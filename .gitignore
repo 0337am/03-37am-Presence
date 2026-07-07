@@ -1,3 +1,21 @@
 
 # Local environment settings
 .env
+.env
+build/
+dist/
+__pycache__/
+*.pyc
+.cache/
+settings.json
+*.backup
+*.before_startup_install
+.env
+build/
+dist/
+__pycache__/
+*.pyc
+.cache/
+settings.json
+*.backup
+*.before_startup_install

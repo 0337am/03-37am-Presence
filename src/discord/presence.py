@@ -21,8 +21,7 @@ class DiscordPresence:
     """
     Maintains Discord Rich Presence on a background thread.
 
-    Discord and Cloudinary operations never run on Qt's UI thread,
-    preventing either service from freezing the application.
+    Discord and Cloudinary operations never run on Qt's UI thread.
     """
 
     RECONNECT_DELAY_SECONDS = 5.0
@@ -222,25 +221,54 @@ class DiscordPresence:
             fallback="Unknown artist",
         )
 
-        album = self._discord_text(
-            getattr(song, "album", ""),
-            fallback="Unknown album",
+        raw_album = str(
+            getattr(song, "album", "") or ""
+        ).strip()
+
+        album_is_available = (
+            raw_album
+            and raw_album.lower()
+            not in {
+                "unknown",
+                "unknown album",
+                "none",
+            }
         )
 
         playing = bool(
             getattr(song, "playing", False)
         )
 
-        if playing:
-            state = self._discord_text(
-                f"by {artist}",
-                fallback="Now playing",
+        if album_is_available:
+            album = self._discord_text(
+                raw_album,
+                fallback="",
             )
+
+            if playing:
+                state = self._discord_text(
+                    f"by {artist} • {album}",
+                    fallback=f"by {artist}",
+                )
+            else:
+                state = self._discord_text(
+                    f"Paused • {artist} • {album}",
+                    fallback=f"Paused • {artist}",
+                )
+
         else:
-            state = self._discord_text(
-                f"Paused • {artist}",
-                fallback="Paused",
-            )
+            album = ""
+
+            if playing:
+                state = self._discord_text(
+                    f"by {artist}",
+                    fallback="Now playing",
+                )
+            else:
+                state = self._discord_text(
+                    f"Paused • {artist}",
+                    fallback="Paused",
+                )
 
         options = {
             "details": title,
@@ -280,9 +308,13 @@ class DiscordPresence:
 
         if artwork_url:
             options["large_image"] = artwork_url
-            options["large_text"] = (
-                f"{title} — {artist}"
-            )
+
+            if album_is_available:
+                options["large_text"] = album
+            else:
+                options["large_text"] = (
+                    f"{title} — {artist}"
+                )
 
         self.rpc.update(**options)
 
@@ -298,9 +330,16 @@ class DiscordPresence:
             else "without artwork"
         )
 
+        album_status = (
+            f", album: {album}"
+            if album_is_available
+            else ", no album supplied"
+        )
+
         print(
             f"Discord updated: {title} — {artist} "
-            f"({status}, {artwork_status})"
+            f"({status}, {artwork_status}"
+            f"{album_status})"
         )
 
     def _disconnect(

@@ -244,7 +244,7 @@ class DashboardPage(QWidget):
 
         self.setStyleSheet("""
             QFrame#card {
-                background: #252533;
+                background: #352747;
                 border-radius: 18px;
             }
 
@@ -261,7 +261,7 @@ class DashboardPage(QWidget):
 
         card.setStyleSheet("""
             QFrame {
-                background: #252533;
+                background: #3E2E54;
                 border-radius: 14px;
             }
         """)
