@@ -14,10 +14,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.discord.presence import DiscordPresence
+from src.discord.extended_presence import ExtendedDiscordPresence
+from src.discord.presence_controller import PresenceController
 from src.ui.about import AboutPage
 from src.ui.dashboard import DashboardPage
 from src.ui.library import LibraryPage
+from src.ui.presence_page import PresencePage
 from src.ui.settings import SettingsPage
 
 
@@ -71,7 +73,10 @@ class MainWindow(QMainWindow):
         self.resize(1200, 720)
         self.setMinimumSize(950, 650)
 
-        self.discord = DiscordPresence()
+        self.discord = ExtendedDiscordPresence()
+        self.presence_controller = PresenceController(
+            self.discord
+        )
 
         root = QWidget()
         root.setObjectName("root")
@@ -141,6 +146,10 @@ class MainWindow(QMainWindow):
             "♡",
             "Dashboard",
         )
+        self.presence_button = NavigationButton(
+            "?",
+            "Presence",
+        )
         self.library_button = NavigationButton(
             "♫",
             "Library",
@@ -156,6 +165,7 @@ class MainWindow(QMainWindow):
 
         self.navigation_buttons = [
             self.dashboard_button,
+            self.presence_button,
             self.library_button,
             self.settings_button,
             self.about_button,
@@ -182,11 +192,15 @@ class MainWindow(QMainWindow):
         self.pages.setObjectName("pages")
 
         self.dashboard_page = DashboardPage()
+        self.presence_page = PresencePage(
+            self.presence_controller
+        )
         self.library_page = LibraryPage()
         self.settings_page = SettingsPage()
         self.about_page = AboutPage()
 
         self.pages.addWidget(self.dashboard_page)
+        self.pages.addWidget(self.presence_page)
         self.pages.addWidget(self.library_page)
         self.pages.addWidget(self.settings_page)
         self.pages.addWidget(self.about_page)
@@ -196,14 +210,17 @@ class MainWindow(QMainWindow):
         self.dashboard_button.clicked.connect(
             lambda: self.switch_page(0)
         )
-        self.library_button.clicked.connect(
+        self.presence_button.clicked.connect(
             lambda: self.switch_page(1)
         )
-        self.settings_button.clicked.connect(
+        self.library_button.clicked.connect(
             lambda: self.switch_page(2)
         )
-        self.about_button.clicked.connect(
+        self.settings_button.clicked.connect(
             lambda: self.switch_page(3)
+        )
+        self.about_button.clicked.connect(
+            lambda: self.switch_page(4)
         )
 
     def switch_page(self, page_index: int):
@@ -302,6 +319,11 @@ class MainWindow(QMainWindow):
 
         self.discord.connect()
 
+        QTimer.singleShot(
+            0,
+            self.presence_controller.apply_saved_mode,
+        )
+
         self.discord_status_timer = QTimer(self)
         self.discord_status_timer.timeout.connect(
             self.refresh_discord_status
@@ -325,7 +347,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(object)
     def handle_song_update(self, song):
-        self.discord.update_song(song)
+        self.presence_controller.handle_song(song)
         self.library_page.add_song(song)
 
     @pyqtSlot(bool)
