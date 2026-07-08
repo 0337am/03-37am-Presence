@@ -5,7 +5,6 @@ import time
 
 from pypresence import Presence
 
-from src.artwork.uploader import ArtworkUploader
 
 try:
     from pypresence.types import ActivityType
@@ -21,7 +20,7 @@ class DiscordPresence:
     """
     Maintains Discord Rich Presence on a background thread.
 
-    Discord and Cloudinary operations never run on Qt's UI thread.
+    Discord operations never run on Qt's UI thread.
     """
 
     RECONNECT_DELAY_SECONDS = 5.0
@@ -31,7 +30,6 @@ class DiscordPresence:
         self.client_id = "1523801127962022070"
 
         self.rpc = None
-        self.artwork_uploader = ArtworkUploader()
 
         self._updates = queue.Queue(maxsize=1)
         self._stop_event = threading.Event()
@@ -300,21 +298,9 @@ class DiscordPresence:
             None,
         )
 
-        artwork_url = (
-            self.artwork_uploader.get_or_upload(
-                artwork_bytes
-            )
+        local_artwork_available = bool(
+            artwork_bytes
         )
-
-        if artwork_url:
-            options["large_image"] = artwork_url
-
-            if album_is_available:
-                options["large_text"] = album
-            else:
-                options["large_text"] = (
-                    f"{title} — {artist}"
-                )
 
         self.rpc.update(**options)
 
@@ -325,9 +311,9 @@ class DiscordPresence:
         )
 
         artwork_status = (
-            "with artwork"
-            if artwork_url
-            else "without artwork"
+            "local artwork kept on device"
+            if local_artwork_available
+            else "no local artwork"
         )
 
         album_status = (
