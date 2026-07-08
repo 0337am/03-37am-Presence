@@ -1,6 +1,8 @@
 import ctypes
 import os
 import sys
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import QLockFile
@@ -34,6 +36,156 @@ def resource_path(
     return (
         base_path
         / relative_path
+    )
+
+
+def crash_log_directory() -> Path:
+    local_app_data = os.environ.get(
+        "LOCALAPPDATA"
+    )
+
+    if local_app_data:
+        return (
+            Path(local_app_data)
+            / "0337am Presence"
+            / "logs"
+        )
+
+    return (
+        Path.home()
+        / ".0337am-presence"
+        / "logs"
+    )
+
+
+def write_crash_log(
+    exception_type,
+    exception_value,
+    exception_traceback,
+) -> Path | None:
+    try:
+        log_directory = (
+            crash_log_directory()
+        )
+
+        log_directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        timestamp = (
+            datetime.now().astimezone()
+        )
+
+        log_path = (
+            log_directory
+            / (
+                "crash_"
+                + timestamp.strftime(
+                    "%Y%m%d_%H%M%S_%f"
+                )
+                + ".log"
+            )
+        )
+
+        traceback_text = "".join(
+            traceback.format_exception(
+                exception_type,
+                exception_value,
+                exception_traceback,
+            )
+        )
+
+        python_version = (
+            sys.version.replace(
+                "\n",
+                " ",
+            )
+        )
+
+        report = (
+            "03:37am Presence crash report\n"
+            "================================\n"
+            f"Timestamp: {timestamp.isoformat()}\n"
+            f"Python: {python_version}\n"
+            f"Executable: {sys.executable}\n"
+            "Packaged: "
+            f"{bool(getattr(sys, 'frozen', False))}\n"
+            f"Platform: {sys.platform}\n"
+            "\n"
+            "Traceback\n"
+            "---------\n"
+            f"{traceback_text}"
+        )
+
+        log_path.write_text(
+            report,
+            encoding="utf-8",
+        )
+
+        return log_path
+
+    except Exception:
+        return None
+
+
+def handle_unhandled_exception(
+    exception_type,
+    exception_value,
+    exception_traceback,
+):
+    if issubclass(
+        exception_type,
+        KeyboardInterrupt,
+    ):
+        sys.__excepthook__(
+            exception_type,
+            exception_value,
+            exception_traceback,
+        )
+        return
+
+    log_path = write_crash_log(
+        exception_type,
+        exception_value,
+        exception_traceback,
+    )
+
+    if log_path is not None:
+        log_message = (
+            "\n\nA crash report was saved to:\n"
+            f"{log_path}"
+        )
+    else:
+        log_message = (
+            "\n\nThe crash report could not be saved."
+        )
+
+    app = QApplication.instance()
+
+    if app is not None:
+        try:
+            QMessageBox.critical(
+                None,
+                "03:37am Presence - Unexpected Error",
+                (
+                    "03:37am Presence encountered an "
+                    "unexpected error and must close."
+                    f"{log_message}"
+                ),
+            )
+
+            app.exit(
+                1
+            )
+
+        except Exception:
+            pass
+
+    sys.__excepthook__(
+        exception_type,
+        exception_value,
+        exception_traceback,
     )
 
 
@@ -106,48 +258,60 @@ def set_windows_app_id():
         pass
 
 
-set_windows_app_id()
 
-app = QApplication(
-    sys.argv
-)
-
-app.setApplicationName(
-    "03:37am Presence"
-)
-app.setOrganizationName(
-    "03:37am"
-)
-
-instance_lock = acquire_single_instance_lock()
-
-icon_path = resource_path(
-    "icons/app_icon.ico"
-)
-
-app_icon = QIcon(
-    str(icon_path)
-)
-
-if not app_icon.isNull():
-    app.setWindowIcon(
-        app_icon
+def main() -> int:
+    sys.excepthook = (
+        handle_unhandled_exception
     )
 
-window = MainWindow()
+    set_windows_app_id()
 
-if not app_icon.isNull():
-    window.setWindowIcon(
-        app_icon
+    app = QApplication(
+        sys.argv
     )
 
-tray_controller = TrayController(
-    app,
-    window,
-)
+    app.setApplicationName(
+        "03:37am Presence"
+    )
+    app.setOrganizationName(
+        "03:37am"
+    )
 
-window.show()
+    instance_lock = (
+        acquire_single_instance_lock()
+    )
 
-sys.exit(
-    app.exec()
-)
+    icon_path = resource_path(
+        "icons/app_icon.ico"
+    )
+
+    app_icon = QIcon(
+        str(icon_path)
+    )
+
+    if not app_icon.isNull():
+        app.setWindowIcon(
+            app_icon
+        )
+
+    window = MainWindow()
+
+    if not app_icon.isNull():
+        window.setWindowIcon(
+            app_icon
+        )
+
+    tray_controller = TrayController(
+        app,
+        window,
+    )
+
+    window.show()
+
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(
+        main()
+    )
