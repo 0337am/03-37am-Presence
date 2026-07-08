@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QObject, QSettings, pyqtSignal
+from PyQt6.QtCore import QObject, QSettings, QTimer, pyqtSignal
 
 from src.discord.presence_modes import (
     MODE_DEFAULTS,
@@ -9,6 +9,8 @@ from src.discord.presence_modes import (
 
 class PresenceController(QObject):
     mode_changed = pyqtSignal(dict)
+
+    PAUSE_GRACE_PERIOD_MS = 30_000
 
     def __init__(self, discord_presence):
         super().__init__()
@@ -21,6 +23,22 @@ class PresenceController(QObject):
 
         self._auto_afk_active = False
         self._mode_before_auto_afk = None
+
+        self._latest_song = None
+        self._music_presence_cleared_for_pause = False
+
+        self._pause_grace_timer = QTimer(
+            self
+        )
+        self._pause_grace_timer.setSingleShot(
+            True
+        )
+        self._pause_grace_timer.setInterval(
+            self.PAUSE_GRACE_PERIOD_MS
+        )
+        self._pause_grace_timer.timeout.connect(
+            self._expire_pause_grace
+        )
 
     @property
     def active_mode(self) -> str:
@@ -130,6 +148,62 @@ class PresenceController(QObject):
 
         self.store.sync()
 
+    @staticmethod
+    def _is_playing_song(
+        song,
+    ) -> bool:
+        if song is None:
+            return False
+
+        title = str(
+            getattr(
+                song,
+                "title",
+                "",
+            )
+            or ""
+        ).strip()
+
+        return bool(
+            title
+            and getattr(
+                song,
+                "playing",
+                False,
+            )
+        )
+
+    def _cancel_pause_grace(self):
+        if self._pause_grace_timer.isActive():
+            self._pause_grace_timer.stop()
+
+        self._music_presence_cleared_for_pause = False
+
+    def _start_pause_grace(self):
+        if self._music_presence_cleared_for_pause:
+            return
+
+        if self._pause_grace_timer.isActive():
+            return
+
+        self._pause_grace_timer.start()
+
+    def _expire_pause_grace(self):
+        if self._auto_afk_active:
+            return
+
+        if self.active_mode != "music":
+            return
+
+        if self._is_playing_song(
+            self._latest_song
+        ):
+            return
+
+        self.discord.clear_presence()
+
+        self._music_presence_cleared_for_pause = True
+
     def apply_mode(
         self,
         presence_mode: PresenceMode,
@@ -140,19 +214,22 @@ class PresenceController(QObject):
             self._auto_afk_active = False
             self._mode_before_auto_afk = None
 
+        self._cancel_pause_grace()
+
         self.save_mode(presence_mode)
 
         if mode == "music":
-            latest_song = getattr(
-                self,
-                "_latest_song",
-                None,
-            )
+            latest_song = self._latest_song
 
-            if latest_song is not None:
+            if self._is_playing_song(
+                latest_song
+            ):
                 self.discord.update_song(
                     latest_song
                 )
+            else:
+                self.discord.clear_presence()
+                self._music_presence_cleared_for_pause = True
 
         elif mode == "disabled":
             self.discord.clear_presence()
@@ -198,6 +275,8 @@ class PresenceController(QObject):
         self._mode_before_auto_afk = (
             current_mode
         )
+
+        self._cancel_pause_grace()
 
         self._auto_afk_active = True
 
@@ -245,5 +324,16 @@ class PresenceController(QObject):
         if self._auto_afk_active:
             return
 
-        if self.active_mode == "music":
-            self.discord.update_song(song)
+        if self.active_mode != "music":
+            return
+
+        if self._is_playing_song(
+            song
+        ):
+            self._cancel_pause_grace()
+            self.discord.update_song(
+                song
+            )
+            return
+
+        self._start_pause_grace()
