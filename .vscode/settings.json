@@ -1,0 +1,14 @@
+﻿{
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/*.pyo": true,
+        "**/*.before_*": true,
+        "**/*.backup*": true,
+        "**/*.bak": true,
+        "**/.pytest_cache": true,
+        "**/.mypy_cache": true,
+        "build": true,
+        "dist": true
+    }
+}
