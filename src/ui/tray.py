@@ -4,6 +4,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QAction,
+    QActionGroup,
     QIcon,
 )
 from PyQt6.QtWidgets import (
@@ -26,6 +27,9 @@ class TrayController(QObject):
         self.main_window = main_window
         self.tray_icon = None
 
+        self.mode_actions = {}
+        self.mode_action_group = None
+
         self._quitting = False
         self._message_shown = False
 
@@ -38,6 +42,7 @@ class TrayController(QObject):
         )
 
         self.create_tray_icon()
+        self.connect_presence_controller()
 
     def create_tray_icon(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -91,6 +96,58 @@ class TrayController(QObject):
             self,
         )
 
+        presence_menu = QMenu(
+            "Presence Mode",
+            menu,
+        )
+
+        self.mode_action_group = QActionGroup(
+            self
+        )
+
+        self.mode_action_group.setExclusive(
+            True
+        )
+
+        modes = (
+            ("music", "Music"),
+            ("afk", "AFK"),
+            ("sleep", "Sleep"),
+            ("working", "Working"),
+            ("custom", "Custom"),
+            ("disabled", "Disabled"),
+        )
+
+        for mode, display_name in modes:
+            mode_action = QAction(
+                display_name,
+                self,
+            )
+
+            mode_action.setData(
+                mode
+            )
+
+            mode_action.setCheckable(
+                True
+            )
+
+            self.mode_action_group.addAction(
+                mode_action
+            )
+
+            presence_menu.addAction(
+                mode_action
+            )
+
+            self.mode_actions[
+                mode
+            ] = mode_action
+
+        self.mode_action_group.triggered.connect(
+            self.on_mode_action_triggered
+        )
+
         open_action.triggered.connect(
             self.show_window
         )
@@ -110,6 +167,12 @@ class TrayController(QObject):
             hide_action
         )
         menu.addSeparator()
+
+        menu.addMenu(
+            presence_menu
+        )
+
+        menu.addSeparator()
         menu.addAction(
             quit_action
         )
@@ -123,6 +186,205 @@ class TrayController(QObject):
         )
 
         self.tray_icon.show()
+
+    def presence_controller(self):
+        controller = getattr(
+            self.main_window,
+            "presence_controller",
+            None,
+        )
+
+        if controller is not None:
+            return controller
+
+        presence_page = getattr(
+            self.main_window,
+            "presence_page",
+            None,
+        )
+
+        return getattr(
+            presence_page,
+            "controller",
+            None,
+        )
+
+    def connect_presence_controller(self):
+        controller = (
+            self.presence_controller()
+        )
+
+        if controller is None:
+            print(
+                "Tray could not find the "
+                "PresenceController."
+            )
+            return
+
+        controller.mode_changed.connect(
+            self.sync_mode_actions
+        )
+
+        self.sync_mode_actions()
+
+    def on_mode_action_triggered(
+        self,
+        action,
+    ):
+        mode = str(
+            action.data()
+            or "music"
+        )
+
+        self.set_presence_mode(
+            mode
+        )
+
+    def set_presence_mode(
+        self,
+        mode: str,
+    ):
+        controller = (
+            self.presence_controller()
+        )
+
+        if controller is None:
+            return
+
+        normalized = str(
+            mode or "music"
+        ).strip().lower()
+
+        try:
+            presence_mode = (
+                controller.load_mode(
+                    normalized
+                )
+            )
+
+            controller.apply_mode(
+                presence_mode
+            )
+
+            presence_page = getattr(
+                self.main_window,
+                "presence_page",
+                None,
+            )
+
+            if (
+                presence_page is not None
+                and hasattr(
+                    presence_page,
+                    "load_active_mode",
+                )
+            ):
+                presence_page.load_active_mode()
+
+            self.sync_mode_actions(
+                {
+                    "mode": normalized,
+                }
+            )
+
+            display_name = (
+                self.mode_actions[
+                    normalized
+                ].text()
+            )
+
+            if normalized == "disabled":
+                message = (
+                    "Discord Rich Presence "
+                    "has been disabled."
+                )
+            else:
+                message = (
+                    f"{display_name} presence "
+                    "is now active."
+                )
+
+            if self.tray_icon is not None:
+                self.tray_icon.showMessage(
+                    "03:37am Presence",
+                    message,
+                    QSystemTrayIcon
+                    .MessageIcon
+                    .Information,
+                    2200,
+                )
+
+        except Exception as error:
+            print(
+                "Tray presence change failed:",
+                error,
+            )
+
+            self.sync_mode_actions()
+
+    def sync_mode_actions(
+        self,
+        payload=None,
+    ):
+        controller = (
+            self.presence_controller()
+        )
+
+        if controller is None:
+            return
+
+        mode = ""
+
+        if isinstance(
+            payload,
+            dict,
+        ):
+            mode = str(
+                payload.get(
+                    "mode",
+                    "",
+                )
+            ).strip().lower()
+
+        if not mode:
+            if getattr(
+                controller,
+                "auto_afk_active",
+                False,
+            ):
+                mode = "afk"
+            else:
+                mode = str(
+                    controller.active_mode
+                ).strip().lower()
+
+        for action_mode, action in (
+            self.mode_actions.items()
+        ):
+            action.blockSignals(
+                True
+            )
+
+            action.setChecked(
+                action_mode == mode
+            )
+
+            action.blockSignals(
+                False
+            )
+
+        active_action = self.mode_actions.get(
+            mode
+        )
+
+        if (
+            active_action is not None
+            and self.tray_icon is not None
+        ):
+            self.tray_icon.setToolTip(
+                "03:37am Presence"
+                f" — {active_action.text()}"
+            )
 
     def eventFilter(
         self,

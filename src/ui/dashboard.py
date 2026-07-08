@@ -1,23 +1,50 @@
+from datetime import datetime
+import hashlib
+from pathlib import Path
+import os
+import subprocess
+
 from PyQt6.QtCore import (
     Qt,
+    QUrl,
     QThread,
+    QTimer,
     pyqtSignal,
     pyqtSlot,
 )
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import (
+    QDesktopServices,
+    QPixmap,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QProgressBar,
+    QPushButton,
     QSizePolicy,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
 
+from src.library.history_store import (
+    HistoryStore,
+    HistoryTrack,
+)
 from src.music.manager import MusicManager
 from src.music.song import Song
+from src.music.source_preferences import (
+    SourcePreferencesStore,
+)
+from src.system.afk_preferences import (
+    AfkPreferencesStore,
+)
+from src.system.idle_monitor import (
+    WindowsIdleMonitor,
+)
 from src.ui.theme import ThemeManager
 
 
@@ -53,6 +80,14 @@ class MediaWorker(QThread):
         self.requestInterruption()
 
 class DashboardPage(QWidget):
+    # ANIMATED_EQUALIZER
+    # FINAL_GUIDE_DETAILS
+    # HEADER_PREVIEW_POLISH
+    # V2_DASHBOARD_PATCH
+    # V2_THREE_COLUMN_POLISH
+    navigate_requested = pyqtSignal(int)
+    settings_section_requested = pyqtSignal(str)
+
     def __init__(
         self,
         theme_manager=None,
@@ -66,6 +101,18 @@ class DashboardPage(QWidget):
             or ThemeManager(self)
         )
 
+        self.history_store = (
+            HistoryStore()
+        )
+
+        self.source_preferences_store = (
+            SourcePreferencesStore()
+        )
+
+        self.afk_preferences_store = (
+            AfkPreferencesStore()
+        )
+
         self.song = Song(
             title="Waiting for media...",
             artist="",
@@ -76,8 +123,32 @@ class DashboardPage(QWidget):
         self._artwork_size = 112
         self._preview_artwork_size = 58
         self._branding_title = "03:37am Presence"
+        self._last_worker_error = ""
 
         self.build_ui()
+
+        self._equalizer_frames = [
+            "▁▃▆█▄▂▇▅",
+            "▃▇▄▁▆█▂▅",
+            "▆▂█▄▁▅▇▃",
+            "█▄▁▇▃▆▂▅",
+            "▄▆▃█▂▁▇▅",
+            "▂▅▇▃█▄▁▆",
+            "▇▁▄▆▂█▅▃",
+            "▃█▅▂▇▁▄▆",
+        ]
+
+        self._equalizer_index = 0
+
+        self.equalizer_timer = QTimer(
+            self
+        )
+        self.equalizer_timer.setInterval(
+            140
+        )
+        self.equalizer_timer.timeout.connect(
+            self.advance_equalizer
+        )
 
         self.theme_manager.theme_changed.connect(
             self.apply_theme
@@ -91,6 +162,20 @@ class DashboardPage(QWidget):
         )
         self.apply_theme(
             self.theme_manager.theme()
+        )
+
+        self.refresh_dashboard_data()
+
+        self.dashboard_timer = QTimer(
+            self
+        )
+
+        self.dashboard_timer.timeout.connect(
+            self.refresh_dashboard_data
+        )
+
+        self.dashboard_timer.start(
+            5000
         )
 
         self.start_media_worker()
@@ -117,12 +202,12 @@ class DashboardPage(QWidget):
     def build_ui(self):
         self.root_layout = QVBoxLayout(self)
         self.root_layout.setContentsMargins(
-            20,
             18,
-            20,
+            16,
             18,
+            12,
         )
-        self.root_layout.setSpacing(12)
+        self.root_layout.setSpacing(9)
 
         header = QHBoxLayout()
         header.setSpacing(10)
@@ -130,13 +215,18 @@ class DashboardPage(QWidget):
         title_group = QVBoxLayout()
         title_group.setSpacing(1)
 
-        self.page_title = QLabel("Dashboard")
+        self.page_title = QLabel(
+            "Dashboard"
+        )
         self.page_title.setObjectName(
             "pageTitle"
         )
 
         self.page_subtitle = QLabel(
-            "Media, Discord preview, and service status"
+            (
+                "Overview of your activity "
+                "and rich presence"
+            )
         )
         self.page_subtitle.setObjectName(
             "pageSubtitle"
@@ -149,7 +239,61 @@ class DashboardPage(QWidget):
             self.page_subtitle
         )
 
-        self.activity_badge = QLabel("Waiting")
+        self.connection_card = QFrame()
+        self.connection_card.setObjectName(
+            "connectionCard"
+        )
+
+        connection_layout = QHBoxLayout(
+            self.connection_card
+        )
+        connection_layout.setContentsMargins(
+            12,
+            7,
+            12,
+            7,
+        )
+        connection_layout.setSpacing(8)
+
+        connection_dot = QLabel("●")
+        connection_dot.setObjectName(
+            "connectionDot"
+        )
+
+        connection_text = QVBoxLayout()
+        connection_text.setSpacing(0)
+
+        self.header_connection_status = QLabel(
+            "Status: Waiting"
+        )
+        self.header_connection_status.setObjectName(
+            "connectionStatus"
+        )
+
+        self.header_connection_detail = QLabel(
+            "Discord connection"
+        )
+        self.header_connection_detail.setObjectName(
+            "connectionDetail"
+        )
+
+        connection_text.addWidget(
+            self.header_connection_status
+        )
+        connection_text.addWidget(
+            self.header_connection_detail
+        )
+
+        connection_layout.addWidget(
+            connection_dot
+        )
+        connection_layout.addLayout(
+            connection_text
+        )
+
+        self.activity_badge = QLabel(
+            "WAITING"
+        )
         self.activity_badge.setObjectName(
             "activityBadge"
         )
@@ -157,114 +301,192 @@ class DashboardPage(QWidget):
             Qt.AlignmentFlag.AlignCenter
         )
 
+        settings_shortcut = QPushButton("⚙")
+        settings_shortcut.setObjectName(
+            "headerSettingsButton"
+        )
+        settings_shortcut.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        settings_shortcut.setFixedSize(
+            40,
+            40,
+        )
+        settings_shortcut.clicked.connect(
+            lambda:
+            self.navigate_requested.emit(3)
+        )
+
         header.addLayout(title_group)
         header.addStretch()
         header.addWidget(
-            self.activity_badge,
-            alignment=Qt.AlignmentFlag.AlignVCenter,
+            self.connection_card
+        )
+        header.addWidget(
+            self.activity_badge
+        )
+        header.addWidget(
+            settings_shortcut
         )
 
         self.root_layout.addLayout(header)
 
         self.top_row = QHBoxLayout()
-        self.top_row.setSpacing(12)
+        self.top_row.setSpacing(10)
 
         self.build_now_playing_card()
         self.build_discord_preview_card()
 
+        self.now_playing_card.setMinimumHeight(
+            220
+        )
+        self.preview_card.setMinimumHeight(
+            220
+        )
+
         self.top_row.addWidget(
             self.now_playing_card,
-            stretch=3,
+            stretch=5,
         )
         self.top_row.addWidget(
             self.preview_card,
-            stretch=2,
+            stretch=4,
         )
 
         self.root_layout.addLayout(
             self.top_row
         )
 
+        middle_row = QHBoxLayout()
+        middle_row.setSpacing(10)
+
+        self.build_recent_card()
+        self.build_quick_access_card()
+        self.build_library_status_card()
+
+        self.recent_card.setMinimumHeight(
+            270
+        )
+        self.quick_access_card.setMinimumHeight(
+            270
+        )
+        self.library_status_card.setMinimumHeight(
+            270
+        )
+
+        middle_row.addWidget(
+            self.recent_card,
+            stretch=4,
+        )
+        middle_row.addWidget(
+            self.quick_access_card,
+            stretch=4,
+        )
+        middle_row.addWidget(
+            self.library_status_card,
+            stretch=4,
+        )
+
+        self.root_layout.addLayout(
+            middle_row,
+            stretch=1,
+        )
+
         self.status_row = QHBoxLayout()
-        self.status_row.setSpacing(9)
+        self.status_row.setSpacing(8)
 
-        discord_pill, self.discord_status = (
-            self.make_status_pill(
-                "Discord",
-                "Not connected",
-            )
+        (
+            discord_card,
+            self.discord_status,
+            self.discord_status_detail,
+        ) = self.make_status_card(
+            "💬",
+            "DISCORD STATUS",
+            "Not connected",
+            "Ready to update rich presence",
         )
 
-        music_pill, self.music_status = (
-            self.make_status_pill(
-                "Music",
-                "Starting",
-            )
+        (
+            music_card,
+            self.music_status,
+            self.music_status_detail,
+        ) = self.make_status_card(
+            "🎵",
+            "MUSIC STATUS",
+            "Starting",
+            "Listening for new tracks",
         )
 
-        artwork_pill, self.artwork_status = (
-            self.make_status_pill(
-                "Artwork",
-                "Waiting",
-            )
+        (
+            afk_card,
+            self.afk_status,
+            self.afk_status_detail,
+        ) = self.make_status_card(
+            "⏱",
+            "AUTO AFK",
+            "Inactive",
+            "Auto AFK is disabled",
+            button_text="⚙  Configure",
+            button_section="auto_afk",
         )
+
+        self.artwork_status = QLabel("")
 
         self.status_row.addWidget(
-            discord_pill
+            discord_card
         )
         self.status_row.addWidget(
-            music_pill
+            music_card
         )
         self.status_row.addWidget(
-            artwork_pill
+            afk_card
         )
 
         self.root_layout.addLayout(
             self.status_row
         )
 
-        self.info_card = QFrame()
-        self.info_card.setObjectName(
-            "infoCard"
+        footer = QFrame()
+        footer.setObjectName(
+            "dashboardFooter"
         )
 
-        info_layout = QHBoxLayout(
-            self.info_card
+        footer_layout = QHBoxLayout(
+            footer
         )
-        info_layout.setContentsMargins(
-            14,
-            11,
-            14,
-            11,
-        )
-        info_layout.setSpacing(10)
-
-        info_title = QLabel("Tip")
-        info_title.setObjectName(
-            "infoTitle"
+        footer_layout.setContentsMargins(
+            12,
+            5,
+            12,
+            5,
         )
 
-        info_text = QLabel(
-            "The preview mirrors your current music activity. "
-            "Custom-mode previews can be added next."
+        footer_left = QLabel(
+            "💜  Thank you for using "
+            "03:37am Presence!"
         )
-        info_text.setObjectName(
-            "infoText"
+        footer_left.setObjectName(
+            "footerText"
         )
-        info_text.setWordWrap(True)
 
-        info_layout.addWidget(
-            info_title
+        footer_right = QLabel(
+            "Made with  💜  for your presence."
         )
-        info_layout.addWidget(
-            info_text,
-            stretch=1,
+        footer_right.setObjectName(
+            "footerText"
+        )
+
+        footer_layout.addWidget(
+            footer_left
+        )
+        footer_layout.addStretch()
+        footer_layout.addWidget(
+            footer_right
         )
 
         self.root_layout.addWidget(
-            self.info_card
+            footer
         )
-        self.root_layout.addStretch()
 
     def build_now_playing_card(self):
         self.now_playing_card = QFrame()
@@ -272,16 +494,63 @@ class DashboardPage(QWidget):
             "nowPlayingCard"
         )
 
-        self.now_playing_layout = QHBoxLayout(
+        outer_layout = QVBoxLayout(
             self.now_playing_card
         )
-        self.now_playing_layout.setContentsMargins(
+        outer_layout.setContentsMargins(
             14,
+            12,
             14,
-            14,
-            14,
+            12,
         )
-        self.now_playing_layout.setSpacing(14)
+        outer_layout.setSpacing(8)
+
+        heading_row = QHBoxLayout()
+
+        self.section_label = QLabel(
+            "🎵  NOW PLAYING"
+        )
+        self.section_label.setObjectName(
+            "sectionLabel"
+        )
+
+        source_button = QPushButton()
+        source_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_ArrowForward
+            )
+        )
+        source_button.setObjectName(
+            "cardIconButton"
+        )
+        source_button.setFixedSize(
+            34,
+            34,
+        )
+        source_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        source_button.setToolTip(
+            "Open the current media source"
+        )
+        source_button.clicked.connect(
+            self.open_current_source
+        )
+
+        heading_row.addWidget(
+            self.section_label
+        )
+        heading_row.addStretch()
+        heading_row.addWidget(
+            source_button
+        )
+
+        outer_layout.addLayout(
+            heading_row
+        )
+
+        body_layout = QHBoxLayout()
+        body_layout.setSpacing(14)
 
         self.artwork = QLabel(
             "Album\nArtwork"
@@ -297,20 +566,13 @@ class DashboardPage(QWidget):
             QSizePolicy.Policy.Fixed,
         )
 
-        self.now_playing_layout.addWidget(
+        body_layout.addWidget(
             self.artwork,
             alignment=Qt.AlignmentFlag.AlignVCenter,
         )
 
         info_layout = QVBoxLayout()
         info_layout.setSpacing(4)
-
-        self.section_label = QLabel(
-            "NOW PLAYING"
-        )
-        self.section_label.setObjectName(
-            "sectionLabel"
-        )
 
         self.song_title = QLabel(
             self.song.title
@@ -335,9 +597,6 @@ class DashboardPage(QWidget):
         )
 
         info_layout.addWidget(
-            self.section_label
-        )
-        info_layout.addWidget(
             self.song_title
         )
         info_layout.addWidget(
@@ -348,20 +607,8 @@ class DashboardPage(QWidget):
         )
         info_layout.addStretch()
 
-        self.progress = QProgressBar()
-        self.progress.setObjectName(
-            "playbackProgress"
-        )
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self.progress.setTextVisible(False)
-
-        info_layout.addWidget(
-            self.progress
-        )
-
-        times = QHBoxLayout()
-        times.setSpacing(8)
+        progress_row = QHBoxLayout()
+        progress_row.setSpacing(8)
 
         self.current_time = QLabel(
             self.song.position
@@ -370,6 +617,14 @@ class DashboardPage(QWidget):
             "timeLabel"
         )
 
+        self.progress = QProgressBar()
+        self.progress.setObjectName(
+            "playbackProgress"
+        )
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setTextVisible(False)
+
         self.total_time = QLabel(
             self.song.duration
         )
@@ -377,18 +632,57 @@ class DashboardPage(QWidget):
             "timeLabel"
         )
 
-        times.addWidget(
+        progress_row.addWidget(
             self.current_time
         )
-        times.addStretch()
-        times.addWidget(
+        progress_row.addWidget(
+            self.progress,
+            stretch=1,
+        )
+        progress_row.addWidget(
             self.total_time
         )
 
-        info_layout.addLayout(times)
+        info_layout.addLayout(
+            progress_row
+        )
 
-        self.now_playing_layout.addLayout(
+        lower_row = QHBoxLayout()
+        lower_row.setSpacing(8)
+
+        self.now_source = QLabel(
+            "●  Waiting for media"
+        )
+        self.now_source.setObjectName(
+            "sourceLine"
+        )
+
+        self.equalizer = QLabel(
+            "▁▃▅▇▄▆▂▅"
+        )
+        self.equalizer.setObjectName(
+            "equalizer"
+        )
+
+        lower_row.addWidget(
+            self.now_source
+        )
+        lower_row.addStretch()
+        lower_row.addWidget(
+            self.equalizer
+        )
+
+        info_layout.addLayout(
+            lower_row
+        )
+
+        body_layout.addLayout(
             info_layout,
+            stretch=1,
+        )
+
+        outer_layout.addLayout(
+            body_layout,
             stretch=1,
         )
 
@@ -403,9 +697,9 @@ class DashboardPage(QWidget):
         )
         preview_layout.setContentsMargins(
             14,
-            13,
+            12,
             14,
-            13,
+            12,
         )
         preview_layout.setSpacing(8)
 
@@ -413,7 +707,7 @@ class DashboardPage(QWidget):
         preview_top.setSpacing(8)
 
         preview_heading = QLabel(
-            "DISCORD PREVIEW"
+            "🎮  DISCORD PREVIEW"
         )
         preview_heading.setObjectName(
             "previewHeading"
@@ -438,16 +732,47 @@ class DashboardPage(QWidget):
             preview_top
         )
 
+        activity_panel = QFrame()
+        activity_panel.setObjectName(
+            "discordActivityPanel"
+        )
+
+        panel_layout = QVBoxLayout(
+            activity_panel
+        )
+        panel_layout.setContentsMargins(
+            12,
+            9,
+            12,
+            9,
+        )
+        panel_layout.setSpacing(7)
+
+        app_row = QHBoxLayout()
+        app_row.setSpacing(6)
+
         self.preview_app = QLabel(
-            "Listening to 03:37am Presence"
+            "03:37am Presence"
         )
         self.preview_app.setObjectName(
             "previewApp"
         )
-        self.preview_app.setWordWrap(True)
 
-        preview_layout.addWidget(
+        app_badge = QLabel("APP")
+        app_badge.setObjectName(
+            "appBadge"
+        )
+
+        app_row.addWidget(
             self.preview_app
+        )
+        app_row.addWidget(
+            app_badge
+        )
+        app_row.addStretch()
+
+        panel_layout.addLayout(
+            app_row
         )
 
         activity_row = QHBoxLayout()
@@ -521,55 +846,678 @@ class DashboardPage(QWidget):
             stretch=1,
         )
 
-        preview_layout.addLayout(
+        panel_layout.addLayout(
             activity_row
         )
-        preview_layout.addStretch()
 
-    def make_status_pill(
-        self,
+        preview_layout.addWidget(
+            activity_panel,
+            stretch=1,
+        )
+
+        open_discord = QPushButton(
+            "Open in Discord"
+        )
+        open_discord.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_ArrowForward
+            )
+        )
+        open_discord.setObjectName(
+            "libraryOpenButton"
+        )
+        open_discord.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        open_discord.clicked.connect(
+            self.open_discord
+        )
+
+        preview_layout.addWidget(
+            open_discord
+        )
+
+    def open_discord(self):
+        try:
+            os.startfile(
+                "discord://-/channels/@me"
+            )
+            return
+
+        except Exception:
+            pass
+
+        local_app_data = os.getenv(
+            "LOCALAPPDATA",
+            "",
+        )
+
+        discord_versions = [
+            (
+                "Discord",
+                "Discord.exe",
+            ),
+            (
+                "DiscordPTB",
+                "DiscordPTB.exe",
+            ),
+            (
+                "DiscordCanary",
+                "DiscordCanary.exe",
+            ),
+        ]
+
+        for folder, executable in discord_versions:
+            updater = os.path.join(
+                local_app_data,
+                folder,
+                "Update.exe",
+            )
+
+            if not os.path.exists(
+                updater
+            ):
+                continue
+
+            try:
+                creation_flags = getattr(
+                    subprocess,
+                    "CREATE_NO_WINDOW",
+                    0,
+                )
+
+                subprocess.Popen(
+                    [
+                        updater,
+                        "--processStart",
+                        executable,
+                    ],
+                    creationflags=creation_flags,
+                )
+                return
+
+            except Exception:
+                continue
+
+        QDesktopServices.openUrl(
+            QUrl(
+                "https://discord.com/app"
+            )
+        )
+
+    def open_current_source(self):
+        source = str(
+            getattr(
+                self.song,
+                "source_app",
+                "",
+            )
+            or ""
+        ).lower()
+
+        if "spotify" in source:
+            QDesktopServices.openUrl(
+                QUrl("spotify:")
+            )
+            return
+
+        if any(
+            browser in source
+            for browser in (
+                "chrome",
+                "msedge",
+                "firefox",
+                "brave",
+                "opera",
+                "vivaldi",
+            )
+        ):
+            QDesktopServices.openUrl(
+                QUrl("https://soundcloud.com")
+            )
+            return
+
+        self.navigate_requested.emit(2)
+
+    def build_recent_card(self):
+        self.recent_card = QFrame()
+        self.recent_card.setObjectName(
+            "recentCard"
+        )
+
+        layout = QVBoxLayout(
+            self.recent_card
+        )
+        layout.setContentsMargins(
+            16,
+            14,
+            16,
+            14,
+        )
+        layout.setSpacing(8)
+
+        heading_row = QHBoxLayout()
+
+        heading = QLabel(
+            "RECENTLY PLAYED"
+        )
+        heading.setObjectName(
+            "sectionLabel"
+        )
+
+        view_all = QPushButton(
+            "View all"
+        )
+        view_all.setObjectName(
+            "textButton"
+        )
+        view_all.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        view_all.clicked.connect(
+            lambda:
+            self.navigate_requested.emit(2)
+        )
+
+        heading_row.addWidget(heading)
+        heading_row.addStretch()
+        heading_row.addWidget(view_all)
+
+        layout.addLayout(heading_row)
+
+        self.recent_empty = QLabel(
+            (
+                "Your recent listening "
+                "history will appear here."
+            )
+        )
+        self.recent_empty.setObjectName(
+            "emptyRecent"
+        )
+        self.recent_empty.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.recent_empty.setWordWrap(True)
+
+        layout.addWidget(
+            self.recent_empty,
+            stretch=1,
+        )
+
+        self.recent_rows = []
+
+        for _ in range(4):
+            row_card = QFrame()
+            row_card.setObjectName(
+                "recentRow"
+            )
+
+            row_layout = QHBoxLayout(
+                row_card
+            )
+            row_layout.setContentsMargins(
+                10,
+                7,
+                10,
+                7,
+            )
+            row_layout.setSpacing(10)
+
+            icon = QLabel("♪")
+            icon.setObjectName(
+                "recentIcon"
+            )
+            icon.setFixedSize(34, 34)
+            icon.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+
+            text_layout = QVBoxLayout()
+            text_layout.setSpacing(0)
+
+            title = QLabel("")
+            title.setObjectName(
+                "recentTitle"
+            )
+
+            artist = QLabel("")
+            artist.setObjectName(
+                "recentArtist"
+            )
+
+            text_layout.addWidget(title)
+            text_layout.addWidget(artist)
+
+            source = QLabel("")
+            source.setObjectName(
+                "recentSource"
+            )
+            source.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+
+            played = QLabel("")
+            played.setObjectName(
+                "recentTime"
+            )
+            played.setAlignment(
+                Qt.AlignmentFlag.AlignRight
+                | Qt.AlignmentFlag.AlignVCenter
+            )
+
+            row_layout.addWidget(icon)
+            row_layout.addLayout(
+                text_layout,
+                stretch=1,
+            )
+            row_layout.addWidget(source)
+            row_layout.addWidget(played)
+
+            layout.addWidget(row_card)
+
+            self.recent_rows.append(
+                {
+                    "card": row_card,
+                    "icon": icon,
+                    "title": title,
+                    "artist": artist,
+                    "source": source,
+                    "time": played,
+                }
+            )
+
+    def build_quick_access_card(self):
+        self.quick_access_card = QFrame()
+        self.quick_access_card.setObjectName(
+            "quickAccessCard"
+        )
+
+        layout = QVBoxLayout(
+            self.quick_access_card
+        )
+        layout.setContentsMargins(
+            14,
+            12,
+            14,
+            12,
+        )
+        layout.setSpacing(8)
+
+        heading = QLabel(
+            "ϟ  QUICK ACCESS"
+        )
+        heading.setObjectName(
+            "sectionLabel"
+        )
+
+        layout.addWidget(
+            heading
+        )
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setRowStretch(0, 1)
+        grid.setRowStretch(1, 1)
+
+        buttons = [
+            (
+                "♙  AFK\nSet AFK presence",
+                1,
+                0,
+                0,
+            ),
+            (
+                "✎  Custom\nCreate a presence",
+                1,
+                0,
+                1,
+            ),
+            (
+                "★  Presets\nManage presence modes",
+                1,
+                1,
+                0,
+            ),
+            (
+                "⚙  Settings\nConfigure application",
+                3,
+                1,
+                1,
+            ),
+        ]
+
+        for (
+            text,
+            page_index,
+            row,
+            column,
+        ) in buttons:
+            button = QPushButton(
+                text
+            )
+            button.setObjectName(
+                "quickButton"
+            )
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+            button.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Expanding,
+            )
+            button.setMinimumHeight(0)
+
+            button.clicked.connect(
+                lambda checked=False,
+                index=page_index:
+                self.navigate_requested.emit(
+                    index
+                )
+            )
+
+            grid.addWidget(
+                button,
+                row,
+                column,
+            )
+
+        layout.addLayout(
+            grid,
+            stretch=1,
+        )
+
+    def build_library_status_card(self):
+        self.library_status_card = QFrame()
+        self.library_status_card.setObjectName(
+            "libraryStatusCard"
+        )
+
+        layout = QVBoxLayout(
+            self.library_status_card
+        )
+        layout.setContentsMargins(
+            14,
+            12,
+            14,
+            12,
+        )
+        layout.setSpacing(8)
+
+        heading = QLabel(
+            "▥  LIBRARY STATUS"
+        )
+        heading.setObjectName(
+            "sectionLabel"
+        )
+
+        layout.addWidget(
+            heading
+        )
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+
+        (
+            tracks_tile,
+            self.library_track_count,
+            self.library_track_detail,
+        ) = self.make_stat_tile(
+            "Total Tracks",
+            "0",
+            "Saved in Library",
+        )
+
+        (
+            plays_tile,
+            self.library_play_count,
+            self.library_play_detail,
+        ) = self.make_stat_tile(
+            "Total Plays",
+            "0",
+            "Listening events",
+        )
+
+        (
+            sources_tile,
+            self.library_source_count,
+            self.library_source_detail,
+        ) = self.make_stat_tile(
+            "Sources",
+            "0",
+            "None enabled",
+        )
+
+        (
+            latest_tile,
+            self.library_latest_track,
+            self.library_latest_artist,
+        ) = self.make_stat_tile(
+            "Last Added",
+            "Waiting",
+            "",
+        )
+
+        grid.addWidget(
+            tracks_tile,
+            0,
+            0,
+        )
+        grid.addWidget(
+            plays_tile,
+            0,
+            1,
+        )
+        grid.addWidget(
+            sources_tile,
+            1,
+            0,
+        )
+        grid.addWidget(
+            latest_tile,
+            1,
+            1,
+        )
+
+        layout.addLayout(
+            grid,
+            stretch=1,
+        )
+
+        open_library = QPushButton(
+            "▱  Open Library  →"
+        )
+        open_library.setObjectName(
+            "libraryOpenButton"
+        )
+        open_library.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        open_library.clicked.connect(
+            lambda:
+            self.navigate_requested.emit(2)
+        )
+
+        layout.addWidget(
+            open_library
+        )
+
+    @staticmethod
+    def make_stat_tile(
         title: str,
         value: str,
+        detail: str,
+    ):
+        tile = QFrame()
+        tile.setObjectName(
+            "statTile"
+        )
+
+        layout = QVBoxLayout(
+            tile
+        )
+        layout.setContentsMargins(
+            10,
+            8,
+            10,
+            8,
+        )
+        layout.setSpacing(2)
+
+        title_label = QLabel(
+            title
+        )
+        title_label.setObjectName(
+            "statTitle"
+        )
+
+        value_label = QLabel(
+            value
+        )
+        value_label.setObjectName(
+            "statValue"
+        )
+        value_label.setWordWrap(
+            True
+        )
+
+        detail_label = QLabel(
+            detail
+        )
+        detail_label.setObjectName(
+            "statDetail"
+        )
+        detail_label.setWordWrap(
+            True
+        )
+
+        layout.addWidget(
+            title_label
+        )
+        layout.addWidget(
+            value_label
+        )
+        layout.addWidget(
+            detail_label
+        )
+        layout.addStretch()
+
+        return (
+            tile,
+            value_label,
+            detail_label,
+        )
+
+    def make_status_card(
+        self,
+        icon_text: str,
+        title: str,
+        value: str,
+        detail: str,
+        button_text: str = "",
+        button_page: int | None = None,
+        button_section: str = "",
     ):
         card = QFrame()
         card.setObjectName(
-            "statusPill"
+            "statusStripCard"
+        )
+        card.setMinimumHeight(
+            68
         )
 
         layout = QHBoxLayout(card)
         layout.setContentsMargins(
-            12,
+            13,
             8,
-            12,
+            13,
             8,
         )
-        layout.setSpacing(7)
+        layout.setSpacing(10)
 
-        dot = QLabel("●")
-        dot.setObjectName(
-            "statusDot"
+        icon = QLabel(icon_text)
+        icon.setObjectName(
+            "statusIcon"
+        )
+        icon.setFixedWidth(40)
+        icon.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
         )
 
-        label = QLabel(title)
-        label.setObjectName(
-            "statusTitle"
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(1)
+
+        title_label = QLabel(title)
+        title_label.setObjectName(
+            "statusStripTitle"
         )
 
-        status = QLabel(value)
-        status.setObjectName(
+        value_label = QLabel(value)
+        value_label.setObjectName(
             "statusValue"
         )
-        status.setAlignment(
-            Qt.AlignmentFlag.AlignRight
-            | Qt.AlignmentFlag.AlignVCenter
+
+        detail_label = QLabel(detail)
+        detail_label.setObjectName(
+            "statusDetail"
         )
 
-        layout.addWidget(dot)
-        layout.addWidget(label)
-        layout.addStretch()
-        layout.addWidget(status)
+        text_layout.addWidget(
+            title_label
+        )
+        text_layout.addWidget(
+            value_label
+        )
+        text_layout.addWidget(
+            detail_label
+        )
 
-        return card, status
+        layout.addWidget(icon)
+        layout.addLayout(
+            text_layout,
+            stretch=1,
+        )
+
+        if button_text:
+            button = QPushButton(
+                button_text
+            )
+            button.setObjectName(
+                "statusConfigure"
+            )
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+
+            if button_section:
+                button.clicked.connect(
+                    lambda checked=False,
+                    section=button_section:
+                    self.settings_section_requested.emit(
+                        section
+                    )
+                )
+
+            elif button_page is not None:
+                button.clicked.connect(
+                    lambda checked=False,
+                    page=button_page:
+                    self.navigate_requested.emit(
+                        page
+                    )
+                )
+
+            layout.addWidget(button)
+
+        return (
+            card,
+            value_label,
+            detail_label,
+        )
 
     @pyqtSlot(dict)
     def apply_theme(self, theme: dict):
@@ -579,10 +1527,10 @@ class DashboardPage(QWidget):
         )
 
         self._artwork_size = (
-            108 if compact else 124
+            140 if compact else 156
         )
         self._preview_artwork_size = (
-            54 if compact else 64
+            62 if compact else 72
         )
 
         margin = 18 if compact else 24
@@ -629,6 +1577,127 @@ class DashboardPage(QWidget):
             QLabel#pageSubtitle {{
                 color: {theme["muted"]};
                 font-size: 11px;
+            }}
+
+            QPushButton#cardIconButton {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 700;
+            }}
+
+            QPushButton#cardIconButton:hover {{
+                border: 1px solid {theme["accent"]};
+            }}
+
+            QLabel#sourceLine {{
+                color: {theme["text"]};
+                font-size: 10px;
+                font-weight: 650;
+            }}
+
+            QLabel#equalizer {{
+                color: {theme["accent"]};
+                font-size: 14px;
+                letter-spacing: 1px;
+            }}
+
+            QFrame#statusStripCard {{
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 10px;
+            }}
+
+            QLabel#statusIcon {{
+                color: {theme["accent"]};
+                font-size: 24px;
+            }}
+
+            QLabel#statusStripTitle {{
+                color: {theme["accent"]};
+                font-size: 8px;
+                font-weight: 750;
+            }}
+
+            QLabel#statusDetail {{
+                color: {theme["muted"]};
+                font-size: 8px;
+            }}
+
+            QPushButton#statusConfigure {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 8px;
+                padding: 7px 9px;
+                font-size: 8px;
+                font-weight: 700;
+            }}
+
+            QPushButton#statusConfigure:hover {{
+                border: 1px solid {theme["accent"]};
+            }}
+
+            QFrame#dashboardFooter {{
+                background: transparent;
+                border-top: 1px solid {theme["border"]};
+            }}
+
+            QLabel#footerText {{
+                color: {theme["muted"]};
+                font-size: 8px;
+            }}
+
+            QFrame#connectionCard {{
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 10px;
+            }}
+
+            QLabel#connectionDot {{
+                color: #31d158;
+                font-size: 12px;
+            }}
+
+            QLabel#connectionStatus {{
+                color: {theme["text"]};
+                font-size: 10px;
+                font-weight: 700;
+            }}
+
+            QLabel#connectionDetail {{
+                color: {theme["muted"]};
+                font-size: 9px;
+            }}
+
+            QPushButton#headerSettingsButton {{
+                color: {theme["text"]};
+                background: {theme["accent"]};
+                border: none;
+                border-radius: 10px;
+                font-size: 16px;
+                font-weight: 700;
+            }}
+
+            QPushButton#headerSettingsButton:hover {{
+                border: 1px solid {theme["text"]};
+            }}
+
+            QFrame#discordActivityPanel {{
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 10px;
+            }}
+
+            QLabel#appBadge {{
+                color: {theme["text"]};
+                background: {theme["accent"]};
+                border-radius: 4px;
+                padding: 2px 4px;
+                font-size: 7px;
+                font-weight: 750;
             }}
 
             QLabel#activityBadge {{
@@ -751,6 +1820,105 @@ class DashboardPage(QWidget):
                 color: {theme["muted"]};
                 font-size: 10px;
             }}
+
+            QFrame#recentCard,
+            QFrame#quickAccessCard,
+            QFrame#libraryStatusCard {{
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 14px;
+            }}
+
+            QFrame#recentRow,
+            QFrame#statTile {{
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 9px;
+            }}
+
+            QLabel#recentIcon {{
+                color: {theme["accent"]};
+                background: {theme["background"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: 700;
+            }}
+
+            QLabel#recentTitle {{
+                color: {theme["text"]};
+                font-size: 10px;
+                font-weight: 700;
+            }}
+
+            QLabel#recentArtist,
+            QLabel#recentTime,
+            QLabel#emptyRecent,
+            QLabel#statTitle,
+            QLabel#statDetail {{
+                color: {theme["muted"]};
+                font-size: 9px;
+            }}
+
+            QLabel#recentSource {{
+                color: {theme["accent"]};
+                background: {theme["background"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 6px;
+                padding: 3px 6px;
+                font-size: 8px;
+                font-weight: 700;
+            }}
+
+            QLabel#statValue {{
+                color: {theme["text"]};
+                font-size: 15px;
+                font-weight: 750;
+            }}
+
+            QPushButton#quickButton {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 9px;
+                padding: 8px 10px;
+                text-align: left;
+                font-size: 10px;
+                font-weight: 650;
+            }}
+
+            QPushButton#quickButton:hover {{
+                border: 1px solid {theme["accent"]};
+                background: {theme["background"]};
+            }}
+
+            QPushButton#libraryOpenButton {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 8px;
+                padding: 7px 10px;
+                text-align: left;
+                font-size: 9px;
+                font-weight: 700;
+            }}
+
+            QPushButton#libraryOpenButton:hover {{
+                border: 1px solid {theme["accent"]};
+            }}
+
+            QPushButton#textButton {{
+                color: {theme["accent"]};
+                background: transparent;
+                border: none;
+                padding: 3px 5px;
+                font-size: 9px;
+                font-weight: 700;
+            }}
+
+            QPushButton#textButton:hover {{
+                color: {theme["text"]};
+            }}
             """
         )
 
@@ -772,7 +1940,40 @@ class DashboardPage(QWidget):
         self._branding_title = title
 
         self.preview_app.setText(
-            f"Listening to {title}"
+            title
+        )
+
+    def start_equalizer_animation(self):
+        self.equalizer.setVisible(
+            True
+        )
+
+        if not self.equalizer_timer.isActive():
+            self.equalizer_timer.start()
+
+        self.advance_equalizer()
+
+    def stop_equalizer_animation(self):
+        self.equalizer_timer.stop()
+        self.equalizer.clear()
+        self.equalizer.setVisible(
+            False
+        )
+
+    def advance_equalizer(self):
+        if not self._equalizer_frames:
+            return
+
+        self.equalizer.setText(
+            self._equalizer_frames[
+                self._equalizer_index
+            ]
+        )
+
+        self._equalizer_index = (
+            self._equalizer_index + 1
+        ) % len(
+            self._equalizer_frames
         )
 
     @pyqtSlot(object)
@@ -781,7 +1982,10 @@ class DashboardPage(QWidget):
             self.show_nothing_playing()
             return
 
+        self._last_worker_error = ""
+
         self.song = song
+        self.cache_song_artwork(song)
 
         self.song_title.setText(song.title)
         self.artist.setText(song.artist)
@@ -804,29 +2008,389 @@ class DashboardPage(QWidget):
             song.album or "No album"
         )
 
+        source_name = self._display_source(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+        )
+
+        self.preview_mode.setText(
+            source_name.upper()
+        )
+
         if song.playing:
             self.music_status.setText(
-                "Playing"
+                f"{source_name} • Playing"
+            )
+            self.music_status_detail.setText(
+                f"Listening on {source_name}"
             )
             self.activity_badge.setText(
-                "Playing"
+                "PLAYING"
             )
+            self.now_source.setText(
+                f"●  Playing on {source_name}"
+            )
+            self.start_equalizer_animation()
             self.preview_time.setText(
-                f"{song.position} elapsed"
+                f"{song.position} / {song.duration}"
             )
         else:
             self.music_status.setText(
-                "Paused"
+                f"{source_name} • Paused"
+            )
+            self.music_status_detail.setText(
+                f"Paused on {source_name}"
             )
             self.activity_badge.setText(
-                "Paused"
+                "PAUSED"
             )
+            self.now_source.setText(
+                f"Ⅱ  Paused on {source_name}"
+            )
+            self.stop_equalizer_animation()
             self.preview_time.setText(
                 "Paused"
             )
 
         self.update_artwork(song)
         self.update_progress(song)
+
+        QTimer.singleShot(
+            300,
+            self.refresh_dashboard_data,
+        )
+
+    def refresh_dashboard_data(self):
+        tracks = (
+            self.history_store.list_tracks(
+                limit=4
+            )
+        )
+
+        self.populate_recent_tracks(
+            tracks
+        )
+
+        self.library_track_count.setText(
+            str(
+                self.history_store.count_tracks()
+            )
+        )
+
+        self.library_play_count.setText(
+            str(
+                self.history_store.total_plays()
+            )
+        )
+
+        source_preferences = (
+            self.source_preferences_store.load()
+        )
+
+        enabled_sources = []
+
+        if source_preferences.spotify_enabled:
+            enabled_sources.append(
+                "Spotify"
+            )
+
+        if source_preferences.browser_enabled:
+            enabled_sources.append(
+                "Browsers"
+            )
+
+        self.library_source_count.setText(
+            str(
+                len(enabled_sources)
+            )
+        )
+
+        self.library_source_detail.setText(
+            ", ".join(enabled_sources)
+            or "None enabled"
+        )
+
+        if tracks:
+            self.library_latest_track.setText(
+                tracks[0].title
+            )
+            self.library_latest_artist.setText(
+                tracks[0].artist
+            )
+        else:
+            self.library_latest_track.setText(
+                "Waiting"
+            )
+            self.library_latest_artist.setText(
+                ""
+            )
+
+        preferences = (
+            self.afk_preferences_store.load()
+        )
+
+        if not preferences.enabled:
+            self.afk_status.setText(
+                "Inactive"
+            )
+            self.afk_status_detail.setText(
+                "Auto AFK is disabled"
+            )
+        else:
+            try:
+                active = (
+                    WindowsIdleMonitor.is_idle(
+                        preferences.timeout_minutes
+                        * 60
+                    )
+                )
+            except Exception:
+                active = False
+
+            if active:
+                self.afk_status.setText(
+                    "Active"
+                )
+            else:
+                self.afk_status.setText(
+                    "Inactive"
+                )
+
+            self.afk_status_detail.setText(
+                (
+                    "AFK after "
+                    f"{preferences.timeout_minutes} "
+                    "minute"
+                    + (
+                        ""
+                        if preferences.timeout_minutes == 1
+                        else "s"
+                    )
+                )
+            )
+
+        connection_text = (
+            self.discord_status.text().strip()
+            or "Waiting"
+        )
+
+        self.header_connection_status.setText(
+            f"Status: {connection_text}"
+        )
+
+        if connection_text == "Connected":
+            detail = "Discord Connected"
+        elif connection_text == "Waiting for Discord":
+            detail = "Waiting for Discord"
+        else:
+            detail = "Discord unavailable"
+
+        self.header_connection_detail.setText(
+            detail
+        )
+
+        if connection_text == "Connected":
+            strip_detail = (
+                "Ready to update rich presence"
+            )
+        elif connection_text == "Waiting for Discord":
+            strip_detail = (
+                "Open Discord to connect"
+            )
+        else:
+            strip_detail = (
+                "Discord is not connected"
+            )
+
+        self.discord_status_detail.setText(
+            strip_detail
+        )
+
+    @staticmethod
+    def _artwork_cache_directory() -> Path:
+        local_app_data = os.getenv(
+            "LOCALAPPDATA",
+            "",
+        ).strip()
+
+        if local_app_data:
+            directory = (
+                Path(local_app_data)
+                / "0337am Presence"
+                / "artwork_cache"
+            )
+        else:
+            directory = (
+                Path.home()
+                / ".0337am-presence"
+                / "artwork_cache"
+            )
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return directory
+
+    @staticmethod
+    def _artwork_identity(
+        title,
+        artist,
+        album,
+        source_app,
+    ) -> str:
+        identity = "|".join(
+            [
+                str(title or "").strip().lower(),
+                str(artist or "").strip().lower(),
+                str(album or "").strip().lower(),
+                str(source_app or "").strip().lower(),
+            ]
+        )
+
+        return hashlib.sha256(
+            identity.encode("utf-8")
+        ).hexdigest()
+
+    def cache_song_artwork(
+        self,
+        song,
+    ):
+        artwork_bytes = getattr(
+            song,
+            "artwork_bytes",
+            None,
+        )
+
+        if not artwork_bytes:
+            return
+
+        cache_key = self._artwork_identity(
+            getattr(song, "title", ""),
+            getattr(song, "artist", ""),
+            getattr(song, "album", ""),
+            getattr(song, "source_app", ""),
+        )
+
+        cache_path = (
+            self._artwork_cache_directory()
+            / f"{cache_key}.img"
+        )
+
+        if cache_path.exists():
+            return
+
+        try:
+            cache_path.write_bytes(
+                bytes(artwork_bytes)
+            )
+
+        except OSError:
+            pass
+
+    def set_recent_artwork(
+        self,
+        label: QLabel,
+        track: HistoryTrack,
+    ):
+        cache_key = self._artwork_identity(
+            track.title,
+            track.artist,
+            track.album,
+            track.source_app,
+        )
+
+        cache_path = (
+            self._artwork_cache_directory()
+            / f"{cache_key}.img"
+        )
+
+        if not cache_path.exists():
+            label.clear()
+            label.setText("♪")
+            return
+
+        try:
+            artwork_bytes = (
+                cache_path.read_bytes()
+            )
+
+        except OSError:
+            artwork_bytes = b""
+
+        pixmap = QPixmap()
+
+        if (
+            not artwork_bytes
+            or not pixmap.loadFromData(
+                artwork_bytes
+            )
+            or pixmap.isNull()
+        ):
+            label.clear()
+            label.setText("♪")
+            return
+
+        label.clear()
+        label.setText("")
+
+        label.setPixmap(
+            pixmap.scaled(
+                label.width(),
+                label.height(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def populate_recent_tracks(
+        self,
+        tracks: list[HistoryTrack],
+    ):
+        self.recent_empty.setVisible(
+            not bool(tracks)
+        )
+
+        for index, row in enumerate(
+            self.recent_rows
+        ):
+            if index >= len(tracks):
+                row["card"].setVisible(
+                    False
+                )
+                continue
+
+            track = tracks[index]
+
+            row["title"].setText(
+                track.title
+            )
+            row["artist"].setText(
+                track.artist
+            )
+
+            self.set_recent_artwork(
+                row["icon"],
+                track,
+            )
+
+            row["source"].setText(
+                self._display_source(
+                    track.source_app
+                )
+            )
+            row["time"].setText(
+                self._friendly_time(
+                    track.last_played
+                )
+            )
+            row["card"].setVisible(
+                True
+            )
 
     def update_artwork(self, song: Song):
         artwork_bytes = song.artwork_bytes or b""
@@ -949,6 +2513,8 @@ class DashboardPage(QWidget):
         self.total_time.setText("0:00")
         self.progress.setValue(0)
 
+        self.stop_equalizer_animation()
+
         self.preview_title.setText(
             "Nothing playing"
         )
@@ -984,8 +2550,15 @@ class DashboardPage(QWidget):
 
     @pyqtSlot(str)
     def show_worker_error(self, message):
+        self._last_worker_error = str(
+            message
+            or "Unknown media error"
+        )
+
         print("Media worker error:")
         print(message)
+
+        self.stop_equalizer_animation()
 
         self.music_status.setText(
             "Error"
@@ -998,6 +2571,24 @@ class DashboardPage(QWidget):
         )
 
     def stop_media_worker(self):
+        equalizer_timer = getattr(
+            self,
+            "equalizer_timer",
+            None,
+        )
+
+        if equalizer_timer is not None:
+            equalizer_timer.stop()
+
+        dashboard_timer = getattr(
+            self,
+            "dashboard_timer",
+            None,
+        )
+
+        if dashboard_timer is not None:
+            dashboard_timer.stop()
+
         worker = getattr(
             self,
             "media_worker",
@@ -1012,6 +2603,95 @@ class DashboardPage(QWidget):
 
         worker.stop()
         worker.wait(7000)
+
+    @staticmethod
+    def _display_source(
+        source_app: str,
+    ) -> str:
+        source = str(
+            source_app or ""
+        ).strip()
+
+        lowered = source.lower()
+
+        markers = [
+            ("spotify", "Spotify"),
+            ("googlechrome", "Chrome"),
+            ("chrome", "Chrome"),
+            ("msedge", "Edge"),
+            ("firefox", "Firefox"),
+            ("brave", "Brave"),
+            ("opera", "Opera"),
+            ("vivaldi", "Vivaldi"),
+            ("soundcloud", "SoundCloud"),
+        ]
+
+        for marker, label in markers:
+            if marker in lowered:
+                return label
+
+        if not source:
+            return "Unknown"
+
+        cleaned = (
+            source
+            .replace(".exe", "")
+            .replace("_", " ")
+            .strip()
+        )
+
+        return (
+            cleaned[:18]
+            or "Unknown"
+        )
+
+    @staticmethod
+    def _friendly_time(
+        value: str,
+    ) -> str:
+        try:
+            played = datetime.strptime(
+                value,
+                "%Y-%m-%d %H:%M:%S",
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return ""
+
+        seconds = max(
+            0,
+            int(
+                (
+                    datetime.now()
+                    - played
+                ).total_seconds()
+            ),
+        )
+
+        if seconds < 60:
+            return "Just now"
+
+        minutes = seconds // 60
+
+        if minutes < 60:
+            return f"{minutes}m ago"
+
+        hours = minutes // 60
+
+        if hours < 24:
+            return f"{hours}h ago"
+
+        days = hours // 24
+
+        if days < 7:
+            return f"{days}d ago"
+
+        return played.strftime(
+            "%d %b"
+        )
 
     @staticmethod
     def time_to_seconds(

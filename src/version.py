@@ -1,5 +1,5 @@
-APP_VERSION = "1.2.0"
-RELEASE_NAME = "Vanity Update"
+APP_VERSION = "2.0.0"
+RELEASE_NAME = "Smart Presence Update"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} — {RELEASE_NAME}"
 )

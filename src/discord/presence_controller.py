@@ -19,6 +19,9 @@ class PresenceController(QObject):
             "Presence",
         )
 
+        self._auto_afk_active = False
+        self._mode_before_auto_afk = None
+
     @property
     def active_mode(self) -> str:
         mode = str(
@@ -133,6 +136,10 @@ class PresenceController(QObject):
     ):
         mode = presence_mode.normalized_mode()
 
+        if self._auto_afk_active:
+            self._auto_afk_active = False
+            self._mode_before_auto_afk = None
+
         self.save_mode(presence_mode)
 
         if mode == "music":
@@ -172,9 +179,71 @@ class PresenceController(QObject):
 
         self.apply_mode(presence_mode)
 
+    @property
+    def auto_afk_active(self) -> bool:
+        return self._auto_afk_active
+
+    def enter_auto_afk(self):
+        if self._auto_afk_active:
+            return
+
+        current_mode = self.active_mode
+
+        if current_mode in {
+            "afk",
+            "disabled",
+        }:
+            return
+
+        self._mode_before_auto_afk = (
+            current_mode
+        )
+
+        self._auto_afk_active = True
+
+        afk_mode = self.load_mode(
+            "afk"
+        )
+
+        payload = afk_mode.to_payload()
+
+        self.discord.update_custom(
+            title=payload["title"],
+            message=payload["message"],
+            image_bytes=payload["image_bytes"],
+            image_name=payload["image_name"],
+            show_elapsed=payload["show_elapsed"],
+        )
+
+        self.mode_changed.emit(
+            payload
+        )
+
+    def leave_auto_afk(self):
+        if not self._auto_afk_active:
+            return
+
+        restore_mode = (
+            self._mode_before_auto_afk
+            or self.active_mode
+        )
+
+        self._auto_afk_active = False
+        self._mode_before_auto_afk = None
+
+        presence_mode = self.load_mode(
+            restore_mode
+        )
+
+        self.apply_mode(
+            presence_mode
+        )
+
     def handle_song(self, song):
         self._latest_song = song
 
+        if self._auto_afk_active:
+            return
+
         if self.active_mode == "music":
             self.discord.update_song(song)
-

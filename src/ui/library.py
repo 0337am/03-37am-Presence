@@ -6,10 +6,13 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QFrame,
     QHeaderView,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -17,6 +20,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.library.history_store import (
+    HistoryStore,
+    HistoryTrack,
+)
 from src.ui.theme import ThemeManager
 
 
@@ -27,17 +34,23 @@ class LibraryPage(QWidget):
     ):
         super().__init__()
 
-        self.setObjectName("libraryRoot")
+        self.setObjectName(
+            "libraryRoot"
+        )
 
         self.theme_manager = (
             theme_manager
             or ThemeManager(self)
         )
 
+        self.history_store = (
+            HistoryStore()
+        )
+
         self._last_track_key = None
-        self._track_count = 0
 
         self.build_ui()
+        self.connect_signals()
 
         self.theme_manager.theme_changed.connect(
             self.apply_theme
@@ -47,10 +60,12 @@ class LibraryPage(QWidget):
             self.theme_manager.theme()
         )
 
-        self.update_library_state()
+        self.load_history()
 
     def build_ui(self):
-        self.root_layout = QVBoxLayout(self)
+        self.root_layout = QVBoxLayout(
+            self
+        )
         self.root_layout.setContentsMargins(
             20,
             18,
@@ -65,13 +80,15 @@ class LibraryPage(QWidget):
         title_layout = QVBoxLayout()
         title_layout.setSpacing(1)
 
-        self.page_title = QLabel("Library")
+        self.page_title = QLabel(
+            "Library"
+        )
         self.page_title.setObjectName(
             "libraryTitle"
         )
 
         self.page_subtitle = QLabel(
-            "Songs played during this session"
+            "Your persistent listening history"
         )
         self.page_subtitle.setObjectName(
             "librarySubtitle"
@@ -94,6 +111,16 @@ class LibraryPage(QWidget):
             Qt.AlignmentFlag.AlignCenter
         )
 
+        self.play_badge = QLabel(
+            "0 PLAYS"
+        )
+        self.play_badge.setObjectName(
+            "playBadge"
+        )
+        self.play_badge.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
         self.clear_button = QPushButton(
             "Clear history"
         )
@@ -103,9 +130,6 @@ class LibraryPage(QWidget):
         self.clear_button.setCursor(
             Qt.CursorShape.PointingHandCursor
         )
-        self.clear_button.clicked.connect(
-            self.clear_history
-        )
 
         header_layout.addLayout(
             title_layout
@@ -113,6 +137,10 @@ class LibraryPage(QWidget):
         header_layout.addStretch()
         header_layout.addWidget(
             self.track_badge,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+        header_layout.addWidget(
+            self.play_badge,
             alignment=Qt.AlignmentFlag.AlignVCenter,
         )
         header_layout.addWidget(
@@ -140,7 +168,9 @@ class LibraryPage(QWidget):
         )
         status_layout.setSpacing(8)
 
-        status_dot = QLabel("●")
+        status_dot = QLabel(
+            "\u25cf"
+        )
         status_dot.setObjectName(
             "statusDot"
         )
@@ -153,7 +183,7 @@ class LibraryPage(QWidget):
         )
 
         self.latest_status = QLabel(
-            "Waiting for Spotify"
+            "Waiting for media"
         )
         self.latest_status.setObjectName(
             "latestStatus"
@@ -174,6 +204,97 @@ class LibraryPage(QWidget):
             self.status_card
         )
 
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(8)
+
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName(
+            "librarySearch"
+        )
+        self.search_input.setPlaceholderText(
+            "Search songs, artists, albums, or sources"
+        )
+        self.search_input.setClearButtonEnabled(
+            True
+        )
+
+        self.refresh_button = QPushButton(
+            "Refresh"
+        )
+        self.refresh_button.setObjectName(
+            "secondaryButton"
+        )
+        self.refresh_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.source_filter = QComboBox()
+        self.source_filter.setObjectName(
+            "libraryFilter"
+        )
+        self.source_filter.setMinimumWidth(
+            132
+        )
+
+        source_options = (
+            ("All sources", "all"),
+            ("Spotify", "spotify"),
+            ("SoundCloud", "soundcloud"),
+            ("Chrome", "chrome"),
+            ("Edge", "edge"),
+            ("Firefox", "firefox"),
+            ("Brave", "brave"),
+            ("Opera", "opera"),
+            ("Vivaldi", "vivaldi"),
+            ("Other", "other"),
+        )
+
+        for label, value in source_options:
+            self.source_filter.addItem(
+                label,
+                value,
+            )
+
+        self.sort_box = QComboBox()
+        self.sort_box.setObjectName(
+            "libraryFilter"
+        )
+        self.sort_box.setMinimumWidth(
+            140
+        )
+
+        sort_options = (
+            ("Newest first", "newest"),
+            ("Oldest first", "oldest"),
+            ("Most played", "most_played"),
+            ("Title A–Z", "title"),
+            ("Artist A–Z", "artist"),
+        )
+
+        for label, value in sort_options:
+            self.sort_box.addItem(
+                label,
+                value,
+            )
+
+        controls_layout.addWidget(
+            self.search_input,
+            stretch=1,
+        )
+        controls_layout.addWidget(
+            self.source_filter
+        )
+        controls_layout.addWidget(
+            self.sort_box
+        )
+        controls_layout.addWidget(
+            self.refresh_button
+        )
+
+        self.root_layout.addLayout(
+            controls_layout
+        )
+
         self.library_card = QFrame()
         self.library_card.setObjectName(
             "libraryCard"
@@ -191,9 +312,8 @@ class LibraryPage(QWidget):
         card_layout.setSpacing(8)
 
         self.empty_label = QLabel(
-            "No songs have been played yet.\n"
-            "Start Spotify and your session history "
-            "will appear here."
+            "No listening history yet.\n"
+            "Play something and it will appear here."
         )
         self.empty_label.setObjectName(
             "emptyLibrary"
@@ -203,7 +323,10 @@ class LibraryPage(QWidget):
         )
         self.empty_label.setWordWrap(True)
 
-        self.table = QTableWidget(0, 5)
+        self.table = QTableWidget(
+            0,
+            6,
+        )
         self.table.setObjectName(
             "historyTable"
         )
@@ -213,53 +336,80 @@ class LibraryPage(QWidget):
                 "Song",
                 "Artist",
                 "Album",
-                "Status",
+                "Source",
+                "Plays",
                 "Last played",
             ]
         )
 
         self.table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self.table.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
-        )
-        self.table.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
+            QAbstractItemView
+            .SelectionBehavior
+            .SelectRows
         )
 
-        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionMode(
+            QAbstractItemView
+            .SelectionMode
+            .SingleSelection
+        )
+
+        self.table.setEditTriggers(
+            QAbstractItemView
+            .EditTrigger
+            .NoEditTriggers
+        )
+
+        self.table.setAlternatingRowColors(
+            True
+        )
+
         self.table.verticalHeader().setVisible(
             False
         )
-        self.table.setShowGrid(False)
 
-        header = self.table.horizontalHeader()
+        self.table.setShowGrid(
+            False
+        )
+
+        header = (
+            self.table.horizontalHeader()
+        )
 
         header.setSectionResizeMode(
             0,
             QHeaderView.ResizeMode.Stretch,
         )
+
         header.setSectionResizeMode(
             1,
             QHeaderView.ResizeMode.Stretch,
         )
+
         header.setSectionResizeMode(
             2,
             QHeaderView.ResizeMode.Stretch,
         )
+
         header.setSectionResizeMode(
             3,
             QHeaderView.ResizeMode.ResizeToContents,
         )
+
         header.setSectionResizeMode(
             4,
+            QHeaderView.ResizeMode.ResizeToContents,
+        )
+
+        header.setSectionResizeMode(
+            5,
             QHeaderView.ResizeMode.ResizeToContents,
         )
 
         card_layout.addWidget(
             self.empty_label
         )
+
         card_layout.addWidget(
             self.table,
             stretch=1,
@@ -270,18 +420,56 @@ class LibraryPage(QWidget):
             stretch=1,
         )
 
+    def connect_signals(self):
+        self.search_input.textChanged.connect(
+            self.load_history
+        )
+
+        self.refresh_button.clicked.connect(
+            self.load_history
+        )
+
+        self.source_filter.currentIndexChanged.connect(
+            self.load_history
+        )
+
+        self.sort_box.currentIndexChanged.connect(
+            self.load_history
+        )
+
+        self.clear_button.clicked.connect(
+            self.clear_history
+        )
+
     @pyqtSlot(dict)
-    def apply_theme(self, theme: dict):
+    def apply_theme(
+        self,
+        theme: dict,
+    ):
         compact = theme.get(
             "compact",
             True,
         )
 
-        margin = 18 if compact else 24
-        spacing = 10 if compact else 14
-        title_size = 23 if compact else 27
-        row_height = 34 if compact else 42
-        header_height = 34 if compact else 40
+        margin = (
+            18 if compact else 24
+        )
+
+        spacing = (
+            10 if compact else 14
+        )
+
+        title_size = (
+            23 if compact else 27
+        )
+
+        row_height = (
+            34 if compact else 42
+        )
+
+        header_height = (
+            34 if compact else 40
+        )
 
         self.root_layout.setContentsMargins(
             margin,
@@ -319,7 +507,8 @@ class LibraryPage(QWidget):
                 font-size: 11px;
             }}
 
-            QLabel#trackBadge {{
+            QLabel#trackBadge,
+            QLabel#playBadge {{
                 color: {theme["accent"]};
                 background: {theme["card_alt"]};
                 border: 1px solid {theme["border"]};
@@ -329,7 +518,8 @@ class LibraryPage(QWidget):
                 font-weight: 700;
             }}
 
-            QPushButton#clearButton {{
+            QPushButton#clearButton,
+            QPushButton#secondaryButton {{
                 color: {theme["text"]};
                 background: {theme["card_alt"]};
                 border: 1px solid {theme["border"]};
@@ -339,11 +529,13 @@ class LibraryPage(QWidget):
                 font-weight: 650;
             }}
 
-            QPushButton#clearButton:hover {{
+            QPushButton#clearButton:hover,
+            QPushButton#secondaryButton:hover {{
                 border: 1px solid {theme["accent"]};
             }}
 
-            QPushButton#clearButton:pressed {{
+            QPushButton#clearButton:pressed,
+            QPushButton#secondaryButton:pressed {{
                 background: {theme["background"]};
             }}
 
@@ -373,6 +565,38 @@ class LibraryPage(QWidget):
                 color: {theme["text"]};
                 font-size: 10px;
                 font-weight: 650;
+            }}
+
+            QLineEdit#librarySearch,
+            QComboBox#libraryFilter {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 9px;
+                padding: 8px 11px;
+                font-size: 11px;
+                selection-background-color: {theme["accent"]};
+            }}
+
+            QLineEdit#librarySearch:hover,
+            QLineEdit#librarySearch:focus,
+            QComboBox#libraryFilter:hover,
+            QComboBox#libraryFilter:focus {{
+                border: 1px solid {theme["accent"]};
+            }}
+
+            QComboBox#libraryFilter::drop-down {{
+                border: none;
+                width: 22px;
+            }}
+
+            QComboBox#libraryFilter QAbstractItemView {{
+                color: {theme["text"]};
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                selection-color: {theme["text"]};
+                selection-background-color: {theme["accent"]};
+                outline: none;
             }}
 
             QFrame#libraryCard {{
@@ -472,22 +696,326 @@ class LibraryPage(QWidget):
             """
         )
 
-    def add_song(self, song):
+    def load_history(
+        self,
+        *_,
+    ):
+        search_text = (
+            self.search_input.text().strip()
+        )
+
+        tracks = self.history_store.list_tracks(
+            search_text=search_text,
+            limit=1000,
+        )
+
+        source_filter = str(
+            self.source_filter.currentData()
+            or "all"
+        )
+
+        sort_mode = str(
+            self.sort_box.currentData()
+            or "newest"
+        )
+
+        tracks = [
+            track
+            for track in tracks
+            if self._matches_source_filter(
+                track,
+                source_filter,
+            )
+        ]
+
+        tracks = self._sort_tracks(
+            tracks,
+            sort_mode,
+        )
+
+        self.populate_table(
+            tracks
+        )
+
+        total_tracks = (
+            self.history_store.count_tracks()
+        )
+
+        total_plays = (
+            self.history_store.total_plays()
+        )
+
+        self.track_badge.setText(
+            self._format_count(
+                total_tracks,
+                "TRACK",
+                "TRACKS",
+            )
+        )
+
+        self.play_badge.setText(
+            self._format_count(
+                total_plays,
+                "PLAY",
+                "PLAYS",
+            )
+        )
+
+        has_results = bool(tracks)
+
+        self.table.setVisible(
+            has_results
+        )
+
+        self.empty_label.setVisible(
+            not has_results
+        )
+
+        self.clear_button.setEnabled(
+            total_tracks > 0
+        )
+
+        if not has_results:
+            filters_active = (
+                bool(search_text)
+                or source_filter != "all"
+            )
+
+            if filters_active:
+                self.empty_label.setText(
+                    "No tracks match the current filters."
+                )
+            else:
+                self.empty_label.setText(
+                    "No listening history yet.\n"
+                    "Play something and it will appear here."
+                )
+
+        latest_tracks = (
+            self.history_store.list_tracks(
+                limit=1,
+            )
+        )
+
+        if latest_tracks:
+            latest = latest_tracks[0]
+
+            self.latest_status.setText(
+                f"{latest.last_status}: "
+                f"{latest.title}"
+            )
+
+        elif not search_text:
+            self.latest_status.setText(
+                "Waiting for media"
+            )
+
+    def _matches_source_filter(
+        self,
+        track: HistoryTrack,
+        selected_filter: str,
+    ) -> bool:
+        selected = str(
+            selected_filter or "all"
+        ).strip().lower()
+
+        if selected == "all":
+            return True
+
+        display_source = self._display_source(
+            track.source_app
+        ).strip().lower()
+
+        known_sources = {
+            "spotify",
+            "soundcloud",
+            "chrome",
+            "edge",
+            "firefox",
+            "brave",
+            "opera",
+            "vivaldi",
+        }
+
+        if selected == "other":
+            return (
+                display_source
+                not in known_sources
+            )
+
+        return (
+            display_source == selected
+        )
+
+    @staticmethod
+    def _sort_tracks(
+        tracks: list[HistoryTrack],
+        sort_mode: str,
+    ) -> list[HistoryTrack]:
+        selected = str(
+            sort_mode or "newest"
+        ).strip().lower()
+
+        sorted_tracks = list(
+            tracks
+        )
+
+        if selected == "oldest":
+            sorted_tracks.sort(
+                key=lambda track: (
+                    track.last_played,
+                    track.track_id,
+                )
+            )
+
+        elif selected == "most_played":
+            sorted_tracks.sort(
+                key=lambda track: (
+                    -track.play_count,
+                    track.title.lower(),
+                    track.artist.lower(),
+                )
+            )
+
+        elif selected == "title":
+            sorted_tracks.sort(
+                key=lambda track: (
+                    track.title.lower(),
+                    track.artist.lower(),
+                    track.last_played,
+                )
+            )
+
+        elif selected == "artist":
+            sorted_tracks.sort(
+                key=lambda track: (
+                    track.artist.lower(),
+                    track.title.lower(),
+                    track.last_played,
+                )
+            )
+
+        else:
+            sorted_tracks.sort(
+                key=lambda track: (
+                    track.last_played,
+                    track.track_id,
+                ),
+                reverse=True,
+            )
+
+        return sorted_tracks
+
+    def populate_table(
+        self,
+        tracks: list[HistoryTrack],
+    ):
+        self.table.setUpdatesEnabled(
+            False
+        )
+
+        try:
+            self.table.clearContents()
+            self.table.setRowCount(
+                len(tracks)
+            )
+
+            for row, track in enumerate(
+                tracks
+            ):
+                values = [
+                    track.title,
+                    track.artist,
+                    track.album,
+                    self._display_source(
+                        track.source_app
+                    ),
+                    str(track.play_count),
+                    self._format_timestamp(
+                        track.last_played
+                    ),
+                ]
+
+                for column, value in enumerate(
+                    values
+                ):
+                    item = QTableWidgetItem(
+                        value
+                    )
+
+                    item.setData(
+                        Qt.ItemDataRole.UserRole,
+                        track.track_id,
+                    )
+
+                    alignment = (
+                        Qt.AlignmentFlag.AlignVCenter
+                        | Qt.AlignmentFlag.AlignLeft
+                    )
+
+                    if column in {
+                        3,
+                        4,
+                    }:
+                        alignment = (
+                            Qt.AlignmentFlag.AlignCenter
+                        )
+
+                    item.setTextAlignment(
+                        alignment
+                    )
+
+                    self.table.setItem(
+                        row,
+                        column,
+                        item,
+                    )
+
+        finally:
+            self.table.setUpdatesEnabled(
+                True
+            )
+
+    def add_song(
+        self,
+        song,
+    ):
         if song is None:
             return
 
         title = str(
-            getattr(song, "title", "")
+            getattr(
+                song,
+                "title",
+                "",
+            )
             or ""
         ).strip()
 
         artist = str(
-            getattr(song, "artist", "")
+            getattr(
+                song,
+                "artist",
+                "",
+            )
             or ""
         ).strip()
 
         album = str(
-            getattr(song, "album", "")
+            getattr(
+                song,
+                "album",
+                "",
+            )
+            or ""
+        ).strip()
+
+        source_app = str(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
             or ""
         ).strip()
 
@@ -499,7 +1027,8 @@ class LibraryPage(QWidget):
 
         if (
             not title
-            or title.lower() in ignored_titles
+            or title.lower()
+            in ignored_titles
         ):
             return
 
@@ -507,153 +1036,175 @@ class LibraryPage(QWidget):
             title.lower(),
             artist.lower(),
             album.lower(),
-        )
-
-        is_playing = bool(
-            getattr(song, "playing", False)
+            source_app.lower(),
         )
 
         status = (
             "Playing"
-            if is_playing
+            if bool(
+                getattr(
+                    song,
+                    "playing",
+                    False,
+                )
+            )
             else "Paused"
         )
 
-        played_time = (
-            datetime.now().strftime(
-                "%H:%M:%S"
-            )
-        )
-
         if (
-            track_key == self._last_track_key
-            and self.table.rowCount() > 0
+            track_key
+            == self._last_track_key
         ):
-            status_item = self.table.item(
-                0,
-                3,
-            )
-
-            time_item = self.table.item(
-                0,
-                4,
-            )
-
-            if status_item is not None:
-                status_item.setText(
-                    status
+            if (
+                status
+                != getattr(
+                    self,
+                    "_last_status",
+                    None,
+                )
+            ):
+                self.history_store.update_current(
+                    song
                 )
 
-            if time_item is not None:
-                time_item.setText(
-                    played_time
-                )
+                self._last_status = status
+                self.load_history()
 
             self.latest_status.setText(
                 f"{status}: {title}"
             )
-
-            self.update_library_state()
             return
 
-        self._last_track_key = track_key
-
-        self.table.insertRow(0)
-
-        values = [
-            title,
-            artist or "Unknown artist",
-            album or "No album",
-            status,
-            played_time,
-        ]
-
-        for column, value in enumerate(
-            values
-        ):
-            item = QTableWidgetItem(
-                value
-            )
-
-            item.setTextAlignment(
-                Qt.AlignmentFlag.AlignVCenter
-                | Qt.AlignmentFlag.AlignLeft
-            )
-
-            if column == 3:
-                item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignCenter
-                )
-
-            self.table.setItem(
-                0,
-                column,
-                item,
-            )
-
-        while self.table.rowCount() > 100:
-            last_row = (
-                self.table.rowCount() - 1
-            )
-
-            self.table.removeRow(
-                last_row
-            )
-
-        self._track_count = (
-            self.table.rowCount()
+        self.history_store.record_play(
+            song
         )
+
+        self._last_track_key = track_key
+        self._last_status = status
 
         self.latest_status.setText(
             f"{status}: {title}"
         )
 
-        self.update_library_state()
-
-    def update_library_state(self):
-        count = self.table.rowCount()
-
-        self._track_count = count
-
-        if count == 1:
-            badge_text = "1 TRACK"
-        else:
-            badge_text = (
-                f"{count} TRACKS"
-            )
-
-        self.track_badge.setText(
-            badge_text
-        )
-
-        has_history = count > 0
-
-        self.table.setVisible(
-            has_history
-        )
-
-        self.empty_label.setVisible(
-            not has_history
-        )
-
-        self.clear_button.setEnabled(
-            has_history
-        )
-
-        if not has_history:
-            self.latest_status.setText(
-                "Waiting for Spotify"
-            )
+        self.load_history()
 
     def clear_history(self):
-        self.table.clearContents()
-        self.table.setRowCount(0)
+        response = QMessageBox.question(
+            self,
+            "Clear listening history",
+            (
+                "Permanently delete every saved "
+                "track from your Library?"
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if (
+            response
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
+        self.history_store.clear_history()
 
         self._last_track_key = None
-        self._track_count = 0
+        self._last_status = None
+
+        self.load_history()
 
         self.latest_status.setText(
             "History cleared"
         )
 
-        self.update_library_state()
+    @staticmethod
+    def _display_source(
+        source_app: str,
+    ) -> str:
+        source = str(
+            source_app or ""
+        ).strip()
+
+        lowered = source.lower()
+
+        if "spotify" in lowered:
+            return "Spotify"
+
+        if (
+            "chrome" in lowered
+            or "googlechrome" in lowered
+        ):
+            return "Chrome"
+
+        if (
+            "msedge" in lowered
+            or "microsoftedge" in lowered
+        ):
+            return "Edge"
+
+        if "firefox" in lowered:
+            return "Firefox"
+
+        if "soundcloud" in lowered:
+            return "SoundCloud"
+
+        if not source:
+            return "Unknown"
+
+        cleaned = (
+            source
+            .replace(".exe", "")
+            .replace("_", " ")
+            .strip()
+        )
+
+        return (
+            cleaned[:24]
+            or "Unknown"
+        )
+
+    @staticmethod
+    def _format_timestamp(
+        value: str,
+    ) -> str:
+        try:
+            parsed = datetime.strptime(
+                value,
+                "%Y-%m-%d %H:%M:%S",
+            )
+
+            return parsed.strftime(
+                "%d %b %Y  %H:%M"
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return str(
+                value or ""
+            )
+
+    @staticmethod
+    def _format_count(
+        count: int,
+        singular: str,
+        plural: str,
+    ) -> str:
+        safe_count = max(
+            0,
+            int(count),
+        )
+
+        label = (
+            singular
+            if safe_count == 1
+            else plural
+        )
+
+        return (
+            f"{safe_count} {label}"
+        )

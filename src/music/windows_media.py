@@ -1,411 +1,675 @@
+from __future__ import annotations
+
 import asyncio
-import time
+from typing import Any
 
 from winsdk.windows.media.control import (
-    GlobalSystemMediaTransportControlsSessionManager as MediaManager,
+    GlobalSystemMediaTransportControlsSessionManager,
 )
-from winsdk.windows.storage.streams import DataReader
 
 from src.music.song import Song
+from src.music.source_preferences import (
+    SourcePreferences,
+    SourcePreferencesStore,
+)
 
 
 class WindowsMedia:
-    """
-    Reads metadata and artwork from Spotify's Windows media session.
-
-    Other media applications such as Chrome, Edge, YouTube, and
-    media players are deliberately ignored.
-    """
-
-    MEDIA_TIMEOUT_SECONDS = 3.0
-    ARTWORK_TIMEOUT_SECONDS = 2.0
-    ARTWORK_RETRY_SECONDS = 5.0
-    MAX_ARTWORK_SIZE = 10 * 1024 * 1024
-
-    # Works with both the desktop and Microsoft Store versions
-    # because their source application IDs contain "spotify".
     SPOTIFY_SOURCE_MARKERS = (
         "spotify",
     )
 
+    BROWSER_SOURCE_MARKERS = (
+        "chrome",
+        "googlechrome",
+        "msedge",
+        "microsoftedge",
+        "firefox",
+        "brave",
+        "opera",
+        "vivaldi",
+    )
+
     def __init__(self):
-        self._last_track_key = None
-        self._last_artwork_bytes = None
-        self._next_artwork_retry = 0.0
-
-    def get_current_song(self) -> Song | None:
-        try:
-            return asyncio.run(
-                self._get_current_song()
-            )
-
-        except asyncio.TimeoutError:
-            print(
-                "Windows Media request timed out."
-            )
-            return None
-
-        except Exception as error:
-            print("Windows Media error:")
-            print(error)
-            return None
-
-    async def _get_current_song(
-        self,
-    ) -> Song | None:
-        manager = await asyncio.wait_for(
-            MediaManager.request_async(),
-            timeout=self.MEDIA_TIMEOUT_SECONDS,
+        self.preference_store = (
+            SourcePreferencesStore()
         )
 
-        # Do not use get_current_session(), because Windows may
-        # decide Chrome or another browser is the current session.
-        session = self._select_spotify_session(
-            manager
+        self._artwork_cache: dict[
+            str,
+            bytes,
+        ] = {}
+
+        self._last_artwork_key = ""
+
+    def get_current_song(self) -> Song:
+        try:
+            return asyncio.run(
+                self._get_current_song_async()
+            )
+
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+
+            try:
+                return loop.run_until_complete(
+                    self._get_current_song_async()
+                )
+
+            finally:
+                loop.close()
+
+        except Exception as error:
+            print(
+                "Windows media error:",
+                error,
+            )
+            return Song()
+
+    async def _get_current_song_async(
+        self,
+    ) -> Song:
+        preferences = (
+            self.preference_store.load()
+        )
+
+        if not (
+            preferences.spotify_enabled
+            or preferences.browser_enabled
+        ):
+            return Song()
+
+        manager = await (
+            GlobalSystemMediaTransportControlsSessionManager
+            .request_async()
+        )
+
+        sessions = list(
+            manager.get_sessions()
+        )
+
+        current_session = (
+            manager.get_current_session()
+        )
+
+        session = self._select_session(
+            sessions=sessions,
+            current_session=current_session,
+            preferences=preferences,
         )
 
         if session is None:
-            self._reset_cache()
+            return Song()
+
+        return await self._song_from_session(
+            session
+        )
+
+    def _select_session(
+        self,
+        sessions: list[Any],
+        current_session,
+        preferences: SourcePreferences,
+    ):
+        allowed_sessions = [
+            session
+            for session in sessions
+            if self._session_is_enabled(
+                session,
+                preferences,
+            )
+        ]
+
+        if not allowed_sessions:
             return None
 
-        media = await asyncio.wait_for(
-            session.try_get_media_properties_async(),
-            timeout=self.MEDIA_TIMEOUT_SECONDS,
-        )
+        if (
+            current_session is not None
+            and self._session_is_enabled(
+                current_session,
+                preferences,
+            )
+            and self._is_playing(
+                current_session
+            )
+        ):
+            return current_session
 
-        timeline = (
-            session.get_timeline_properties()
-        )
+        for session in allowed_sessions:
+            if self._is_playing(session):
+                return session
 
-        playback = (
-            session.get_playback_info()
-        )
+        if (
+            current_session is not None
+            and self._session_is_enabled(
+                current_session,
+                preferences,
+            )
+        ):
+            return current_session
 
-        title = (
-            media.title
-            or "Unknown title"
-        )
+        return allowed_sessions[0]
 
-        artist = (
-            media.artist
-            or media.album_artist
-            or "Unknown artist"
-        )
-
-        album = (
-            media.album_title
-            or ""
-        )
-
-        position_seconds = max(
-            0,
-            int(
-                timeline.position.total_seconds()
-            ),
-        )
-
-        duration_seconds = max(
-            0,
-            int(
-                timeline.end_time.total_seconds()
-            ),
-        )
-
-        track_key = (
-            title.strip().lower(),
-            artist.strip().lower(),
-            album.strip().lower(),
-        )
-
-        if track_key != self._last_track_key:
-            self._last_track_key = track_key
-            self._last_artwork_bytes = None
-            self._next_artwork_retry = 0.0
-
-        await self._update_artwork(
-            media.thumbnail
-        )
-
-        playing = self._is_playing(
-            playback
-        )
-
-        source_app = self._get_source_app(
+    def _session_is_enabled(
+        self,
+        session,
+        preferences: SourcePreferences,
+    ) -> bool:
+        source_app = self._source_app(
             session
+        )
+
+        if (
+            preferences.spotify_enabled
+            and self._is_spotify_source(
+                source_app
+            )
+        ):
+            return True
+
+        if (
+            preferences.browser_enabled
+            and self._is_browser_source(
+                source_app
+            )
+        ):
+            return True
+
+        return False
+
+    def _source_app(
+        self,
+        session,
+    ) -> str:
+        try:
+            return str(
+                session.source_app_user_model_id
+                or ""
+            ).strip()
+
+        except Exception:
+            return ""
+
+    def _is_spotify_source(
+        self,
+        source_app: str,
+    ) -> bool:
+        lowered = source_app.lower()
+
+        return any(
+            marker in lowered
+            for marker
+            in self.SPOTIFY_SOURCE_MARKERS
+        )
+
+    def _is_browser_source(
+        self,
+        source_app: str,
+    ) -> bool:
+        lowered = source_app.lower()
+
+        return any(
+            marker in lowered
+            for marker
+            in self.BROWSER_SOURCE_MARKERS
+        )
+
+    async def _song_from_session(
+        self,
+        session,
+    ) -> Song:
+        try:
+            media = await (
+                session
+                .try_get_media_properties_async()
+            )
+
+        except Exception as error:
+            print(
+                "Media properties error:",
+                error,
+            )
+            return Song()
+
+        title = self._clean_text(
+            getattr(
+                media,
+                "title",
+                "",
+            )
+        )
+
+        artist = self._clean_text(
+            getattr(
+                media,
+                "artist",
+                "",
+            )
+        )
+
+        album = self._clean_text(
+            getattr(
+                media,
+                "album_title",
+                "",
+            )
+        )
+
+        if not artist:
+            artist = self._clean_text(
+                getattr(
+                    media,
+                    "album_artist",
+                    "",
+                )
+            )
+
+        if not title:
+            return Song()
+
+        timeline = self._timeline(
+            session
+        )
+
+        duration_seconds = (
+            self._timeline_seconds(
+                timeline,
+                "end_time",
+            )
+        )
+
+        position_seconds = (
+            self._timeline_seconds(
+                timeline,
+                "position",
+            )
+        )
+
+        artwork_bytes = await (
+            self._get_artwork_bytes(
+                media=media,
+                title=title,
+                artist=artist,
+                album=album,
+            )
         )
 
         return Song(
             title=title,
-            artist=artist,
-            album=album,
+            artist=(
+                artist
+                or "Unknown artist"
+            ),
+            album=(
+                album
+                or "No album"
+            ),
             duration=self._format_time(
                 duration_seconds
             ),
             position=self._format_time(
                 position_seconds
             ),
-            playing=playing,
-            artwork_bytes=(
-                self._last_artwork_bytes
-            ),
-            source_app=source_app,
-        )
-
-    def _select_spotify_session(
-        self,
-        manager,
-    ):
-        """
-        Finds Spotify among all available Windows media sessions.
-
-        A playing Spotify session is preferred. If Spotify is
-        paused, its paused session is still returned instead of
-        allowing Chrome to take over.
-        """
-
-        try:
-            sessions = list(
-                manager.get_sessions()
-            )
-
-        except Exception as error:
-            print(
-                "Could not read Windows media sessions:"
-            )
-            print(error)
-            return None
-
-        spotify_sessions = [
-            session
-            for session in sessions
-            if self._is_spotify_session(
+            playing=self._is_playing(
                 session
-            )
-        ]
-
-        if not spotify_sessions:
-            return None
-
-        # Prefer a Spotify session that is currently playing.
-        for session in spotify_sessions:
-            try:
-                playback = (
-                    session.get_playback_info()
-                )
-
-                if self._is_playing(playback):
-                    return session
-
-            except Exception:
-                continue
-
-        # Spotify exists but is currently paused or stopped.
-        current_session = (
-            manager.get_current_session()
-        )
-
-        if (
-            current_session is not None
-            and self._is_spotify_session(
-                current_session
-            )
-        ):
-            return current_session
-
-        return spotify_sessions[0]
-
-    def _is_spotify_session(
-        self,
-        session,
-    ) -> bool:
-        source_app = self._get_source_app(
-            session
-        ).lower()
-
-        return any(
-            marker in source_app
-            for marker
-            in self.SPOTIFY_SOURCE_MARKERS
+            ),
+            artwork_bytes=artwork_bytes,
+            source_app=self._source_app(
+                session
+            ),
         )
 
     @staticmethod
-    def _get_source_app(
+    def _timeline(
         session,
-    ) -> str:
+    ):
         try:
-            return str(
-                getattr(
-                    session,
-                    "source_app_user_model_id",
-                    "",
-                )
-                or ""
+            return (
+                session
+                .get_timeline_properties()
             )
 
         except Exception:
-            return ""
+            return None
 
-    @staticmethod
-    def _is_playing(
-        playback,
-    ) -> bool:
-        if playback is None:
-            return False
-
-        status = getattr(
-            playback,
-            "playback_status",
-            None,
-        )
+    def _timeline_seconds(
+        self,
+        timeline,
+        attribute_name: str,
+    ) -> int:
+        if timeline is None:
+            return 0
 
         try:
-            return int(status) == 4
+            value = getattr(
+                timeline,
+                attribute_name,
+            )
+
+        except Exception:
+            return 0
+
+        return self._time_value_to_seconds(
+            value
+        )
+
+    @staticmethod
+    def _time_value_to_seconds(
+        value,
+    ) -> int:
+        if value is None:
+            return 0
+
+        try:
+            total_seconds = (
+                value.total_seconds()
+            )
+
+            return max(
+                0,
+                int(total_seconds),
+            )
 
         except (
+            AttributeError,
             TypeError,
             ValueError,
         ):
-            return (
-                "playing"
-                in str(status).lower()
-            )
-
-    async def _update_artwork(
-        self,
-        thumbnail,
-    ):
-        if (
-            self._last_artwork_bytes
-            is not None
-        ):
-            return
-
-        if thumbnail is None:
-            return
-
-        current_time = time.monotonic()
-
-        if (
-            current_time
-            < self._next_artwork_retry
-        ):
-            return
-
-        self._next_artwork_retry = (
-            current_time
-            + self.ARTWORK_RETRY_SECONDS
-        )
-
-        artwork = await self._read_thumbnail(
-            thumbnail
-        )
-
-        if artwork:
-            self._last_artwork_bytes = artwork
-
-    async def _read_thumbnail(
-        self,
-        thumbnail,
-    ) -> bytes | None:
-        stream = None
-        input_stream = None
-        reader = None
+            pass
 
         try:
-            stream = await asyncio.wait_for(
-                thumbnail.open_read_async(),
-                timeout=(
-                    self.ARTWORK_TIMEOUT_SECONDS
-                ),
+            duration = int(
+                value.duration
             )
 
-            size = int(stream.size)
+            return max(
+                0,
+                duration // 10_000_000,
+            )
 
-            if size <= 0:
-                return None
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+        ):
+            return 0
 
-            if size > self.MAX_ARTWORK_SIZE:
-                print(
-                    "Artwork ignored because it is "
-                    "unexpectedly large:"
-                    f" {size} bytes"
+    @staticmethod
+    def _format_time(
+        seconds: int,
+    ) -> str:
+        safe_seconds = max(
+            0,
+            int(seconds),
+        )
+
+        minutes, remaining = divmod(
+            safe_seconds,
+            60,
+        )
+
+        hours, minutes = divmod(
+            minutes,
+            60,
+        )
+
+        if hours:
+            return (
+                f"{hours}:"
+                f"{minutes:02d}:"
+                f"{remaining:02d}"
+            )
+
+        return (
+            f"{minutes}:"
+            f"{remaining:02d}"
+        )
+
+    @staticmethod
+    def _clean_text(
+        value,
+    ) -> str:
+        return str(
+            value or ""
+        ).strip()
+
+    async def _get_artwork_bytes(
+        self,
+        media,
+        title: str,
+        artist: str,
+        album: str,
+    ) -> bytes | None:
+        artwork_key = "|".join(
+            [
+                title.lower(),
+                artist.lower(),
+                album.lower(),
+            ]
+        )
+
+        if (
+            artwork_key
+            in self._artwork_cache
+        ):
+            self._last_artwork_key = (
+                artwork_key
+            )
+
+            return self._artwork_cache[
+                artwork_key
+            ]
+
+        thumbnail = getattr(
+            media,
+            "thumbnail",
+            None,
+        )
+
+        if thumbnail is None:
+            return None
+
+        artwork_bytes = None
+
+        for attempt in range(2):
+            try:
+                stream = await (
+                    thumbnail.open_read_async()
                 )
+
+                artwork_bytes = await (
+                    self._read_stream_bytes(
+                        stream
+                    )
+                )
+
+                if artwork_bytes:
+                    break
+
+            except Exception as error:
+                if attempt == 1:
+                    print(
+                        "Artwork read error:",
+                        error,
+                    )
+
+                await asyncio.sleep(
+                    0.05
+                )
+
+        if not artwork_bytes:
+            return None
+
+        self._artwork_cache[
+            artwork_key
+        ] = artwork_bytes
+
+        self._last_artwork_key = (
+            artwork_key
+        )
+
+        self._trim_artwork_cache()
+
+        return artwork_bytes
+
+    @staticmethod
+    async def _read_stream_bytes(
+        stream,
+    ) -> bytes | None:
+        try:
+            from winsdk.windows.storage.streams import (
+                DataReader,
+            )
+
+            stream_size = int(
+                stream.size
+            )
+
+            if stream_size <= 0:
                 return None
 
             input_stream = (
-                stream.get_input_stream_at(0)
+                stream.get_input_stream_at(
+                    0
+                )
             )
 
             reader = DataReader(
                 input_stream
             )
 
-            loaded = int(
-                await asyncio.wait_for(
-                    reader.load_async(size),
-                    timeout=(
-                        self.ARTWORK_TIMEOUT_SECONDS
-                    ),
+            try:
+                loaded_size = await (
+                    reader.load_async(
+                        stream_size
+                    )
                 )
-            )
 
-            if loaded <= 0:
-                return None
+                if int(loaded_size) <= 0:
+                    return None
 
-            image_data = bytearray(
-                loaded
-            )
+                data = bytearray(
+                    int(loaded_size)
+                )
 
-            reader.read_bytes(
-                image_data
-            )
+                reader.read_bytes(
+                    data
+                )
 
-            return bytes(image_data)
+                return bytes(data)
 
-        except asyncio.TimeoutError:
-            print(
-                "Artwork read timed out."
-            )
-            return None
+            finally:
+                try:
+                    reader.detach_stream()
 
-        except Exception as error:
-            print(
-                "Artwork read failed:"
-            )
-            print(error)
+                except Exception:
+                    pass
+
+                try:
+                    reader.close()
+
+                except Exception:
+                    pass
+
+                try:
+                    input_stream.close()
+
+                except Exception:
+                    pass
+
+        except Exception:
             return None
 
         finally:
-            self._close_safely(reader)
-            self._close_safely(input_stream)
-            self._close_safely(stream)
+            try:
+                stream.close()
 
-    def _reset_cache(self):
-        self._last_track_key = None
-        self._last_artwork_bytes = None
-        self._next_artwork_retry = 0.0
+            except Exception:
+                pass
+
+    def _trim_artwork_cache(
+        self,
+    ):
+        maximum_items = 30
+
+        while (
+            len(self._artwork_cache)
+            > maximum_items
+        ):
+            oldest_key = next(
+                iter(
+                    self._artwork_cache
+                )
+            )
+
+            if (
+                oldest_key
+                == self._last_artwork_key
+                and len(
+                    self._artwork_cache
+                ) > 1
+            ):
+                keys = list(
+                    self._artwork_cache
+                )
+
+                oldest_key = keys[1]
+
+            self._artwork_cache.pop(
+                oldest_key,
+                None,
+            )
 
     @staticmethod
-    def _close_safely(item):
-        if item is None:
-            return
-
+    def _is_playing(
+        session,
+    ) -> bool:
         try:
-            item.close()
+            playback_info = (
+                session
+                .get_playback_info()
+            )
+
+            if playback_info is None:
+                return False
+
+            status = getattr(
+                playback_info,
+                "playback_status",
+                None,
+            )
+
+            if status is None:
+                return False
+
+            try:
+                return int(status) == 4
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+                return (
+                    "playing"
+                    in str(status).lower()
+                )
 
         except Exception:
-            pass
+            return False
 
-    @staticmethod
-    def _format_time(
-        seconds: int,
-    ) -> str:
-        minutes, remaining_seconds = divmod(
-            seconds,
-            60,
+    def get_source_preferences(
+        self,
+    ) -> SourcePreferences:
+        return (
+            self.preference_store.load()
         )
 
-        return (
-            f"{minutes}:"
-            f"{remaining_seconds:02d}"
+    def update_source_preferences(
+        self,
+        spotify_enabled: bool | None = None,
+        browser_enabled: bool | None = None,
+    ) -> SourcePreferences:
+        return self.preference_store.update(
+            spotify_enabled=spotify_enabled,
+            browser_enabled=browser_enabled,
         )

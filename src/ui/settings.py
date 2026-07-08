@@ -1,12 +1,17 @@
+import csv
+import os
+import shutil
 from pathlib import Path
 
 from PyQt6.QtCore import (
     Qt,
     QSettings,
+    QTimer,
     pyqtSignal,
 )
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -16,12 +21,14 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
+from src.library.history_store import HistoryStore
 from src.system.startup import StartupManager
 from src.ui.theme import (
     DEFAULT_THEME,
@@ -29,10 +36,18 @@ from src.ui.theme import (
     ThemeManager,
 )
 
+from src.music.source_preferences import (
+    SourcePreferencesStore,
+)
+
+from src.system.afk_preferences import (
+    AfkPreferencesStore,
+)
 
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
+    storage_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -51,6 +66,21 @@ class SettingsPage(QWidget):
         )
 
         self.color_buttons = {}
+
+        self.source_preferences_store = (
+            SourcePreferencesStore()
+        )
+
+        self.afk_preferences_store = (
+            AfkPreferencesStore()
+        )
+
+        self.history_store = (
+            HistoryStore()
+        )
+
+        self.diagnostics_provider = None
+        self._last_diagnostics_text = ""
 
         self.build_ui()
 
@@ -94,6 +124,7 @@ class SettingsPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
 
         scroll = QScrollArea()
+        self.settings_scroll = scroll
         scroll.setObjectName("settingsScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(
@@ -422,6 +453,198 @@ class SettingsPage(QWidget):
 
         theme_layout.addLayout(colour_grid)
 
+        source_preferences = (
+            self.source_preferences_store.load()
+        )
+
+        sources = self.create_card(
+            "Media sources",
+            (
+                "Choose which apps are allowed to "
+                "update your Discord presence."
+            ),
+        )
+
+        sources_layout = sources.layout()
+
+        self.spotify_source_box = (
+            self.create_checkbox(
+                "Enable Spotify",
+                source_preferences.spotify_enabled,
+            )
+        )
+
+        self.browser_source_box = (
+            self.create_checkbox(
+                (
+                    "Enable browser media "
+                    "(Chrome, Edge, Firefox, "
+                    "Brave, Opera, and Vivaldi)"
+                ),
+                source_preferences.browser_enabled,
+            )
+        )
+
+        browser_help = QLabel(
+            (
+                "Browser media includes SoundCloud "
+                "and other websites that expose "
+                "Windows media controls."
+            )
+        )
+        browser_help.setObjectName(
+            "helpText"
+        )
+        browser_help.setWordWrap(
+            True
+        )
+
+        self.spotify_source_box.toggled.connect(
+            self.change_source_preferences
+        )
+
+        self.browser_source_box.toggled.connect(
+            self.change_source_preferences
+        )
+
+        sources_layout.addWidget(
+            self.spotify_source_box
+        )
+
+        sources_layout.addWidget(
+            self.browser_source_box
+        )
+
+        sources_layout.addWidget(
+            browser_help
+        )
+
+        afk_preferences = (
+            self.afk_preferences_store.load()
+        )
+
+        auto_afk = self.create_card(
+            "Auto AFK",
+            (
+                "Automatically switch to AFK mode "
+                "when no keyboard or mouse activity "
+                "is detected."
+            ),
+        )
+
+        auto_afk_layout = auto_afk.layout()
+
+        self.auto_afk_box = (
+            self.create_checkbox(
+                "Enable Auto AFK",
+                afk_preferences.enabled,
+            )
+        )
+
+        timeout_row = QHBoxLayout()
+        timeout_row.setSpacing(12)
+
+        timeout_label = QLabel(
+            "Switch to AFK after"
+        )
+        timeout_label.setObjectName(
+            "fieldLabel"
+        )
+
+        self.afk_timeout_combo = QComboBox()
+        self.afk_timeout_combo.setObjectName(
+            "presetCombo"
+        )
+
+        timeout_options = [
+            1,
+            5,
+            10,
+            15,
+            30,
+            60,
+        ]
+
+        if (
+            afk_preferences.timeout_minutes
+            not in timeout_options
+        ):
+            timeout_options.append(
+                afk_preferences.timeout_minutes
+            )
+            timeout_options.sort()
+
+        for minutes in timeout_options:
+            label = (
+                "1 minute"
+                if minutes == 1
+                else f"{minutes} minutes"
+            )
+
+            self.afk_timeout_combo.addItem(
+                label,
+                minutes,
+            )
+
+        timeout_index = (
+            self.afk_timeout_combo.findData(
+                afk_preferences.timeout_minutes
+            )
+        )
+
+        if timeout_index >= 0:
+            self.afk_timeout_combo.setCurrentIndex(
+                timeout_index
+            )
+
+        self.afk_timeout_combo.setEnabled(
+            afk_preferences.enabled
+        )
+
+        afk_help = QLabel(
+            (
+                "When activity returns, the app "
+                "restores the presence mode that "
+                "was active before AFK."
+            )
+        )
+        afk_help.setObjectName(
+            "helpText"
+        )
+        afk_help.setWordWrap(
+            True
+        )
+
+        self.auto_afk_box.toggled.connect(
+            self.afk_timeout_combo.setEnabled
+        )
+
+        self.auto_afk_box.toggled.connect(
+            self.change_afk_preferences
+        )
+
+        self.afk_timeout_combo.currentIndexChanged.connect(
+            self.change_afk_preferences
+        )
+
+        timeout_row.addWidget(
+            timeout_label
+        )
+        timeout_row.addStretch()
+        timeout_row.addWidget(
+            self.afk_timeout_combo
+        )
+
+        auto_afk_layout.addWidget(
+            self.auto_afk_box
+        )
+        auto_afk_layout.addLayout(
+            timeout_row
+        )
+        auto_afk_layout.addWidget(
+            afk_help
+        )
+
         appearance = self.create_card(
             "Window",
             "Choose how the desktop window behaves.",
@@ -488,6 +711,331 @@ class SettingsPage(QWidget):
             self.hidden_box
         )
 
+        storage = self.create_card(
+            "Data & Storage",
+            (
+                "Review, export, or clear the "
+                "persistent data saved by the app."
+            ),
+        )
+
+        storage_layout = storage.layout()
+
+        storage_grid = QGridLayout()
+        storage_grid.setHorizontalSpacing(18)
+        storage_grid.setVerticalSpacing(9)
+
+        library_label = QLabel(
+            "Library"
+        )
+        library_label.setObjectName(
+            "fieldLabel"
+        )
+
+        self.storage_library_value = QLabel(
+            "0 tracks • 0 plays"
+        )
+        self.storage_library_value.setObjectName(
+            "helpText"
+        )
+
+        database_label = QLabel(
+            "Library database"
+        )
+        database_label.setObjectName(
+            "fieldLabel"
+        )
+
+        self.storage_database_value = QLabel(
+            "0 B"
+        )
+        self.storage_database_value.setObjectName(
+            "helpText"
+        )
+
+        artwork_label = QLabel(
+            "Artwork cache"
+        )
+        artwork_label.setObjectName(
+            "fieldLabel"
+        )
+
+        self.storage_artwork_value = QLabel(
+            "0 B"
+        )
+        self.storage_artwork_value.setObjectName(
+            "helpText"
+        )
+
+        location_label = QLabel(
+            "Saved-data location"
+        )
+        location_label.setObjectName(
+            "fieldLabel"
+        )
+
+        self.storage_location_value = QLabel("")
+        self.storage_location_value.setObjectName(
+            "helpText"
+        )
+        self.storage_location_value.setWordWrap(
+            True
+        )
+
+        storage_grid.addWidget(
+            library_label,
+            0,
+            0,
+        )
+        storage_grid.addWidget(
+            self.storage_library_value,
+            0,
+            1,
+        )
+
+        storage_grid.addWidget(
+            database_label,
+            1,
+            0,
+        )
+        storage_grid.addWidget(
+            self.storage_database_value,
+            1,
+            1,
+        )
+
+        storage_grid.addWidget(
+            artwork_label,
+            2,
+            0,
+        )
+        storage_grid.addWidget(
+            self.storage_artwork_value,
+            2,
+            1,
+        )
+
+        storage_grid.addWidget(
+            location_label,
+            3,
+            0,
+        )
+        storage_grid.addWidget(
+            self.storage_location_value,
+            3,
+            1,
+        )
+
+        storage_grid.setColumnStretch(
+            1,
+            1,
+        )
+
+        storage_layout.addLayout(
+            storage_grid
+        )
+
+        storage_safe_row = QHBoxLayout()
+        storage_safe_row.setSpacing(8)
+
+        open_data_button = QPushButton(
+            "Open data folder"
+        )
+        open_data_button.setObjectName(
+            "secondaryButton"
+        )
+        open_data_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        open_data_button.clicked.connect(
+            self.open_data_folder
+        )
+
+        export_library_button = QPushButton(
+            "Export Library CSV"
+        )
+        export_library_button.setObjectName(
+            "secondaryButton"
+        )
+        export_library_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        export_library_button.clicked.connect(
+            self.export_library_csv
+        )
+
+        storage_safe_row.addWidget(
+            open_data_button
+        )
+        storage_safe_row.addWidget(
+            export_library_button
+        )
+        storage_safe_row.addStretch()
+
+        storage_danger_row = QHBoxLayout()
+        storage_danger_row.setSpacing(8)
+
+        clear_artwork_button = QPushButton(
+            "Clear artwork cache"
+        )
+        clear_artwork_button.setObjectName(
+            "dangerButton"
+        )
+        clear_artwork_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        clear_artwork_button.clicked.connect(
+            self.clear_artwork_cache
+        )
+
+        clear_history_button = QPushButton(
+            "Clear listening history"
+        )
+        clear_history_button.setObjectName(
+            "dangerButton"
+        )
+        clear_history_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        clear_history_button.clicked.connect(
+            self.clear_listening_history
+        )
+
+        storage_danger_row.addWidget(
+            clear_artwork_button
+        )
+        storage_danger_row.addWidget(
+            clear_history_button
+        )
+        storage_danger_row.addStretch()
+
+        storage_layout.addLayout(
+            storage_safe_row
+        )
+        storage_layout.addLayout(
+            storage_danger_row
+        )
+
+        diagnostics = self.create_card(
+            "Diagnostics & Support",
+            (
+                "View the app's live status and copy "
+                "a troubleshooting report."
+            ),
+        )
+
+        diagnostics_layout = diagnostics.layout()
+
+        diagnostics_grid = QGridLayout()
+        diagnostics_grid.setHorizontalSpacing(18)
+        diagnostics_grid.setVerticalSpacing(8)
+
+        self.diagnostic_values = {}
+
+        diagnostic_rows = (
+            ("app_version", "App version"),
+            ("discord", "Discord"),
+            ("presence_mode", "Presence mode"),
+            ("media", "Current media"),
+            ("media_source", "Media source"),
+            ("enabled_sources", "Enabled sources"),
+            ("auto_afk", "Auto AFK"),
+            ("library", "Library"),
+            ("media_error", "Latest media error"),
+        )
+
+        for row_index, (
+            diagnostic_key,
+            diagnostic_name,
+        ) in enumerate(
+            diagnostic_rows
+        ):
+            name_label = QLabel(
+                diagnostic_name
+            )
+            name_label.setObjectName(
+                "fieldLabel"
+            )
+
+            value_label = QLabel(
+                "Waiting for app status..."
+            )
+            value_label.setObjectName(
+                "helpText"
+            )
+            value_label.setWordWrap(
+                True
+            )
+            value_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+
+            diagnostics_grid.addWidget(
+                name_label,
+                row_index,
+                0,
+            )
+
+            diagnostics_grid.addWidget(
+                value_label,
+                row_index,
+                1,
+            )
+
+            self.diagnostic_values[
+                diagnostic_key
+            ] = value_label
+
+        diagnostics_grid.setColumnStretch(
+            1,
+            1,
+        )
+
+        diagnostics_layout.addLayout(
+            diagnostics_grid
+        )
+
+        diagnostics_buttons = QHBoxLayout()
+        diagnostics_buttons.setSpacing(8)
+
+        refresh_diagnostics_button = QPushButton(
+            "Refresh diagnostics"
+        )
+        refresh_diagnostics_button.setObjectName(
+            "secondaryButton"
+        )
+        refresh_diagnostics_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        refresh_diagnostics_button.clicked.connect(
+            self.refresh_diagnostics
+        )
+
+        copy_diagnostics_button = QPushButton(
+            "Copy diagnostics"
+        )
+        copy_diagnostics_button.setObjectName(
+            "secondaryButton"
+        )
+        copy_diagnostics_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        copy_diagnostics_button.clicked.connect(
+            self.copy_diagnostics
+        )
+
+        diagnostics_buttons.addWidget(
+            refresh_diagnostics_button
+        )
+        diagnostics_buttons.addWidget(
+            copy_diagnostics_button
+        )
+        diagnostics_buttons.addStretch()
+
+        diagnostics_layout.addLayout(
+            diagnostics_buttons
+        )
+
         self.status = QLabel("")
         self.status.setObjectName("status")
 
@@ -526,14 +1074,648 @@ class SettingsPage(QWidget):
 
         root.addWidget(branding)
         root.addWidget(theme_card)
+        root.addWidget(sources)
+        root.addWidget(auto_afk)
         root.addWidget(appearance)
         root.addWidget(startup)
+        root.addWidget(storage)
+        root.addWidget(diagnostics)
         root.addWidget(self.status)
         root.addLayout(button_row)
         root.addStretch()
 
+        self.settings_sections = {
+            "theme": theme_card,
+            "media_sources": sources,
+            "auto_afk": auto_afk,
+            "data_storage": storage,
+            "diagnostics": diagnostics,
+        }
+
         scroll.setWidget(content)
         outer.addWidget(scroll)
+
+        self.refresh_storage_summary()
+        self.refresh_diagnostics()
+
+    def set_diagnostics_provider(
+        self,
+        provider,
+    ):
+        self.diagnostics_provider = provider
+        self.refresh_diagnostics()
+
+    def refresh_diagnostics(self):
+        values = {
+            "app_version": "Waiting for app status...",
+            "discord": "Waiting for app status...",
+            "presence_mode": "Waiting for app status...",
+            "media": "Waiting for app status...",
+            "media_source": "Waiting for app status...",
+            "enabled_sources": "Waiting for app status...",
+            "auto_afk": "Waiting for app status...",
+            "library": "Waiting for app status...",
+            "media_error": "None",
+        }
+
+        provider = getattr(
+            self,
+            "diagnostics_provider",
+            None,
+        )
+
+        if callable(provider):
+            try:
+                provided_values = provider()
+
+                if isinstance(
+                    provided_values,
+                    dict,
+                ):
+                    for key, value in (
+                        provided_values.items()
+                    ):
+                        if key in values:
+                            values[key] = str(
+                                value
+                            )
+
+            except Exception as error:
+                values[
+                    "media_error"
+                ] = (
+                    "Diagnostics refresh failed: "
+                    f"{error}"
+                )
+
+        label_order = (
+            ("app_version", "App version"),
+            ("discord", "Discord"),
+            ("presence_mode", "Presence mode"),
+            ("media", "Current media"),
+            ("media_source", "Media source"),
+            ("enabled_sources", "Enabled sources"),
+            ("auto_afk", "Auto AFK"),
+            ("library", "Library"),
+            ("media_error", "Latest media error"),
+        )
+
+        report_lines = [
+            "03:37am Presence Diagnostics",
+            "----------------------------",
+        ]
+
+        for key, display_name in label_order:
+            value = str(
+                values.get(
+                    key,
+                    "Unavailable",
+                )
+            )
+
+            label = self.diagnostic_values.get(
+                key
+            )
+
+            if label is not None:
+                label.setText(
+                    value
+                )
+
+            report_lines.append(
+                f"{display_name}: {value}"
+            )
+
+        self._last_diagnostics_text = (
+            "\n".join(
+                report_lines
+            )
+        )
+
+    def copy_diagnostics(self):
+        self.refresh_diagnostics()
+
+        clipboard = (
+            QApplication.clipboard()
+        )
+
+        if clipboard is None:
+            self.status.setText(
+                "The clipboard is unavailable."
+            )
+            return
+
+        clipboard.setText(
+            self._last_diagnostics_text
+        )
+
+        self.status.setText(
+            "Diagnostics copied to the clipboard."
+        )
+
+    def data_directory(self) -> Path:
+        directory = (
+            self.history_store
+            .database_path
+            .parent
+        )
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return directory
+
+    def artwork_cache_directory(self) -> Path:
+        return (
+            self.data_directory()
+            / "artwork_cache"
+        )
+
+    @staticmethod
+    def directory_size(
+        directory: Path,
+    ) -> int:
+        if not directory.exists():
+            return 0
+
+        total = 0
+
+        for item in directory.rglob("*"):
+            if not item.is_file():
+                continue
+
+            try:
+                total += item.stat().st_size
+            except OSError:
+                continue
+
+        return total
+
+    @staticmethod
+    def format_bytes(
+        byte_count: int,
+    ) -> str:
+        value = float(
+            max(
+                0,
+                int(byte_count),
+            )
+        )
+
+        units = (
+            "B",
+            "KB",
+            "MB",
+            "GB",
+        )
+
+        for unit in units:
+            if (
+                value < 1024
+                or unit == units[-1]
+            ):
+                if unit == "B":
+                    return (
+                        f"{int(value)} {unit}"
+                    )
+
+                return (
+                    f"{value:.1f} {unit}"
+                )
+
+            value /= 1024
+
+        return "0 B"
+
+    def database_size(self) -> int:
+        database_path = (
+            self.history_store
+            .database_path
+        )
+
+        total = 0
+
+        for suffix in (
+            "",
+            "-wal",
+            "-shm",
+        ):
+            path = Path(
+                str(database_path)
+                + suffix
+            )
+
+            if not path.exists():
+                continue
+
+            try:
+                total += path.stat().st_size
+            except OSError:
+                continue
+
+        return total
+
+    def refresh_storage_summary(self):
+        try:
+            total_tracks = (
+                self.history_store
+                .count_tracks()
+            )
+
+            total_plays = (
+                self.history_store
+                .total_plays()
+            )
+
+        except Exception:
+            total_tracks = 0
+            total_plays = 0
+
+        track_word = (
+            "track"
+            if total_tracks == 1
+            else "tracks"
+        )
+
+        play_word = (
+            "play"
+            if total_plays == 1
+            else "plays"
+        )
+
+        self.storage_library_value.setText(
+            (
+                f"{total_tracks} {track_word}"
+                " • "
+                f"{total_plays} {play_word}"
+            )
+        )
+
+        self.storage_database_value.setText(
+            self.format_bytes(
+                self.database_size()
+            )
+        )
+
+        self.storage_artwork_value.setText(
+            self.format_bytes(
+                self.directory_size(
+                    self.artwork_cache_directory()
+                )
+            )
+        )
+
+        self.storage_location_value.setText(
+            str(
+                self.data_directory()
+            )
+        )
+
+    def open_data_folder(self):
+        directory = self.data_directory()
+
+        try:
+            os.startfile(
+                str(directory)
+            )
+
+            self.status.setText(
+                "Opened the saved-data folder."
+            )
+
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "Folder could not be opened",
+                str(error),
+            )
+
+    def export_library_csv(self):
+        suggested_path = (
+            self.data_directory()
+            / "03-37am-library.csv"
+        )
+
+        selected_path, _ = (
+            QFileDialog.getSaveFileName(
+                self,
+                "Export Library",
+                str(suggested_path),
+                "CSV files (*.csv)",
+            )
+        )
+
+        if not selected_path:
+            return
+
+        destination = Path(
+            selected_path
+        )
+
+        if (
+            destination.suffix.lower()
+            != ".csv"
+        ):
+            destination = (
+                destination.with_suffix(
+                    ".csv"
+                )
+            )
+
+        try:
+            tracks = (
+                self.history_store
+                .list_tracks(
+                    limit=5000
+                )
+            )
+
+            with destination.open(
+                "w",
+                encoding="utf-8-sig",
+                newline="",
+            ) as csv_file:
+                writer = csv.writer(
+                    csv_file
+                )
+
+                writer.writerow(
+                    [
+                        "Title",
+                        "Artist",
+                        "Album",
+                        "Source",
+                        "First played",
+                        "Last played",
+                        "Play count",
+                        "Last status",
+                    ]
+                )
+
+                for track in tracks:
+                    writer.writerow(
+                        [
+                            track.title,
+                            track.artist,
+                            track.album,
+                            track.source_app,
+                            track.first_played,
+                            track.last_played,
+                            track.play_count,
+                            track.last_status,
+                        ]
+                    )
+
+            self.status.setText(
+                f"Library exported to {destination.name}."
+            )
+
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "Export failed",
+                (
+                    "The Library could not be exported."
+                    "\n\n"
+                    f"{error}"
+                ),
+            )
+
+    def clear_artwork_cache(self):
+        response = QMessageBox.question(
+            self,
+            "Clear artwork cache",
+            (
+                "Delete all saved album-art thumbnails?"
+                "\n\n"
+                "Artwork will be cached again as "
+                "songs are played."
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if (
+            response
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
+        cache_directory = (
+            self.artwork_cache_directory()
+        )
+
+        try:
+            if cache_directory.exists():
+                shutil.rmtree(
+                    cache_directory
+                )
+
+            cache_directory.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+        except OSError as error:
+            QMessageBox.warning(
+                self,
+                "Cache could not be cleared",
+                str(error),
+            )
+            return
+
+        self.refresh_storage_summary()
+        self.storage_changed.emit()
+
+        self.status.setText(
+            "Artwork cache cleared."
+        )
+
+    def clear_listening_history(self):
+        response = QMessageBox.question(
+            self,
+            "Clear listening history",
+            (
+                "Permanently delete every saved "
+                "track and listening event?"
+                "\n\n"
+                "This cannot be undone."
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if (
+            response
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
+        try:
+            self.history_store.clear_history()
+
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "History could not be cleared",
+                str(error),
+            )
+            return
+
+        self.refresh_storage_summary()
+        self.storage_changed.emit()
+
+        self.status.setText(
+            "Listening history cleared."
+        )
+
+    def show_section(
+        self,
+        section_name: str,
+    ):
+        requested = str(
+            section_name or ""
+        ).strip().lower()
+
+        aliases = {
+            "afk": "auto_afk",
+            "auto afk": "auto_afk",
+            "sources": "media_sources",
+            "media": "media_sources",
+            "media sources": "media_sources",
+            "colours": "theme",
+            "colors": "theme",
+            "data": "data_storage",
+            "storage": "data_storage",
+            "data storage": "data_storage",
+            "data & storage": "data_storage",
+            "support": "diagnostics",
+            "diagnostic": "diagnostics",
+            "diagnostics & support": "diagnostics",
+        }
+
+        section_key = aliases.get(
+            requested,
+            requested,
+        )
+
+        sections = getattr(
+            self,
+            "settings_sections",
+            {},
+        )
+
+        card = sections.get(
+            section_key
+        )
+
+        scroll = getattr(
+            self,
+            "settings_scroll",
+            None,
+        )
+
+        if card is None or scroll is None:
+            return
+
+        QTimer.singleShot(
+            0,
+            lambda target=card, area=scroll:
+            area.ensureWidgetVisible(
+                target,
+                0,
+                24,
+            )
+        )
+
+        self._highlight_settings_card(
+            card
+        )
+
+    def _highlight_settings_card(
+        self,
+        card,
+    ):
+        previous = getattr(
+            self,
+            "_focused_settings_card",
+            None,
+        )
+
+        if (
+            previous is not None
+            and previous is not card
+        ):
+            self._clear_settings_highlight(
+                previous
+            )
+
+        self._focused_settings_card = card
+
+        card.setProperty(
+            "deepLinkFocus",
+            True,
+        )
+
+        self._refresh_widget_style(
+            card
+        )
+
+        QTimer.singleShot(
+            1600,
+            lambda target=card:
+            self._clear_settings_highlight(
+                target
+            )
+        )
+
+    def _clear_settings_highlight(
+        self,
+        card,
+    ):
+        if (
+            getattr(
+                self,
+                "_focused_settings_card",
+                None,
+            )
+            is not card
+        ):
+            return
+
+        card.setProperty(
+            "deepLinkFocus",
+            False,
+        )
+
+        self._focused_settings_card = None
+
+        self._refresh_widget_style(
+            card
+        )
+
+    @staticmethod
+    def _refresh_widget_style(
+        widget,
+    ):
+        style = widget.style()
+
+        style.unpolish(
+            widget
+        )
+        style.polish(
+            widget
+        )
+
+        widget.update()
 
     def create_card(
         self,
@@ -798,10 +1980,92 @@ class SettingsPage(QWidget):
             "Layout preference saved."
         )
 
+    def change_source_preferences(
+        self,
+        _checked: bool = False,
+    ):
+        preferences = (
+            self.source_preferences_store.update(
+                spotify_enabled=(
+                    self.spotify_source_box.isChecked()
+                ),
+                browser_enabled=(
+                    self.browser_source_box.isChecked()
+                ),
+            )
+        )
+
+        enabled_sources = []
+
+        if preferences.spotify_enabled:
+            enabled_sources.append(
+                "Spotify"
+            )
+
+        if preferences.browser_enabled:
+            enabled_sources.append(
+                "browser media"
+            )
+
+        if enabled_sources:
+            source_text = " and ".join(
+                enabled_sources
+            )
+
+            self.status.setText(
+                f"Media sources saved: {source_text}."
+            )
+        else:
+            self.status.setText(
+                "All media sources are disabled."
+            )
+ 
+    def change_afk_preferences(
+        self,
+        _value=None,
+    ):
+        timeout_minutes = (
+            self.afk_timeout_combo.currentData()
+        )
+
+        if timeout_minutes is None:
+            timeout_minutes = 10
+
+        preferences = (
+            self.afk_preferences_store.update(
+                enabled=(
+                    self.auto_afk_box.isChecked()
+                ),
+                timeout_minutes=int(
+                    timeout_minutes
+                ),
+            )
+        )
+
+        if preferences.enabled:
+            self.status.setText(
+                (
+                    "Auto AFK enabled after "
+                    f"{preferences.timeout_minutes} "
+                    "minute"
+                    + (
+                        ""
+                        if preferences.timeout_minutes == 1
+                        else "s"
+                    )
+                    + "."
+                )
+            )
+        else:
+            self.status.setText(
+                "Auto AFK disabled."
+            )
+
     def on_theme_changed(
         self,
         theme: dict,
     ):
+
         preset = theme.get(
             "preset",
             "Custom",
@@ -916,6 +2180,10 @@ class SettingsPage(QWidget):
                 background: {theme["card"]};
                 border: 1px solid {theme["border"]};
                 border-radius: 14px;
+            }}
+
+            QFrame#settingsCard[deepLinkFocus="true"] {{
+                border: 2px solid {theme["accent"]};
             }}
 
             QLabel#cardTitle {{

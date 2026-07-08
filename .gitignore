@@ -9,3 +9,13 @@ __pycache__/
 *.before_*
 .cache/
 src/cloudinary_config_local.py
+# Local release and development helpers
+/release/
+/patch_*.py
+/repair_*.py
+/audit_*.py
+/build_*_release.ps1
+/*_for_*.py
+/*_current*.py
+/*_redesign.py
+/*.failed_*

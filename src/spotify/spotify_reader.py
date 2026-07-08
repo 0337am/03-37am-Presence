@@ -9,4 +9,4 @@ class SpotifyReader(WindowsMedia):
     Music and artwork now come from Windows Media.
     """
 
-    passpython main.py
+    pass

@@ -42,7 +42,7 @@ def set_windows_app_id():
     try:
         app_id = (
             "0337am.Presence."
-            "Vanity"
+            "Desktop"
         )
 
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
