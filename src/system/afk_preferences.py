@@ -6,6 +6,7 @@ from dataclasses import (
     asdict,
     dataclass,
 )
+from datetime import datetime
 from pathlib import Path
 
 
@@ -65,12 +66,28 @@ class AfkPreferencesStore:
             ) as file:
                 data = json.load(file)
 
+            if not isinstance(
+                data,
+                dict,
+            ):
+                raise TypeError(
+                    "AFK preferences must "
+                    "contain a JSON object."
+                )
+
+        except FileNotFoundError:
+            preferences = AfkPreferences()
+
+            self.save(preferences)
+            return preferences
+
         except (
-            FileNotFoundError,
             json.JSONDecodeError,
             OSError,
             TypeError,
         ):
+            self._quarantine_invalid_file()
+
             preferences = AfkPreferences()
 
             self.save(preferences)
@@ -95,6 +112,15 @@ class AfkPreferencesStore:
         self,
         preferences: AfkPreferences,
     ):
+        if not isinstance(
+            preferences,
+            AfkPreferences,
+        ):
+            raise TypeError(
+                "preferences must be an "
+                "AfkPreferences instance."
+            )
+
         safe_preferences = AfkPreferences(
             enabled=bool(
                 preferences.enabled
@@ -106,25 +132,92 @@ class AfkPreferencesStore:
             ),
         )
 
+        self.file_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         temporary_path = (
             self.file_path.with_suffix(
-                ".tmp"
+                self.file_path.suffix
+                + ".tmp"
             )
         )
 
-        with temporary_path.open(
-            "w",
-            encoding="utf-8",
-        ) as file:
-            json.dump(
-                asdict(safe_preferences),
-                file,
-                indent=2,
+        payload = asdict(
+            safe_preferences
+        )
+
+        try:
+            with temporary_path.open(
+                "w",
+                encoding="utf-8",
+            ) as file:
+                json.dump(
+                    payload,
+                    file,
+                    indent=2,
+                    sort_keys=True,
+                )
+
+                file.write(
+                    "\n"
+                )
+                file.flush()
+                os.fsync(
+                    file.fileno()
+                )
+
+            with temporary_path.open(
+                "r",
+                encoding="utf-8",
+            ) as file:
+                verified_payload = (
+                    json.load(file)
+                )
+
+            if verified_payload != payload:
+                raise ValueError(
+                    "Temporary AFK preferences "
+                    "failed validation."
+                )
+
+            temporary_path.replace(
+                self.file_path
             )
 
-        temporary_path.replace(
-            self.file_path
+        finally:
+            temporary_path.unlink(
+                missing_ok=True
+            )
+
+    def _quarantine_invalid_file(
+        self,
+    ) -> Path | None:
+        if not self.file_path.exists():
+            return None
+
+        timestamp = datetime.now().strftime(
+            "%Y%m%d_%H%M%S_%f"
         )
+
+        invalid_path = (
+            self.file_path.with_name(
+                f"{self.file_path.stem}"
+                f".invalid_{timestamp}"
+                f"{self.file_path.suffix}"
+            )
+        )
+
+        try:
+            self.file_path.replace(
+                invalid_path
+            )
+
+        except OSError:
+            return None
+
+        return invalid_path
 
     def update(
         self,
