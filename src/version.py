@@ -1,0 +1,5 @@
+APP_VERSION = "1.2.0"
+RELEASE_NAME = "Vanity Update"
+DISPLAY_VERSION = (
+    f"v{APP_VERSION} — {RELEASE_NAME}"
+)

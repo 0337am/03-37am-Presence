@@ -1,7 +1,11 @@
-from pathlib import Path
-
-from PyQt6.QtCore import QEvent, QObject
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtCore import (
+    QEvent,
+    QObject,
+)
+from PyQt6.QtGui import (
+    QAction,
+    QIcon,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QMenu,
@@ -10,12 +14,12 @@ from PyQt6.QtWidgets import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-YUNO_IMAGE_PATH = PROJECT_ROOT / "assets" / "yuno.png"
-
-
 class TrayController(QObject):
-    def __init__(self, app: QApplication, main_window):
+    def __init__(
+        self,
+        app: QApplication,
+        main_window,
+    ):
         super().__init__()
 
         self.app = app
@@ -25,51 +29,114 @@ class TrayController(QObject):
         self._quitting = False
         self._message_shown = False
 
-        self.app.setQuitOnLastWindowClosed(False)
-        self.main_window.installEventFilter(self)
+        self.app.setQuitOnLastWindowClosed(
+            False
+        )
+
+        self.main_window.installEventFilter(
+            self
+        )
 
         self.create_tray_icon()
 
     def create_tray_icon(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
-            print("Windows system tray is not available.")
+            print(
+                "Windows system tray "
+                "is not available."
+            )
             return
 
-        icon = QIcon(str(YUNO_IMAGE_PATH))
+        icon = self.app.windowIcon()
 
         if icon.isNull():
-            icon = self.main_window.style().standardIcon(
-                QStyle.StandardPixmap.SP_ComputerIcon
+            icon = self.main_window.windowIcon()
+
+        if icon.isNull():
+            icon = (
+                self.main_window
+                .style()
+                .standardIcon(
+                    QStyle.StandardPixmap.SP_ComputerIcon
+                )
             )
 
-        self.main_window.setWindowIcon(icon)
+        self.main_window.setWindowIcon(
+            icon
+        )
 
-        self.tray_icon = QSystemTrayIcon(icon, self)
-        self.tray_icon.setToolTip("03:37am Presence")
+        self.tray_icon = QSystemTrayIcon(
+            icon,
+            self,
+        )
+
+        self.tray_icon.setToolTip(
+            "03:37am Presence"
+        )
 
         menu = QMenu()
 
-        open_action = QAction("Open 03:37am Presence", self)
-        hide_action = QAction("Hide window", self)
-        quit_action = QAction("Quit", self)
+        open_action = QAction(
+            "Open 03:37am Presence",
+            self,
+        )
 
-        open_action.triggered.connect(self.show_window)
-        hide_action.triggered.connect(self.hide_window)
-        quit_action.triggered.connect(self.quit_application)
+        hide_action = QAction(
+            "Hide window",
+            self,
+        )
 
-        menu.addAction(open_action)
-        menu.addAction(hide_action)
+        quit_action = QAction(
+            "Quit",
+            self,
+        )
+
+        open_action.triggered.connect(
+            self.show_window
+        )
+
+        hide_action.triggered.connect(
+            self.hide_window
+        )
+
+        quit_action.triggered.connect(
+            self.quit_application
+        )
+
+        menu.addAction(
+            open_action
+        )
+        menu.addAction(
+            hide_action
+        )
         menu.addSeparator()
-        menu.addAction(quit_action)
+        menu.addAction(
+            quit_action
+        )
 
-        self.tray_icon.setContextMenu(menu)
-        self.tray_icon.activated.connect(self.on_tray_activated)
+        self.tray_icon.setContextMenu(
+            menu
+        )
+
+        self.tray_icon.activated.connect(
+            self.on_tray_activated
+        )
+
         self.tray_icon.show()
 
-    def eventFilter(self, watched, event):
-        if (
+    def eventFilter(
+        self,
+        watched,
+        event,
+    ):
+        closing_window = (
             watched is self.main_window
-            and event.type() == QEvent.Type.Close
+            and event.type()
+            == QEvent.Type.Close
+        )
+
+        if (
+            closing_window
             and not self._quitting
             and self.tray_icon is not None
         ):
@@ -77,28 +144,48 @@ class TrayController(QObject):
             self.hide_window()
             return True
 
-        return super().eventFilter(watched, event)
+        return super().eventFilter(
+            watched,
+            event,
+        )
 
-    def on_tray_activated(self, reason):
+    def on_tray_activated(
+        self,
+        reason,
+    ):
         valid_reasons = (
-            QSystemTrayIcon.ActivationReason.Trigger,
-            QSystemTrayIcon.ActivationReason.DoubleClick,
+            QSystemTrayIcon
+            .ActivationReason
+            .Trigger,
+
+            QSystemTrayIcon
+            .ActivationReason
+            .DoubleClick,
         )
 
         if reason not in valid_reasons:
             return
 
         if self.main_window.isVisible():
-            self.hide_window(show_message=False)
+            self.hide_window(
+                show_message=False
+            )
         else:
             self.show_window()
 
-    def show_window(self, checked=False):
+    def show_window(
+        self,
+        checked=False,
+    ):
         self.main_window.showNormal()
         self.main_window.raise_()
         self.main_window.activateWindow()
 
-    def hide_window(self, checked=False, show_message=True):
+    def hide_window(
+        self,
+        checked=False,
+        show_message=True,
+    ):
         self.main_window.hide()
 
         if (
@@ -108,14 +195,22 @@ class TrayController(QObject):
         ):
             self.tray_icon.showMessage(
                 "03:37am Presence",
-                "The app is still running in the system tray.",
-                QSystemTrayIcon.MessageIcon.Information,
+                (
+                    "The app is still running "
+                    "in the system tray."
+                ),
+                QSystemTrayIcon
+                .MessageIcon
+                .Information,
                 3000,
             )
 
             self._message_shown = True
 
-    def quit_application(self, checked=False):
+    def quit_application(
+        self,
+        checked=False,
+    ):
         self._quitting = True
 
         if self.tray_icon is not None:

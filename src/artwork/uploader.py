@@ -7,41 +7,52 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
+
+from src.cloudinary_config import (
+    CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_UPLOAD_PRESET,
+)
 
 
 class ArtworkUploader:
     """
-    Uploads album artwork to Cloudinary using an unsigned preset.
+    Uploads album artwork to Cloudinary using an
+    unsigned upload preset.
 
-    Uploaded URLs are cached locally using a hash of the image,
-    preventing the same cover from being uploaded repeatedly.
+    Uploaded URLs are cached locally using a hash
+    of the image, preventing duplicate uploads.
     """
 
-    MAX_ARTWORK_BYTES = 10 * 1024 * 1024
+    MAX_ARTWORK_BYTES = (
+        10 * 1024 * 1024
+    )
 
     def __init__(self):
-        self.project_root = Path(__file__).resolve().parents[2]
-
-        load_dotenv(
-            self.project_root / ".env",
-            override=False,
+        self.project_root = (
+            Path(__file__)
+            .resolve()
+            .parents[2]
         )
 
-        self.cloud_name = os.getenv(
-            "CLOUDINARY_CLOUD_NAME",
-            "",
-        ).strip()
+        self.cloud_name = (
+            CLOUDINARY_CLOUD_NAME.strip()
+        )
 
-        self.upload_preset = os.getenv(
-            "CLOUDINARY_UPLOAD_PRESET",
-            "",
-        ).strip()
+        self.upload_preset = (
+            CLOUDINARY_UPLOAD_PRESET.strip()
+        )
 
-        self.cache_path = self._get_cache_path()
-        self.cache = self._load_cache()
+        self.cache_path = (
+            self._get_cache_path()
+        )
 
-        self._configuration_warning_shown = False
+        self.cache = (
+            self._load_cache()
+        )
+
+        self._configuration_warning_shown = (
+            False
+        )
 
     @property
     def is_configured(self) -> bool:
@@ -57,17 +68,21 @@ class ArtworkUploader:
         """
         Returns a cached URL or uploads new artwork.
 
-        This method performs a network request and should only be
-        called from a background worker.
+        This performs a network request and should
+        only be called from a background worker.
         """
 
         if not artwork_bytes:
             return None
 
-        if len(artwork_bytes) > self.MAX_ARTWORK_BYTES:
+        if (
+            len(artwork_bytes)
+            > self.MAX_ARTWORK_BYTES
+        ):
             print(
-                "Discord artwork was not uploaded because "
-                "the image is larger than 10 MB."
+                "Discord artwork was not uploaded "
+                "because the image is larger "
+                "than 10 MB."
             )
             return None
 
@@ -75,9 +90,13 @@ class ArtworkUploader:
             artwork_bytes
         ).hexdigest()
 
-        cached_url = self.cache.get(artwork_hash)
+        cached_url = self.cache.get(
+            artwork_hash
+        )
 
-        if self._is_valid_url(cached_url):
+        if self._is_valid_url(
+            cached_url
+        ):
             return cached_url
 
         if not self.is_configured:
@@ -95,13 +114,16 @@ class ArtworkUploader:
         artwork_hash: str,
     ) -> str | None:
         upload_endpoint = (
-            "https://api.cloudinary.com/v1_1/"
+            "https://api.cloudinary.com/"
+            "v1_1/"
             f"{self.cloud_name}/image/upload"
         )
 
-        filename, mime_type = self._detect_image_type(
-            artwork_bytes,
-            artwork_hash,
+        filename, mime_type = (
+            self._detect_image_type(
+                artwork_bytes,
+                artwork_hash,
+            )
         )
 
         files = {
@@ -113,7 +135,9 @@ class ArtworkUploader:
         }
 
         form_data = {
-            "upload_preset": self.upload_preset,
+            "upload_preset": (
+                self.upload_preset
+            ),
         }
 
         try:
@@ -127,31 +151,55 @@ class ArtworkUploader:
             response.raise_for_status()
 
             result = response.json()
-            secure_url = result.get("secure_url")
 
-            if not self._is_valid_url(secure_url):
+            secure_url = result.get(
+                "secure_url"
+            )
+
+            if not self._is_valid_url(
+                secure_url
+            ):
                 print(
-                    "Cloudinary did not return a valid HTTPS "
-                    "artwork URL."
+                    "Cloudinary did not return "
+                    "a valid HTTPS artwork URL."
                 )
                 return None
 
-            self.cache[artwork_hash] = secure_url
+            self.cache[artwork_hash] = (
+                secure_url
+            )
+
             self._save_cache()
 
-            print("Artwork uploaded to Cloudinary.")
+            print(
+                "Artwork uploaded to Cloudinary."
+            )
+
             return secure_url
 
         except requests.RequestException as error:
-            message = self._get_cloudinary_error(error)
+            message = (
+                self._get_cloudinary_error(
+                    error
+                )
+            )
 
-            print("Cloudinary artwork upload failed:")
+            print(
+                "Cloudinary artwork upload failed:"
+            )
             print(message)
 
             return None
 
-        except (TypeError, ValueError, KeyError) as error:
-            print("Cloudinary response could not be read:")
+        except (
+            TypeError,
+            ValueError,
+            KeyError,
+        ) as error:
+            print(
+                "Cloudinary response "
+                "could not be read:"
+            )
             print(error)
 
             return None
@@ -173,20 +221,32 @@ class ArtworkUploader:
                 / ".cache"
             )
 
-        return cache_directory / "artwork_urls.json"
+        return (
+            cache_directory
+            / "artwork_urls.json"
+        )
 
-    def _load_cache(self) -> dict[str, str]:
+    def _load_cache(
+        self,
+    ) -> dict[str, str]:
         if not self.cache_path.exists():
             return {}
 
         try:
-            content = self.cache_path.read_text(
-                encoding="utf-8"
+            content = (
+                self.cache_path.read_text(
+                    encoding="utf-8"
+                )
             )
 
-            loaded = json.loads(content)
+            loaded = json.loads(
+                content
+            )
 
-            if not isinstance(loaded, dict):
+            if not isinstance(
+                loaded,
+                dict,
+            ):
                 return {}
 
             valid_cache = {}
@@ -194,7 +254,9 @@ class ArtworkUploader:
             for key, value in loaded.items():
                 if (
                     isinstance(key, str)
-                    and self._is_valid_url(value)
+                    and self._is_valid_url(
+                        value
+                    )
                 ):
                     valid_cache[key] = value
 
@@ -214,7 +276,9 @@ class ArtworkUploader:
             )
 
             temporary_path = (
-                self.cache_path.with_suffix(".tmp")
+                self.cache_path.with_suffix(
+                    ".tmp"
+                )
             )
 
             temporary_path.write_text(
@@ -231,19 +295,26 @@ class ArtworkUploader:
             )
 
         except OSError as error:
-            print("Artwork URL cache could not be saved:")
+            print(
+                "Artwork URL cache "
+                "could not be saved:"
+            )
             print(error)
 
-    def _show_configuration_warning(self):
+    def _show_configuration_warning(
+        self,
+    ):
         if self._configuration_warning_shown:
             return
 
-        self._configuration_warning_shown = True
+        self._configuration_warning_shown = (
+            True
+        )
 
         print(
-            "Cloudinary artwork upload is not configured. "
-            "Check CLOUDINARY_CLOUD_NAME and "
-            "CLOUDINARY_UPLOAD_PRESET in .env."
+            "Cloudinary artwork upload "
+            "is not configured. "
+            "Check src/cloudinary_config.py."
         )
 
     @staticmethod
@@ -251,21 +322,28 @@ class ArtworkUploader:
         artwork_bytes: bytes,
         artwork_hash: str,
     ) -> tuple[str, str]:
-        if artwork_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        if artwork_bytes.startswith(
+            b"\x89PNG\r\n\x1a\n"
+        ):
             return (
                 f"{artwork_hash}.png",
                 "image/png",
             )
 
-        if artwork_bytes.startswith(b"\xff\xd8\xff"):
+        if artwork_bytes.startswith(
+            b"\xff\xd8\xff"
+        ):
             return (
                 f"{artwork_hash}.jpg",
                 "image/jpeg",
             )
 
         if (
-            artwork_bytes.startswith(b"RIFF")
-            and artwork_bytes[8:12] == b"WEBP"
+            artwork_bytes.startswith(
+                b"RIFF"
+            )
+            and artwork_bytes[8:12]
+            == b"WEBP"
         ):
             return (
                 f"{artwork_hash}.webp",
@@ -278,10 +356,14 @@ class ArtworkUploader:
         )
 
     @staticmethod
-    def _is_valid_url(value: Any) -> bool:
+    def _is_valid_url(
+        value: Any,
+    ) -> bool:
         return (
             isinstance(value, str)
-            and value.startswith("https://")
+            and value.startswith(
+                "https://"
+            )
         )
 
     @staticmethod
@@ -292,15 +374,21 @@ class ArtworkUploader:
 
         if response is not None:
             try:
-                response_data = response.json()
-
-                cloudinary_error = response_data.get(
-                    "error",
-                    {},
+                response_data = (
+                    response.json()
                 )
 
-                message = cloudinary_error.get(
-                    "message"
+                cloudinary_error = (
+                    response_data.get(
+                        "error",
+                        {},
+                    )
+                )
+
+                message = (
+                    cloudinary_error.get(
+                        "message"
+                    )
                 )
 
                 if message:

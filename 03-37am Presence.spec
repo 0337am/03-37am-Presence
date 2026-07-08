@@ -1,15 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
+
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('assets', 'assets'), ('.env', '.')]
+
+datas = [
+    ("assets", "assets"),
+    ("icons/app_icon.ico", "icons"),
+]
+
 binaries = []
 hiddenimports = []
-tmp_ret = collect_all('winsdk')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+tmp_ret = collect_all("winsdk")
+
+datas += tmp_ret[0]
+binaries += tmp_ret[1]
+hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['main.py'],
+    ["main.py"],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -21,6 +31,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -29,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='03-37am Presence',
+    name="03-37am Presence",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -42,5 +53,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['icons\\yuno.ico'],
+    icon="icons/app_icon.ico",
+    version="version_info.txt",
 )

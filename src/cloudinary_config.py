@@ -1,0 +1,26 @@
+import os
+
+
+try:
+    from src.cloudinary_config_local import (
+        CLOUDINARY_CLOUD_NAME
+        as LOCAL_CLOUDINARY_CLOUD_NAME,
+        CLOUDINARY_UPLOAD_PRESET
+        as LOCAL_CLOUDINARY_UPLOAD_PRESET,
+    )
+
+except ImportError:
+    LOCAL_CLOUDINARY_CLOUD_NAME = ""
+    LOCAL_CLOUDINARY_UPLOAD_PRESET = ""
+
+
+CLOUDINARY_CLOUD_NAME = os.getenv(
+    "CLOUDINARY_CLOUD_NAME",
+    LOCAL_CLOUDINARY_CLOUD_NAME,
+).strip()
+
+
+CLOUDINARY_UPLOAD_PRESET = os.getenv(
+    "CLOUDINARY_UPLOAD_PRESET",
+    LOCAL_CLOUDINARY_UPLOAD_PRESET,
+).strip()
