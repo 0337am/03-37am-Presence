@@ -6,6 +6,7 @@ from dataclasses import (
     asdict,
     dataclass,
 )
+from datetime import datetime
 from pathlib import Path
 
 
@@ -69,12 +70,30 @@ class SourcePreferencesStore:
             ) as file:
                 data = json.load(file)
 
+            if not isinstance(
+                data,
+                dict,
+            ):
+                raise TypeError(
+                    "Source preferences must "
+                    "contain a JSON object."
+                )
+
+        except FileNotFoundError:
+            preferences = (
+                SourcePreferences()
+            )
+
+            self.save(preferences)
+            return preferences
+
         except (
-            FileNotFoundError,
             json.JSONDecodeError,
             OSError,
             TypeError,
         ):
+            self._quarantine_invalid_file()
+
             preferences = (
                 SourcePreferences()
             )
@@ -101,25 +120,101 @@ class SourcePreferencesStore:
         self,
         preferences: SourcePreferences,
     ):
+        if not isinstance(
+            preferences,
+            SourcePreferences,
+        ):
+            raise TypeError(
+                "preferences must be a "
+                "SourcePreferences instance."
+            )
+
+        self.file_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         temporary_path = (
             self.file_path.with_suffix(
-                ".tmp"
+                self.file_path.suffix
+                + ".tmp"
             )
         )
 
-        with temporary_path.open(
-            "w",
-            encoding="utf-8",
-        ) as file:
-            json.dump(
-                asdict(preferences),
-                file,
-                indent=2,
+        payload = asdict(
+            preferences
+        )
+
+        try:
+            with temporary_path.open(
+                "w",
+                encoding="utf-8",
+            ) as file:
+                json.dump(
+                    payload,
+                    file,
+                    indent=2,
+                    sort_keys=True,
+                )
+
+                file.write(
+                    "\n"
+                )
+                file.flush()
+                os.fsync(
+                    file.fileno()
+                )
+
+            with temporary_path.open(
+                "r",
+                encoding="utf-8",
+            ) as file:
+                verified_payload = (
+                    json.load(file)
+                )
+
+            if verified_payload != payload:
+                raise ValueError(
+                    "Temporary source preferences "
+                    "failed validation."
+                )
+
+            temporary_path.replace(
+                self.file_path
             )
 
-        temporary_path.replace(
-            self.file_path
+        finally:
+            temporary_path.unlink(
+                missing_ok=True
+            )
+
+    def _quarantine_invalid_file(
+        self,
+    ) -> Path | None:
+        if not self.file_path.exists():
+            return None
+
+        timestamp = datetime.now().strftime(
+            "%Y%m%d_%H%M%S_%f"
         )
+
+        invalid_path = (
+            self.file_path.with_name(
+                f"{self.file_path.stem}"
+                f".invalid_{timestamp}"
+                f"{self.file_path.suffix}"
+            )
+        )
+
+        try:
+            self.file_path.replace(
+                invalid_path
+            )
+
+        except OSError:
+            return None
+
+        return invalid_path
 
     def update(
         self,
