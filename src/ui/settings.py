@@ -48,6 +48,74 @@ from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
 
+class SleekComboBox(QComboBox):
+    def __init__(
+        self,
+        parent=None,
+    ):
+        super().__init__(
+            parent
+        )
+
+        self.arrow_label = QLabel(
+            "\u25be",
+            self,
+        )
+        self.arrow_label.setObjectName(
+            "comboArrow"
+        )
+        self.arrow_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.arrow_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+        self.arrow_label.setFixedWidth(
+            28
+        )
+
+        self._position_arrow()
+
+    def _position_arrow(self):
+        arrow_width = (
+            self.arrow_label.width()
+        )
+
+        self.arrow_label.setGeometry(
+            max(
+                0,
+                self.width()
+                - arrow_width,
+            ),
+            0,
+            arrow_width,
+            self.height(),
+        )
+
+        self.arrow_label.raise_()
+
+    def resizeEvent(
+        self,
+        event,
+    ):
+        super().resizeEvent(
+            event
+        )
+
+        self._position_arrow()
+
+    def showEvent(
+        self,
+        event,
+    ):
+        super().showEvent(
+            event
+        )
+
+        self._position_arrow()
+
+
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
@@ -340,7 +408,7 @@ class SettingsPage(QWidget):
         preset_label = QLabel("Theme preset")
         preset_label.setObjectName("fieldLabel")
 
-        self.preset_combo = QComboBox()
+        self.preset_combo = SleekComboBox()
         self.preset_combo.setObjectName(
             "presetCombo"
         )
@@ -563,7 +631,7 @@ class SettingsPage(QWidget):
             "fieldLabel"
         )
 
-        self.afk_timeout_combo = QComboBox()
+        self.afk_timeout_combo = SleekComboBox()
         self.afk_timeout_combo.setObjectName(
             "presetCombo"
         )
@@ -2247,6 +2315,36 @@ class SettingsPage(QWidget):
             QLineEdit#textField:focus,
             QComboBox#presetCombo:focus {{
                 border: 1px solid {theme["accent"]};
+            }}
+
+            QComboBox#presetCombo {{
+                padding-right: 30px;
+            }}
+
+            QComboBox#presetCombo::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 28px;
+                border: none;
+                background: transparent;
+            }}
+
+            QComboBox#presetCombo::down-arrow {{
+                image: none;
+                width: 0px;
+                height: 0px;
+            }}
+
+            QLabel#comboArrow {{
+                color: {theme["text"]};
+                background: transparent;
+                border: none;
+                font-size: 11px;
+                font-weight: 700;
+            }}
+
+            QLabel#comboArrow:disabled {{
+                color: {theme["muted"]};
             }}
 
             QComboBox#presetCombo QAbstractItemView {{
