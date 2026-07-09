@@ -5,6 +5,10 @@ import time
 
 from pypresence import Presence
 
+from src.artwork.uploader import (
+    ArtworkUploader,
+)
+
 
 try:
     from pypresence.types import ActivityType
@@ -26,8 +30,16 @@ class DiscordPresence:
     RECONNECT_DELAY_SECONDS = 5.0
     MIN_UPDATE_INTERVAL_SECONDS = 15.0
 
-    def __init__(self):
+    def __init__(
+        self,
+        artwork_uploader=None,
+    ):
         self.client_id = "1523801127962022070"
+
+        self.artwork_uploader = (
+            artwork_uploader
+            or ArtworkUploader()
+        )
 
         self.rpc = None
 
@@ -302,6 +314,43 @@ class DiscordPresence:
             artwork_bytes
         )
 
+        artwork_url = None
+
+        try:
+            if (
+                local_artwork_available
+                and self.artwork_uploader.is_configured
+            ):
+                artwork_url = (
+                    self.artwork_uploader
+                    .get_or_upload(
+                        artwork_bytes
+                    )
+                )
+
+        except Exception as error:
+            print(
+                "Artwork upload failed; "
+                "continuing without Discord artwork: "
+                f"{error}"
+            )
+
+        if artwork_url:
+            options["large_image"] = (
+                artwork_url
+            )
+
+            options["large_text"] = (
+                self._discord_text(
+                    (
+                        album
+                        if album_is_available
+                        else title
+                    ),
+                    fallback=title,
+                )
+            )
+
         self.rpc.update(**options)
 
         status = (
@@ -310,11 +359,20 @@ class DiscordPresence:
             else "Paused"
         )
 
-        artwork_status = (
-            "local artwork kept on device"
-            if local_artwork_available
-            else "no local artwork"
-        )
+        if artwork_url:
+            artwork_status = (
+                "personal Cloudinary artwork"
+            )
+
+        elif local_artwork_available:
+            artwork_status = (
+                "local artwork kept on device"
+            )
+
+        else:
+            artwork_status = (
+                "no local artwork"
+            )
 
         album_status = (
             f", album: {album}"
