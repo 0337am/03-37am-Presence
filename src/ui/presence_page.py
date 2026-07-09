@@ -880,6 +880,20 @@ class PresencePage(QWidget):
     def update_editor_state(self):
         mode = self.current_mode
 
+        self.editor_card.setVisible(
+            mode not in {
+                "music",
+                "disabled",
+            }
+        )
+
+        self.image_card.setVisible(
+            mode not in {
+                "music",
+                "disabled",
+            }
+        )
+
         editable = mode not in {
             "music",
             "disabled",

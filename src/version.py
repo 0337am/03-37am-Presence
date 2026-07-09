@@ -1,5 +1,5 @@
-APP_VERSION = "2.0.0"
-RELEASE_NAME = "Smart Presence Update"
+APP_VERSION = "2.1.0"
+RELEASE_NAME = "Personal Presence Update"
 DISPLAY_VERSION = (
-    f"v{APP_VERSION} — {RELEASE_NAME}"
+    f"v{APP_VERSION} - {RELEASE_NAME}"
 )

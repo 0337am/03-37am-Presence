@@ -1,0 +1,7 @@
+# Runtime dependencies
+PyQt6
+pypresence
+winsdk
+
+# Windows executable build
+PyInstaller
