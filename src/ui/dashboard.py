@@ -7,6 +7,8 @@ import subprocess
 
 from PyQt6.QtCore import (
     Qt,
+    QEvent,
+    QPoint,
     QUrl,
     QThread,
     QTimer,
@@ -51,14 +53,15 @@ from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
 from src.ui.dashboard_layout import (
+    CANVAS_UNITS,
     CARD_ORDER,
     CARD_SPECS,
-    GRID_COLUMNS,
-    MAX_GRID_ROWS,
     DashboardLayout,
     DashboardLayoutStore,
     available_presets,
+    move_card_freeform,
     preset_layout,
+    resize_card_freeform,
     validate_layout,
 )
 from src.ui.theme import ThemeManager
@@ -148,6 +151,29 @@ class DashboardPage(QWidget):
         self._preview_artwork_size = 58
         self._branding_title = "03:37am Presence"
         self._last_worker_error = ""
+
+        self.dashboard_drag_handles = {}
+        self.dashboard_resize_handles = {}
+
+        self._dashboard_drag_card_id = None
+        self._dashboard_drag_origin = None
+        self._dashboard_drag_offset = QPoint()
+        self._dashboard_drag_active = False
+        self._dashboard_drag_original_layout = None
+        self._dashboard_drag_original_geometry = None
+
+        self._dashboard_resize_card_id = None
+        self._dashboard_resize_origin = None
+        self._dashboard_resize_active = False
+        self._dashboard_resize_original_layout = None
+        self._dashboard_resize_original_geometry = None
+
+        self._dashboard_editor_outline = None
+
+        self._recent_track_fetch_limit = 24
+        self._recent_tracks = []
+        self._recent_visible_capacity = 0
+        self._quick_access_layout_mode = None
 
         self.build_ui()
 
@@ -361,27 +387,17 @@ class DashboardPage(QWidget):
             self.layout_toolbar
         )
 
-        self.dashboard_grid = QGridLayout()
-        self.dashboard_grid.setContentsMargins(
-            0,
-            0,
-            0,
-            0,
+        self.dashboard_canvas = QFrame()
+        self.dashboard_canvas.setObjectName(
+            "dashboardCanvas"
         )
-        self.dashboard_grid.setHorizontalSpacing(
-            10
+        self.dashboard_canvas.setMinimumHeight(
+            650
         )
-        self.dashboard_grid.setVerticalSpacing(
-            10
+        self.dashboard_canvas.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
         )
-
-        for column in range(
-            GRID_COLUMNS
-        ):
-            self.dashboard_grid.setColumnStretch(
-                column,
-                1,
-            )
 
         self.build_now_playing_card()
         self.build_discord_preview_card()
@@ -469,12 +485,19 @@ class DashboardPage(QWidget):
             ),
         }
 
+        for card in self.dashboard_cards.values():
+            card.setParent(
+                self.dashboard_canvas
+            )
+
+        self.create_dashboard_drag_handles()
+
         self.apply_dashboard_layout(
             self.dashboard_layout_state
         )
 
-        self.root_layout.addLayout(
-            self.dashboard_grid,
+        self.root_layout.addWidget(
+            self.dashboard_canvas,
             stretch=1,
         )
 
@@ -519,6 +542,1553 @@ class DashboardPage(QWidget):
         self.root_layout.addWidget(
             footer
         )
+
+    def create_dashboard_drag_handles(self):
+        for (
+            card_id,
+            card,
+        ) in self.dashboard_cards.items():
+            move_handle = QLabel(
+                "MOVE",
+                self.dashboard_canvas,
+            )
+            move_handle.setObjectName(
+                "dashboardDragHandle"
+            )
+            move_handle.setProperty(
+                "cardId",
+                card_id,
+            )
+            move_handle.setProperty(
+                "editorAction",
+                "move",
+            )
+            move_handle.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+            move_handle.setCursor(
+                Qt.CursorShape.OpenHandCursor
+            )
+            move_handle.setFixedSize(
+                38,
+                18,
+            )
+            move_handle.setToolTip(
+                "Drag this card anywhere on the dashboard"
+            )
+            move_handle.setAttribute(
+                Qt.WidgetAttribute.WA_Hover,
+                True,
+            )
+            move_handle.installEventFilter(
+                self
+            )
+
+            resize_handle = QLabel(
+                "\u2198",
+                self.dashboard_canvas,
+            )
+            resize_handle.setObjectName(
+                "dashboardResizeHandle"
+            )
+            resize_handle.setProperty(
+                "cardId",
+                card_id,
+            )
+            resize_handle.setProperty(
+                "editorAction",
+                "resize",
+            )
+            resize_handle.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+            resize_handle.setCursor(
+                Qt.CursorShape.SizeFDiagCursor
+            )
+            resize_handle.setFixedSize(
+                18,
+                18,
+            )
+            resize_handle.setToolTip(
+                "Drag to resize this dashboard card"
+            )
+            resize_handle.setAttribute(
+                Qt.WidgetAttribute.WA_Hover,
+                True,
+            )
+            resize_handle.installEventFilter(
+                self
+            )
+
+            self.dashboard_drag_handles[
+                card_id
+            ] = move_handle
+
+            self.dashboard_resize_handles[
+                card_id
+            ] = resize_handle
+
+        self._dashboard_editor_outline = QFrame(
+            self.dashboard_canvas
+        )
+        self._dashboard_editor_outline.setObjectName(
+            "dashboardEditorOutline"
+        )
+        self._dashboard_editor_outline.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+        self._dashboard_editor_outline.hide()
+
+        self.sync_dashboard_drag_handles()
+
+    def sync_dashboard_drag_handles(self):
+        move_handles = getattr(
+            self,
+            "dashboard_drag_handles",
+            {},
+        )
+
+        resize_handles = getattr(
+            self,
+            "dashboard_resize_handles",
+            {},
+        )
+
+        if not move_handles:
+            return
+
+        locked = (
+            self.dashboard_layout_state.locked
+        )
+
+        if hasattr(
+            self,
+            "dashboard_canvas",
+        ):
+            self.dashboard_canvas.setProperty(
+                "editing",
+                not locked,
+            )
+
+            self._refresh_dashboard_widget_style(
+                self.dashboard_canvas
+            )
+
+        for card_id, move_handle in (
+            move_handles.items()
+        ):
+            resize_handle = resize_handles.get(
+                card_id
+            )
+
+            try:
+                card_layout = (
+                    self.dashboard_layout_state.card(
+                        card_id
+                    )
+                )
+            except KeyError:
+                move_handle.hide()
+
+                if resize_handle is not None:
+                    resize_handle.hide()
+
+                continue
+
+            editable = (
+                not locked
+                and card_layout.visible
+            )
+
+            move_handle.setVisible(
+                editable
+            )
+
+            move_handle.setCursor(
+                (
+                    Qt.CursorShape.OpenHandCursor
+                    if editable
+                    else Qt.CursorShape.ArrowCursor
+                )
+            )
+
+            if resize_handle is not None:
+                resize_handle.setVisible(
+                    editable
+                    and CARD_SPECS[
+                        card_id
+                    ].resizable
+                )
+
+                resize_handle.setCursor(
+                    (
+                        Qt.CursorShape.SizeFDiagCursor
+                        if editable
+                        else Qt.CursorShape.ArrowCursor
+                    )
+                )
+
+        if locked:
+            self.hide_dashboard_editor_outline()
+
+        QTimer.singleShot(
+            0,
+            self.position_dashboard_drag_handles,
+        )
+
+    def position_dashboard_drag_handles(self):
+        if not hasattr(
+            self,
+            "dashboard_canvas",
+        ):
+            return
+
+        canvas_width = max(
+            1,
+            self.dashboard_canvas.width(),
+        )
+
+        canvas_height = max(
+            1,
+            self.dashboard_canvas.height(),
+        )
+
+        resize_handles = getattr(
+            self,
+            "dashboard_resize_handles",
+            {},
+        )
+
+        for (
+            card_id,
+            move_handle,
+        ) in getattr(
+            self,
+            "dashboard_drag_handles",
+            {},
+        ).items():
+            card = self.dashboard_cards.get(
+                card_id
+            )
+
+            if card is None:
+                continue
+
+            move_x = (
+                card.x()
+                + (
+                    card.width()
+                    - move_handle.width()
+                )
+                // 2
+            )
+
+            move_y = (
+                card.y()
+                - (
+                    move_handle.height()
+                    // 2
+                )
+            )
+
+            move_x = min(
+                max(
+                    0,
+                    move_x,
+                ),
+                max(
+                    0,
+                    (
+                        canvas_width
+                        - move_handle.width()
+                    ),
+                ),
+            )
+
+            move_y = min(
+                max(
+                    0,
+                    move_y,
+                ),
+                max(
+                    0,
+                    (
+                        canvas_height
+                        - move_handle.height()
+                    ),
+                ),
+            )
+
+            move_handle.move(
+                move_x,
+                move_y,
+            )
+
+            move_handle.raise_()
+
+            resize_handle = resize_handles.get(
+                card_id
+            )
+
+            if resize_handle is not None:
+                resize_x = (
+                    card.x()
+                    + card.width()
+                    - (
+                        resize_handle.width()
+                        // 2
+                    )
+                )
+
+                resize_y = (
+                    card.y()
+                    + card.height()
+                    - (
+                        resize_handle.height()
+                        // 2
+                    )
+                )
+
+                resize_x = min(
+                    max(
+                        0,
+                        resize_x,
+                    ),
+                    max(
+                        0,
+                        (
+                            canvas_width
+                            - resize_handle.width()
+                        ),
+                    ),
+                )
+
+                resize_y = min(
+                    max(
+                        0,
+                        resize_y,
+                    ),
+                    max(
+                        0,
+                        (
+                            canvas_height
+                            - resize_handle.height()
+                        ),
+                    ),
+                )
+
+                resize_handle.move(
+                    resize_x,
+                    resize_y,
+                )
+
+                resize_handle.raise_()
+
+        self.update_dashboard_editor_outline()
+
+    @staticmethod
+    def _refresh_dashboard_widget_style(
+        widget,
+    ):
+        style = widget.style()
+
+        style.unpolish(
+            widget
+        )
+        style.polish(
+            widget
+        )
+
+        widget.update()
+
+    def dashboard_editor_outline_geometry(
+        self,
+        card,
+    ):
+        canvas_rect = (
+            self.dashboard_canvas.rect()
+        )
+
+        outline_rect = (
+            card.geometry()
+            .adjusted(
+                -2,
+                -2,
+                2,
+                2,
+            )
+        )
+
+        return outline_rect.intersected(
+            canvas_rect
+        )
+
+    def show_dashboard_editor_outline(
+        self,
+        card_id: str,
+        mode: str,
+    ):
+        outline = (
+            self._dashboard_editor_outline
+        )
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if outline is None or card is None:
+            return
+
+        if (
+            outline.parentWidget()
+            is not self.dashboard_canvas
+        ):
+            outline.setParent(
+                self.dashboard_canvas
+            )
+
+        outline.setProperty(
+            "editorMode",
+            str(
+                mode
+                or "move"
+            ),
+        )
+
+        self._refresh_dashboard_widget_style(
+            outline
+        )
+
+        outline.setGeometry(
+            self.dashboard_editor_outline_geometry(
+                card
+            )
+        )
+
+        outline.show()
+        outline.raise_()
+
+        move_handle = (
+            self.dashboard_drag_handles.get(
+                card_id
+            )
+        )
+
+        resize_handle = (
+            self.dashboard_resize_handles.get(
+                card_id
+            )
+        )
+
+        if move_handle is not None:
+            move_handle.raise_()
+
+        if resize_handle is not None:
+            resize_handle.raise_()
+
+    def update_dashboard_editor_outline(self):
+        outline = (
+            self._dashboard_editor_outline
+        )
+
+        if outline is None or not outline.isVisible():
+            return
+
+        if self._dashboard_resize_active:
+            card_id = (
+                self._dashboard_resize_card_id
+            )
+        else:
+            card_id = (
+                self._dashboard_drag_card_id
+            )
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if card is None:
+            outline.hide()
+            return
+
+        if (
+            outline.parentWidget()
+            is not self.dashboard_canvas
+        ):
+            outline.setParent(
+                self.dashboard_canvas
+            )
+
+        outline.setGeometry(
+            self.dashboard_editor_outline_geometry(
+                card
+            )
+        )
+
+        outline.raise_()
+
+        move_handle = (
+            self.dashboard_drag_handles.get(
+                card_id
+            )
+        )
+
+        resize_handle = (
+            self.dashboard_resize_handles.get(
+                card_id
+            )
+        )
+
+        if move_handle is not None:
+            move_handle.raise_()
+
+        if resize_handle is not None:
+            resize_handle.raise_()
+
+    def hide_dashboard_editor_outline(self):
+        outline = (
+            self._dashboard_editor_outline
+        )
+
+        if outline is not None:
+            outline.hide()
+
+    def schedule_dashboard_geometry_refresh(self):
+        QTimer.singleShot(
+            0,
+            self.apply_dashboard_layout_geometry,
+        )
+
+    def apply_dashboard_layout_geometry(self):
+        if (
+            not hasattr(
+                self,
+                "dashboard_canvas",
+            )
+            or self._dashboard_drag_active
+            or self._dashboard_resize_active
+        ):
+            return
+
+        canvas_width = max(
+            1,
+            self.dashboard_canvas.width(),
+        )
+
+        canvas_height = max(
+            1,
+            self.dashboard_canvas.height(),
+        )
+
+        visible_cards = []
+
+        for card_layout in (
+            self.dashboard_layout_state.cards
+        ):
+            card = self.dashboard_cards[
+                card_layout.card_id
+            ]
+
+            x = round(
+                (
+                    card_layout.x
+                    / CANVAS_UNITS
+                )
+                * canvas_width
+            )
+
+            y = round(
+                (
+                    card_layout.y
+                    / CANVAS_UNITS
+                )
+                * canvas_height
+            )
+
+            width = max(
+                1,
+                round(
+                    (
+                        card_layout.width
+                        / CANVAS_UNITS
+                    )
+                    * canvas_width
+                ),
+            )
+
+            height = max(
+                1,
+                round(
+                    (
+                        card_layout.height
+                        / CANVAS_UNITS
+                    )
+                    * canvas_height
+                ),
+            )
+
+            width = min(
+                width,
+                canvas_width - x,
+            )
+
+            height = min(
+                height,
+                canvas_height - y,
+            )
+
+            card.setGeometry(
+                x,
+                y,
+                max(
+                    1,
+                    width,
+                ),
+                max(
+                    1,
+                    height,
+                ),
+            )
+
+            card.setVisible(
+                card_layout.visible
+            )
+
+            if card_layout.visible:
+                visible_cards.append(
+                    (
+                        card_layout.z_index,
+                        CARD_ORDER.index(
+                            card_layout.card_id
+                        ),
+                        card,
+                    )
+                )
+
+        for (
+            _,
+            _,
+            card,
+        ) in sorted(
+            visible_cards,
+            key=lambda item: (
+                item[0],
+                item[1],
+            ),
+        ):
+            card.raise_()
+
+        self.update_responsive_dashboard_cards()
+        self.position_dashboard_drag_handles()
+
+    def begin_dashboard_live_drag(
+        self,
+        card_id: str,
+        global_position: QPoint,
+    ) -> bool:
+        if (
+            self.dashboard_layout_state.locked
+            or self._dashboard_drag_active
+            or self._dashboard_resize_active
+        ):
+            return False
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if card is None:
+            return False
+
+        try:
+            card_layout = (
+                self.dashboard_layout_state.card(
+                    card_id
+                )
+            )
+        except KeyError:
+            return False
+
+        if not card_layout.visible:
+            return False
+
+        self._dashboard_drag_active = True
+        self._dashboard_drag_original_layout = (
+            self.dashboard_layout_state
+        )
+        self._dashboard_drag_original_geometry = (
+            card.geometry()
+        )
+
+        card.raise_()
+
+        self.show_dashboard_editor_outline(
+            card_id,
+            "move",
+        )
+
+        self.layout_status_label.setText(
+            "Moving "
+            + CARD_SPECS[
+                card_id
+            ].title
+        )
+
+        return self.update_dashboard_live_drag(
+            global_position
+        )
+
+    def update_dashboard_live_drag(
+        self,
+        global_position: QPoint,
+    ) -> bool:
+        if (
+            not self._dashboard_drag_active
+            or not self._dashboard_drag_card_id
+        ):
+            return False
+
+        card = self.dashboard_cards.get(
+            self._dashboard_drag_card_id
+        )
+
+        if card is None:
+            return False
+
+        cursor_position = (
+            self.dashboard_canvas.mapFromGlobal(
+                global_position
+            )
+        )
+
+        requested_position = (
+            cursor_position
+            - self._dashboard_drag_offset
+        )
+
+        maximum_x = max(
+            0,
+            (
+                self.dashboard_canvas.width()
+                - card.width()
+            ),
+        )
+
+        maximum_y = max(
+            0,
+            (
+                self.dashboard_canvas.height()
+                - card.height()
+            ),
+        )
+
+        clamped_x = min(
+            maximum_x,
+            max(
+                0,
+                requested_position.x(),
+            ),
+        )
+
+        clamped_y = min(
+            maximum_y,
+            max(
+                0,
+                requested_position.y(),
+            ),
+        )
+
+        card.move(
+            clamped_x,
+            clamped_y,
+        )
+
+        card.raise_()
+        self.position_dashboard_drag_handles()
+
+        return True
+
+    def finish_dashboard_live_drag(
+        self,
+        commit: bool = True,
+    ) -> bool:
+        if not self._dashboard_drag_active:
+            return False
+
+        card_id = (
+            self._dashboard_drag_card_id
+        )
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        original_layout = (
+            self._dashboard_drag_original_layout
+        )
+
+        original_geometry = (
+            self._dashboard_drag_original_geometry
+        )
+
+        moved = bool(
+            commit
+            and card is not None
+            and original_layout is not None
+            and original_geometry is not None
+            and card.pos()
+            != original_geometry.topLeft()
+        )
+
+        self.hide_dashboard_editor_outline()
+
+        self._dashboard_drag_active = False
+        self._dashboard_drag_card_id = None
+        self._dashboard_drag_origin = None
+        self._dashboard_drag_offset = QPoint()
+        self._dashboard_drag_original_layout = None
+        self._dashboard_drag_original_geometry = None
+
+        if not moved:
+            if original_layout is not None:
+                self.apply_dashboard_layout(
+                    original_layout,
+                    persist=False,
+                    sync_controls=True,
+                )
+            else:
+                self.sync_dashboard_layout_controls()
+
+            return False
+
+        canvas_width = max(
+            1,
+            self.dashboard_canvas.width(),
+        )
+
+        canvas_height = max(
+            1,
+            self.dashboard_canvas.height(),
+        )
+
+        current_layout = original_layout.card(
+            card_id
+        )
+
+        x = round(
+            (
+                card.x()
+                / canvas_width
+            )
+            * CANVAS_UNITS
+        )
+
+        y = round(
+            (
+                card.y()
+                / canvas_height
+            )
+            * CANVAS_UNITS
+        )
+
+        x = min(
+            CANVAS_UNITS
+            - current_layout.width,
+            max(
+                0,
+                x,
+            ),
+        )
+
+        y = min(
+            CANVAS_UNITS
+            - current_layout.height,
+            max(
+                0,
+                y,
+            ),
+        )
+
+        highest_layer = max(
+            card_layout.z_index
+            for card_layout in (
+                original_layout.cards
+            )
+        )
+
+        try:
+            updated = move_card_freeform(
+                original_layout,
+                card_id,
+                x,
+                y,
+                z_index=min(
+                    1000000,
+                    highest_layer + 1,
+                ),
+            )
+
+            self.apply_dashboard_layout(
+                updated,
+                persist=True,
+                sync_controls=True,
+            )
+
+        except ValueError as error:
+            print(
+                "Dashboard card move rejected: "
+                f"{error}"
+            )
+
+            self.apply_dashboard_layout(
+                original_layout,
+                persist=False,
+                sync_controls=True,
+            )
+
+            return False
+
+        print(
+            "Dashboard card moved freely: "
+            f"{CARD_SPECS[card_id].title}."
+        )
+
+        return True
+
+    def cancel_dashboard_live_drag(self):
+        self.finish_dashboard_live_drag(
+            commit=False
+        )
+
+    def dashboard_minimum_card_size(
+        self,
+        card,
+    ) -> tuple[int, int]:
+        responsive_cards = {
+            getattr(
+                self,
+                "recent_card",
+                None,
+            ),
+            getattr(
+                self,
+                "quick_access_card",
+                None,
+            ),
+        }
+
+        if card in responsive_cards:
+            hint_width = 0
+            hint_height = 0
+        else:
+            hint = card.minimumSizeHint()
+            hint_width = hint.width()
+            hint_height = hint.height()
+
+        minimum_width = max(
+            180,
+            card.minimumWidth(),
+            hint_width,
+        )
+
+        minimum_height = max(
+            68,
+            card.minimumHeight(),
+            hint_height,
+        )
+
+        return (
+            minimum_width,
+            minimum_height,
+        )
+
+    def begin_dashboard_live_resize(
+        self,
+        card_id: str,
+        global_position: QPoint,
+    ) -> bool:
+        if (
+            self.dashboard_layout_state.locked
+            or self._dashboard_drag_active
+            or self._dashboard_resize_active
+        ):
+            return False
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if card is None:
+            return False
+
+        try:
+            card_layout = (
+                self.dashboard_layout_state.card(
+                    card_id
+                )
+            )
+        except KeyError:
+            return False
+
+        if (
+            not card_layout.visible
+            or not CARD_SPECS[
+                card_id
+            ].resizable
+        ):
+            return False
+
+        self._dashboard_resize_active = True
+        self._dashboard_resize_card_id = (
+            card_id
+        )
+        self._dashboard_resize_origin = (
+            global_position
+        )
+        self._dashboard_resize_original_layout = (
+            self.dashboard_layout_state
+        )
+        self._dashboard_resize_original_geometry = (
+            card.geometry()
+        )
+
+        card.raise_()
+
+        self.show_dashboard_editor_outline(
+            card_id,
+            "resize",
+        )
+
+        self.layout_status_label.setText(
+            "Resizing "
+            + CARD_SPECS[
+                card_id
+            ].title
+        )
+
+        return True
+
+    def update_dashboard_live_resize(
+        self,
+        global_position: QPoint,
+    ) -> bool:
+        if (
+            not self._dashboard_resize_active
+            or not self._dashboard_resize_card_id
+            or self._dashboard_resize_origin is None
+            or self._dashboard_resize_original_geometry
+            is None
+        ):
+            return False
+
+        card = self.dashboard_cards.get(
+            self._dashboard_resize_card_id
+        )
+
+        if card is None:
+            return False
+
+        delta = (
+            global_position
+            - self._dashboard_resize_origin
+        )
+
+        original_geometry = (
+            self._dashboard_resize_original_geometry
+        )
+
+        minimum_width, minimum_height = (
+            self.dashboard_minimum_card_size(
+                card
+            )
+        )
+
+        maximum_width = max(
+            1,
+            (
+                self.dashboard_canvas.width()
+                - card.x()
+            ),
+        )
+
+        maximum_height = max(
+            1,
+            (
+                self.dashboard_canvas.height()
+                - card.y()
+            ),
+        )
+
+        minimum_width = min(
+            minimum_width,
+            maximum_width,
+        )
+
+        minimum_height = min(
+            minimum_height,
+            maximum_height,
+        )
+
+        requested_width = (
+            original_geometry.width()
+            + delta.x()
+        )
+
+        requested_height = (
+            original_geometry.height()
+            + delta.y()
+        )
+
+        width = min(
+            maximum_width,
+            max(
+                minimum_width,
+                requested_width,
+            ),
+        )
+
+        height = min(
+            maximum_height,
+            max(
+                minimum_height,
+                requested_height,
+            ),
+        )
+
+        card.resize(
+            width,
+            height,
+        )
+
+        self.update_responsive_dashboard_cards(
+            self._dashboard_resize_card_id
+        )
+
+        card.raise_()
+        self.position_dashboard_drag_handles()
+
+        return True
+
+    def finish_dashboard_live_resize(
+        self,
+        commit: bool = True,
+    ) -> bool:
+        if not self._dashboard_resize_active:
+            return False
+
+        card_id = (
+            self._dashboard_resize_card_id
+        )
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        original_layout = (
+            self._dashboard_resize_original_layout
+        )
+
+        original_geometry = (
+            self._dashboard_resize_original_geometry
+        )
+
+        resized = bool(
+            commit
+            and card is not None
+            and original_layout is not None
+            and original_geometry is not None
+            and card.size()
+            != original_geometry.size()
+        )
+
+        self.hide_dashboard_editor_outline()
+
+        self._dashboard_resize_active = False
+        self._dashboard_resize_card_id = None
+        self._dashboard_resize_origin = None
+        self._dashboard_resize_original_layout = None
+        self._dashboard_resize_original_geometry = None
+
+        if not resized:
+            if original_layout is not None:
+                self.apply_dashboard_layout(
+                    original_layout,
+                    persist=False,
+                    sync_controls=True,
+                )
+            else:
+                self.sync_dashboard_layout_controls()
+
+            return False
+
+        canvas_width = max(
+            1,
+            self.dashboard_canvas.width(),
+        )
+
+        canvas_height = max(
+            1,
+            self.dashboard_canvas.height(),
+        )
+
+        current_layout = original_layout.card(
+            card_id
+        )
+
+        width = round(
+            (
+                card.width()
+                / canvas_width
+            )
+            * CANVAS_UNITS
+        )
+
+        height = round(
+            (
+                card.height()
+                / canvas_height
+            )
+            * CANVAS_UNITS
+        )
+
+        width = min(
+            CANVAS_UNITS
+            - current_layout.x,
+            max(
+                1,
+                width,
+            ),
+        )
+
+        height = min(
+            CANVAS_UNITS
+            - current_layout.y,
+            max(
+                1,
+                height,
+            ),
+        )
+
+        highest_layer = max(
+            card_layout.z_index
+            for card_layout in (
+                original_layout.cards
+            )
+        )
+
+        try:
+            updated = resize_card_freeform(
+                original_layout,
+                card_id,
+                width,
+                height,
+                z_index=min(
+                    1000000,
+                    highest_layer + 1,
+                ),
+            )
+
+            self.apply_dashboard_layout(
+                updated,
+                persist=True,
+                sync_controls=True,
+            )
+
+        except ValueError as error:
+            print(
+                "Dashboard card resize rejected: "
+                f"{error}"
+            )
+
+            self.apply_dashboard_layout(
+                original_layout,
+                persist=False,
+                sync_controls=True,
+            )
+
+            return False
+
+        print(
+            "Dashboard card resized freely: "
+            f"{CARD_SPECS[card_id].title}."
+        )
+
+        return True
+
+    def cancel_dashboard_live_resize(self):
+        self.finish_dashboard_live_resize(
+            commit=False
+        )
+
+    def eventFilter(
+        self,
+        watched,
+        event,
+    ):
+        move_handles = getattr(
+            self,
+            "dashboard_drag_handles",
+            {},
+        )
+
+        resize_handles = getattr(
+            self,
+            "dashboard_resize_handles",
+            {},
+        )
+
+        is_move_handle = (
+            watched in move_handles.values()
+        )
+
+        is_resize_handle = (
+            watched in resize_handles.values()
+        )
+
+        if (
+            not is_move_handle
+            and not is_resize_handle
+        ):
+            return super().eventFilter(
+                watched,
+                event,
+            )
+
+        card_id = str(
+            watched.property(
+                "cardId"
+            )
+            or ""
+        )
+
+        if (
+            not card_id
+            or self.dashboard_layout_state.locked
+        ):
+            return super().eventFilter(
+                watched,
+                event,
+            )
+
+        event_type = event.type()
+
+        if (
+            event_type
+            == QEvent.Type.MouseButtonPress
+            and event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            card = self.dashboard_cards.get(
+                card_id
+            )
+
+            if card is None:
+                return True
+
+            global_position = (
+                event.globalPosition().toPoint()
+            )
+
+            if is_resize_handle:
+                self._dashboard_resize_card_id = (
+                    card_id
+                )
+                self._dashboard_resize_origin = (
+                    global_position
+                )
+                self._dashboard_resize_active = False
+
+                watched.setCursor(
+                    Qt.CursorShape.SizeFDiagCursor
+                )
+
+            else:
+                card_top_left = card.mapToGlobal(
+                    QPoint(
+                        0,
+                        0,
+                    )
+                )
+
+                self._dashboard_drag_card_id = (
+                    card_id
+                )
+                self._dashboard_drag_origin = (
+                    global_position
+                )
+                self._dashboard_drag_offset = (
+                    global_position
+                    - card_top_left
+                )
+                self._dashboard_drag_active = False
+
+                watched.setCursor(
+                    Qt.CursorShape.ClosedHandCursor
+                )
+
+            return True
+
+        if (
+            event_type
+            == QEvent.Type.MouseMove
+            and (
+                event.buttons()
+                & Qt.MouseButton.LeftButton
+            )
+        ):
+            current_position = (
+                event.globalPosition().toPoint()
+            )
+
+            if (
+                is_resize_handle
+                and self._dashboard_resize_card_id
+                == card_id
+            ):
+                origin = (
+                    self._dashboard_resize_origin
+                )
+
+                if (
+                    not self._dashboard_resize_active
+                    and origin is not None
+                    and (
+                        current_position
+                        - origin
+                    ).manhattanLength()
+                    >= QApplication.startDragDistance()
+                ):
+                    self.begin_dashboard_live_resize(
+                        card_id,
+                        origin,
+                    )
+
+                    self.update_dashboard_live_resize(
+                        current_position
+                    )
+
+                elif self._dashboard_resize_active:
+                    self.update_dashboard_live_resize(
+                        current_position
+                    )
+
+                return True
+
+            if (
+                is_move_handle
+                and self._dashboard_drag_card_id
+                == card_id
+            ):
+                origin = (
+                    self._dashboard_drag_origin
+                )
+
+                if (
+                    not self._dashboard_drag_active
+                    and origin is not None
+                    and (
+                        current_position
+                        - origin
+                    ).manhattanLength()
+                    >= QApplication.startDragDistance()
+                ):
+                    self.begin_dashboard_live_drag(
+                        card_id,
+                        current_position,
+                    )
+
+                elif self._dashboard_drag_active:
+                    self.update_dashboard_live_drag(
+                        current_position
+                    )
+
+                return True
+
+        if (
+            event_type
+            == QEvent.Type.MouseButtonRelease
+            and event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            release_position = (
+                event.globalPosition().toPoint()
+            )
+
+            if (
+                is_resize_handle
+                and self._dashboard_resize_card_id
+                == card_id
+            ):
+                was_active = (
+                    self._dashboard_resize_active
+                )
+
+                if was_active:
+                    self.update_dashboard_live_resize(
+                        release_position
+                    )
+
+                    self.finish_dashboard_live_resize(
+                        commit=True
+                    )
+                else:
+                    self._dashboard_resize_card_id = None
+                    self._dashboard_resize_origin = None
+
+                    self.sync_dashboard_layout_controls()
+
+                watched.setCursor(
+                    Qt.CursorShape.SizeFDiagCursor
+                )
+
+                return True
+
+            if (
+                is_move_handle
+                and self._dashboard_drag_card_id
+                == card_id
+            ):
+                was_active = (
+                    self._dashboard_drag_active
+                )
+
+                if was_active:
+                    self.update_dashboard_live_drag(
+                        release_position
+                    )
+
+                    self.finish_dashboard_live_drag(
+                        commit=True
+                    )
+                else:
+                    self._dashboard_drag_card_id = None
+                    self._dashboard_drag_origin = None
+                    self._dashboard_drag_offset = QPoint()
+
+                    self.sync_dashboard_layout_controls()
+
+                watched.setCursor(
+                    Qt.CursorShape.OpenHandCursor
+                )
+
+                return True
+
+        return super().eventFilter(
+            watched,
+            event,
+        )
+
+
+    def resizeEvent(
+        self,
+        event,
+    ):
+        super().resizeEvent(
+            event
+        )
+
+        self.schedule_dashboard_geometry_refresh()
 
     def build_dashboard_layout_toolbar(self):
         self.layout_toolbar = QFrame()
@@ -707,6 +2277,12 @@ class DashboardPage(QWidget):
         )
 
     def toggle_dashboard_layout_lock(self):
+        if self._dashboard_drag_active:
+            self.cancel_dashboard_live_drag()
+
+        if self._dashboard_resize_active:
+            self.cancel_dashboard_live_resize()
+
         updated = replace(
             self.dashboard_layout_state,
             locked=(
@@ -890,10 +2466,13 @@ class DashboardPage(QWidget):
             )
         )
 
+        self.sync_dashboard_drag_handles()
+
     def apply_dashboard_layout(
         self,
         layout: DashboardLayout,
         persist: bool = False,
+        sync_controls: bool = True,
     ) -> DashboardLayout:
         validated = validate_layout(
             layout
@@ -906,95 +2485,14 @@ class DashboardPage(QWidget):
                 )
             )
 
-        while self.dashboard_grid.count():
-            self.dashboard_grid.takeAt(
-                0
-            )
-
-        for row in range(
-            MAX_GRID_ROWS
-        ):
-            self.dashboard_grid.setRowStretch(
-                row,
-                0,
-            )
-
-        for card in self.dashboard_cards.values():
-            card.setVisible(
-                False
-            )
-
-        visible_rows = set()
-        flexible_rows = set()
-
-        flexible_cards = {
-            "recently_played",
-            "quick_access",
-            "library_status",
-        }
-
-        for card_layout in validated.cards:
-            card = self.dashboard_cards[
-                card_layout.card_id
-            ]
-
-            if not card_layout.visible:
-                continue
-
-            card.setVisible(
-                True
-            )
-
-            self.dashboard_grid.addWidget(
-                card,
-                card_layout.row,
-                card_layout.column,
-                card_layout.row_span,
-                card_layout.column_span,
-            )
-
-            occupied_rows = range(
-                card_layout.row,
-                (
-                    card_layout.row
-                    + card_layout.row_span
-                ),
-            )
-
-            visible_rows.update(
-                occupied_rows
-            )
-
-            if (
-                card_layout.card_id
-                in flexible_cards
-            ):
-                flexible_rows.update(
-                    occupied_rows
-                )
-
-        if (
-            not flexible_rows
-            and visible_rows
-        ):
-            flexible_rows.add(
-                min(visible_rows)
-            )
-
-        for row in flexible_rows:
-            self.dashboard_grid.setRowStretch(
-                row,
-                1,
-            )
-
         self.dashboard_layout_state = (
             validated
         )
 
-        self.sync_dashboard_layout_controls()
+        if sync_controls:
+            self.sync_dashboard_layout_controls()
 
-        self.dashboard_grid.invalidate()
-        self.updateGeometry()
+        self.schedule_dashboard_geometry_refresh()
 
         return validated
 
@@ -1556,11 +3054,15 @@ class DashboardPage(QWidget):
 
         self.recent_rows = []
 
-        for _ in range(4):
+        for _ in range(self._recent_track_fetch_limit):
             row_card = QFrame()
             row_card.setObjectName(
                 "recentRow"
             )
+            row_card.setFixedHeight(
+                48
+            )
+            row_card.hide()
 
             row_layout = QHBoxLayout(
                 row_card
@@ -1664,51 +3166,50 @@ class DashboardPage(QWidget):
             heading
         )
 
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(8)
+        self.quick_access_grid = QGridLayout()
+        self.quick_access_grid.setHorizontalSpacing(
+            8
+        )
+        self.quick_access_grid.setVerticalSpacing(
+            8
+        )
 
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
-        grid.setRowStretch(0, 1)
-        grid.setRowStretch(1, 1)
-
-        buttons = [
+        button_definitions = [
             (
-                "♙  AFK\nSet AFK presence",
-                1,
-                0,
-                0,
-            ),
-            (
-                "✎  Custom\nCreate a presence",
-                1,
-                0,
+                "♙",
+                "AFK",
+                "Set AFK presence",
                 1,
             ),
             (
-                "★  Presets\nManage presence modes",
+                "✎",
+                "Custom",
+                "Create a presence",
                 1,
-                1,
-                0,
             ),
             (
-                "⚙  Settings\nConfigure application",
+                "★",
+                "Presets",
+                "Manage presence modes",
+                1,
+            ),
+            (
+                "⚙",
+                "Settings",
+                "Configure application",
                 3,
-                1,
-                1,
             ),
         ]
 
+        self.quick_access_buttons = []
+
         for (
-            text,
+            icon,
+            title,
+            detail,
             page_index,
-            row,
-            column,
-        ) in buttons:
-            button = QPushButton(
-                text
-            )
+        ) in button_definitions:
+            button = QPushButton()
             button.setObjectName(
                 "quickButton"
             )
@@ -1720,6 +3221,9 @@ class DashboardPage(QWidget):
                 QSizePolicy.Policy.Expanding,
             )
             button.setMinimumHeight(0)
+            button.setToolTip(
+                f"{title}: {detail}"
+            )
 
             button.clicked.connect(
                 lambda checked=False,
@@ -1729,16 +3233,266 @@ class DashboardPage(QWidget):
                 )
             )
 
-            grid.addWidget(
+            self.quick_access_buttons.append(
+                {
+                    "button": button,
+                    "icon": icon,
+                    "title": title,
+                    "detail": detail,
+                }
+            )
+
+        layout.addLayout(
+            self.quick_access_grid,
+            stretch=1,
+        )
+
+        self.update_quick_access_layout(
+            force=True
+        )
+
+    def recent_track_capacity(self) -> int:
+        if not hasattr(
+            self,
+            "recent_rows",
+        ):
+            return 0
+
+        card_height = max(
+            0,
+            self.recent_card.height(),
+        )
+
+        header_and_margins = 55
+        row_height = 48
+        row_spacing = 8
+
+        available_height = max(
+            0,
+            (
+                card_height
+                - header_and_margins
+            ),
+        )
+
+        capacity = (
+            (
+                available_height
+                + row_spacing
+            )
+            // (
+                row_height
+                + row_spacing
+            )
+        )
+
+        return max(
+            1,
+            min(
+                len(
+                    self.recent_rows
+                ),
+                capacity,
+            ),
+        )
+
+    def update_quick_access_layout(
+        self,
+        force: bool = False,
+    ):
+        if (
+            not hasattr(
+                self,
+                "quick_access_grid",
+            )
+            or not hasattr(
+                self,
+                "quick_access_buttons",
+            )
+        ):
+            return
+
+        card_width = max(
+            1,
+            self.quick_access_card.width(),
+        )
+
+        card_height = max(
+            1,
+            self.quick_access_card.height(),
+        )
+
+        if card_width < 330:
+            columns = 1
+        elif card_width >= 720:
+            columns = 4
+        else:
+            columns = 2
+
+        button_count = len(
+            self.quick_access_buttons
+        )
+
+        rows = max(
+            1,
+            (
+                button_count
+                + columns
+                - 1
+            )
+            // columns,
+        )
+
+        horizontal_spacing = 8
+        vertical_spacing = 8
+        horizontal_margins = 28
+        vertical_overhead = 60
+
+        button_width = max(
+            1,
+            (
+                card_width
+                - horizontal_margins
+                - (
+                    horizontal_spacing
+                    * (
+                        columns
+                        - 1
+                    )
+                )
+            )
+            // columns,
+        )
+
+        button_height = max(
+            1,
+            (
+                card_height
+                - vertical_overhead
+                - (
+                    vertical_spacing
+                    * (
+                        rows
+                        - 1
+                    )
+                )
+            )
+            // rows,
+        )
+
+        show_details = (
+            button_width >= 145
+            and button_height >= 66
+        )
+
+        layout_mode = (
+            columns,
+            rows,
+            show_details,
+        )
+
+        if (
+            not force
+            and layout_mode
+            == self._quick_access_layout_mode
+        ):
+            return
+
+        while self.quick_access_grid.count():
+            self.quick_access_grid.takeAt(
+                0
+            )
+
+        for index in range(4):
+            self.quick_access_grid.setColumnStretch(
+                index,
+                0,
+            )
+            self.quick_access_grid.setRowStretch(
+                index,
+                0,
+            )
+
+        for column in range(
+            columns
+        ):
+            self.quick_access_grid.setColumnStretch(
+                column,
+                1,
+            )
+
+        for row in range(
+            rows
+        ):
+            self.quick_access_grid.setRowStretch(
+                row,
+                1,
+            )
+
+        for index, item in enumerate(
+            self.quick_access_buttons
+        ):
+            row = index // columns
+            column = index % columns
+
+            text = (
+                f"{item['icon']}  {item['title']}"
+            )
+
+            if show_details:
+                text += (
+                    "\n"
+                    + item["detail"]
+                )
+
+            button = item[
+                "button"
+            ]
+
+            button.setText(
+                text
+            )
+
+            button.setProperty(
+                "compactQuickAccess",
+                not show_details,
+            )
+
+            self._refresh_dashboard_widget_style(
+                button
+            )
+
+            self.quick_access_grid.addWidget(
                 button,
                 row,
                 column,
             )
 
-        layout.addLayout(
-            grid,
-            stretch=1,
+        self._quick_access_layout_mode = (
+            layout_mode
         )
+
+    def update_responsive_dashboard_cards(
+        self,
+        card_id: str | None = None,
+    ):
+        if (
+            card_id is None
+            or card_id == "recently_played"
+        ):
+            if hasattr(
+                self,
+                "recent_rows",
+            ):
+                self.populate_recent_tracks(
+                    self._recent_tracks
+                )
+
+        if (
+            card_id is None
+            or card_id == "quick_access"
+        ):
+            self.update_quick_access_layout()
 
     def build_library_status_card(self):
         self.library_status_card = QFrame()
@@ -2110,6 +3864,55 @@ class DashboardPage(QWidget):
                 padding: 3px 7px;
                 font-size: 8px;
                 font-weight: 700;
+            }}
+
+            QLabel#dashboardDragHandle {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["accent"]};
+                border-radius: 6px;
+                font-size: 6px;
+                font-weight: 750;
+                letter-spacing: 1px;
+            }}
+
+            QLabel#dashboardDragHandle:hover {{
+                color: {theme["background"]};
+                background: {theme["accent"]};
+            }}
+
+            QLabel#dashboardResizeHandle {{
+                color: {theme["background"]};
+                background: {theme["accent"]};
+                border: 1px solid {theme["card"]};
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: 750;
+            }}
+
+            QLabel#dashboardResizeHandle:hover {{
+                color: {theme["text"]};
+                border: 1px solid {theme["text"]};
+            }}
+
+            QFrame#dashboardCanvas {{
+                background: transparent;
+                border: none;
+            }}
+
+            QFrame#dashboardCanvas[editing="true"] {{
+                background: transparent;
+                border: none;
+            }}
+
+            QFrame#dashboardEditorOutline {{
+                background: transparent;
+                border: 1px solid {theme["accent"]};
+                border-radius: 13px;
+            }}
+
+            QFrame#dashboardEditorOutline[editorMode="resize"] {{
+                border: 1px dashed {theme["accent"]};
             }}
 
             QComboBox#layoutPresetCombo,
@@ -2502,6 +4305,11 @@ class DashboardPage(QWidget):
                 background: {theme["background"]};
             }}
 
+            QPushButton#quickButton[compactQuickAccess="true"] {{
+                padding: 6px;
+                text-align: center;
+            }}
+
             QPushButton#libraryOpenButton {{
                 color: {theme["text"]};
                 background: {theme["card_alt"]};
@@ -2531,6 +4339,8 @@ class DashboardPage(QWidget):
             }}
             """
         )
+
+        self.schedule_dashboard_geometry_refresh()
 
         if getattr(
             self.song,
@@ -2676,12 +4486,18 @@ class DashboardPage(QWidget):
     def refresh_dashboard_data(self):
         tracks = (
             self.history_store.list_tracks(
-                limit=4
+                limit=(
+                    self._recent_track_fetch_limit
+                )
             )
         )
 
-        self.populate_recent_tracks(
+        self._recent_tracks = list(
             tracks
+        )
+
+        self.populate_recent_tracks(
+            self._recent_tracks
         )
 
         self.library_track_count.setText(
@@ -2961,20 +4777,43 @@ class DashboardPage(QWidget):
         self,
         tracks: list[HistoryTrack],
     ):
+        track_list = list(
+            tracks
+            or []
+        )
+
+        capacity = (
+            self.recent_track_capacity()
+        )
+
+        self._recent_visible_capacity = (
+            capacity
+        )
+
+        visible_tracks = track_list[
+            :capacity
+        ]
+
         self.recent_empty.setVisible(
-            not bool(tracks)
+            not bool(
+                track_list
+            )
         )
 
         for index, row in enumerate(
             self.recent_rows
         ):
-            if index >= len(tracks):
+            if index >= len(
+                visible_tracks
+            ):
                 row["card"].setVisible(
                     False
                 )
                 continue
 
-            track = tracks[index]
+            track = visible_tracks[
+                index
+            ]
 
             row["title"].setText(
                 track.title

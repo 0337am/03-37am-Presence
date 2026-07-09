@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+import shutil
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
-GRID_COLUMNS = 12
-MAX_GRID_ROWS = 20
+SCHEMA_VERSION = 2
+CANVAS_UNITS = 10000
 
 
 @dataclass(frozen=True)
@@ -88,19 +88,21 @@ CARD_ORDER = tuple(
 @dataclass(frozen=True)
 class DashboardCardLayout:
     card_id: str
-    row: int
-    column: int
-    column_span: int
-    row_span: int = 1
+    x: int
+    y: int
+    width: int
+    height: int
+    z_index: int = 0
     visible: bool = True
 
     def to_dict(self) -> dict:
         return {
             "card_id": self.card_id,
-            "row": self.row,
-            "column": self.column,
-            "column_span": self.column_span,
-            "row_span": self.row_span,
+            "x": self.x,
+            "y": self.y,
+            "width": self.width,
+            "height": self.height,
+            "z_index": self.z_index,
             "visible": self.visible,
         }
 
@@ -121,24 +123,28 @@ class DashboardCardLayout:
                     "",
                 )
             ).strip(),
-            row=_strict_integer(
-                payload.get("row"),
-                "row",
+            x=_strict_integer(
+                payload.get("x"),
+                "x",
             ),
-            column=_strict_integer(
-                payload.get("column"),
-                "column",
+            y=_strict_integer(
+                payload.get("y"),
+                "y",
             ),
-            column_span=_strict_integer(
-                payload.get("column_span"),
-                "column_span",
+            width=_strict_integer(
+                payload.get("width"),
+                "width",
             ),
-            row_span=_strict_integer(
+            height=_strict_integer(
+                payload.get("height"),
+                "height",
+            ),
+            z_index=_strict_integer(
                 payload.get(
-                    "row_span",
-                    1,
+                    "z_index",
+                    0,
                 ),
-                "row_span",
+                "z_index",
             ),
             visible=_strict_boolean(
                 payload.get(
@@ -191,10 +197,15 @@ class DashboardLayout:
         schema_version = _strict_integer(
             payload.get(
                 "schema_version",
-                SCHEMA_VERSION,
+                1,
             ),
             "schema_version",
         )
+
+        if schema_version == 1:
+            return _migrate_v1_payload(
+                payload
+            )
 
         if schema_version != SCHEMA_VERSION:
             raise ValueError(
@@ -237,8 +248,9 @@ class DashboardLayout:
             schema_version=schema_version,
         )
 
-        validate_layout(layout)
-        return layout
+        return validate_layout(
+            layout
+        )
 
 
 def _strict_integer(
@@ -279,39 +291,6 @@ def _strict_boolean(
         )
 
     return value
-
-
-def _cards_overlap(
-    first: DashboardCardLayout,
-    second: DashboardCardLayout,
-) -> bool:
-    if not first.visible or not second.visible:
-        return False
-
-    first_right = (
-        first.column
-        + first.column_span
-    )
-    second_right = (
-        second.column
-        + second.column_span
-    )
-
-    first_bottom = (
-        first.row
-        + first.row_span
-    )
-    second_bottom = (
-        second.row
-        + second.row_span
-    )
-
-    return (
-        first.column < second_right
-        and second.column < first_right
-        and first.row < second_bottom
-        and second.row < first_bottom
-    )
 
 
 def validate_layout(
@@ -360,76 +339,220 @@ def validate_layout(
 
         if not (
             0
-            <= card.row
-            < MAX_GRID_ROWS
+            <= card.x
+            < CANVAS_UNITS
         ):
             raise ValueError(
-                f"{spec.title} has an invalid row."
+                f"{spec.title} has an invalid horizontal position."
             )
 
         if not (
             0
-            <= card.column
-            < GRID_COLUMNS
+            <= card.y
+            < CANVAS_UNITS
         ):
             raise ValueError(
-                f"{spec.title} has an invalid column."
+                f"{spec.title} has an invalid vertical position."
             )
 
         if not (
-            spec.minimum_column_span
-            <= card.column_span
-            <= spec.maximum_column_span
+            1
+            <= card.width
+            <= CANVAS_UNITS
         ):
             raise ValueError(
                 f"{spec.title} has an invalid width."
             )
 
-        if (
-            card.column
-            + card.column_span
-            > GRID_COLUMNS
-        ):
-            raise ValueError(
-                f"{spec.title} extends beyond the grid."
-            )
-
         if not (
-            spec.minimum_row_span
-            <= card.row_span
-            <= spec.maximum_row_span
+            1
+            <= card.height
+            <= CANVAS_UNITS
         ):
             raise ValueError(
                 f"{spec.title} has an invalid height."
             )
 
         if (
-            card.row
-            + card.row_span
-            > MAX_GRID_ROWS
+            card.x
+            + card.width
+            > CANVAS_UNITS
         ):
             raise ValueError(
-                f"{spec.title} extends beyond the grid."
+                f"{spec.title} extends beyond the dashboard width."
             )
 
-    for index, first in enumerate(
-        layout.cards
-    ):
-        for second in layout.cards[
-            index + 1:
-        ]:
-            if _cards_overlap(
-                first,
-                second,
-            ):
-                raise ValueError(
-                    "Dashboard cards overlap: "
-                    f"{CARD_SPECS[first.card_id].title} "
-                    "and "
-                    f"{CARD_SPECS[second.card_id].title}."
-                )
+        if (
+            card.y
+            + card.height
+            > CANVAS_UNITS
+        ):
+            raise ValueError(
+                f"{spec.title} extends beyond the dashboard height."
+            )
+
+        if not (
+            0
+            <= card.z_index
+            <= 1000000
+        ):
+            raise ValueError(
+                f"{spec.title} has an invalid layer."
+            )
 
     return layout
+
+
+def move_card_freeform(
+    layout: DashboardLayout,
+    card_id: str,
+    x: int,
+    y: int,
+    z_index: int | None = None,
+) -> DashboardLayout:
+    validated = validate_layout(
+        layout
+    )
+
+    try:
+        moving_card = validated.card(
+            card_id
+        )
+    except KeyError as error:
+        raise ValueError(
+            "The dashboard card to move is unknown."
+        ) from error
+
+    spec = CARD_SPECS[
+        moving_card.card_id
+    ]
+
+    if not moving_card.visible:
+        raise ValueError(
+            "A hidden dashboard card cannot be moved."
+        )
+
+    if not spec.movable:
+        raise ValueError(
+            f"{spec.title} cannot be moved."
+        )
+
+    requested_x = _strict_integer(
+        x,
+        "x",
+    )
+
+    requested_y = _strict_integer(
+        y,
+        "y",
+    )
+
+    requested_z = (
+        moving_card.z_index
+        if z_index is None
+        else _strict_integer(
+            z_index,
+            "z_index",
+        )
+    )
+
+    moved_card = replace(
+        moving_card,
+        x=requested_x,
+        y=requested_y,
+        z_index=requested_z,
+    )
+
+    updated = replace(
+        validated,
+        cards=tuple(
+            moved_card
+            if card.card_id == card_id
+            else card
+            for card in validated.cards
+        ),
+        preset="Custom",
+    )
+
+    return validate_layout(
+        updated
+    )
+
+
+def resize_card_freeform(
+    layout: DashboardLayout,
+    card_id: str,
+    width: int,
+    height: int,
+    z_index: int | None = None,
+) -> DashboardLayout:
+    validated = validate_layout(
+        layout
+    )
+
+    try:
+        resizing_card = validated.card(
+            card_id
+        )
+    except KeyError as error:
+        raise ValueError(
+            "The dashboard card to resize is unknown."
+        ) from error
+
+    spec = CARD_SPECS[
+        resizing_card.card_id
+    ]
+
+    if not resizing_card.visible:
+        raise ValueError(
+            "A hidden dashboard card cannot be resized."
+        )
+
+    if not spec.resizable:
+        raise ValueError(
+            f"{spec.title} cannot be resized."
+        )
+
+    requested_width = _strict_integer(
+        width,
+        "width",
+    )
+
+    requested_height = _strict_integer(
+        height,
+        "height",
+    )
+
+    requested_z = (
+        resizing_card.z_index
+        if z_index is None
+        else _strict_integer(
+            z_index,
+            "z_index",
+        )
+    )
+
+    resized_card = replace(
+        resizing_card,
+        width=requested_width,
+        height=requested_height,
+        z_index=requested_z,
+    )
+
+    updated = replace(
+        validated,
+        cards=tuple(
+            resized_card
+            if card.card_id == card_id
+            else card
+            for card in validated.cards
+        ),
+        preset="Custom",
+    )
+
+    return validate_layout(
+        updated
+    )
 
 
 def _make_layout(
@@ -441,18 +564,20 @@ def _make_layout(
         cards=tuple(
             DashboardCardLayout(
                 card_id=card_id,
-                row=row,
-                column=column,
-                column_span=column_span,
-                row_span=row_span,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                z_index=z_index,
                 visible=visible,
             )
             for (
                 card_id,
-                row,
-                column,
-                column_span,
-                row_span,
+                x,
+                y,
+                width,
+                height,
+                z_index,
                 visible,
             ) in cards
         ),
@@ -469,346 +594,66 @@ PRESET_LAYOUTS = {
     "Default": _make_layout(
         "Default",
         (
-            (
-                "now_playing",
-                0,
-                0,
-                7,
-                1,
-                True,
-            ),
-            (
-                "discord_preview",
-                0,
-                7,
-                5,
-                1,
-                True,
-            ),
-            (
-                "recently_played",
-                1,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
-                "quick_access",
-                1,
-                4,
-                4,
-                1,
-                True,
-            ),
-            (
-                "library_status",
-                1,
-                8,
-                4,
-                1,
-                True,
-            ),
-            (
-                "discord_status",
-                2,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
-                "music_status",
-                2,
-                4,
-                4,
-                1,
-                True,
-            ),
-            (
-                "auto_afk",
-                2,
-                8,
-                4,
-                1,
-                True,
-            ),
+            ("now_playing", 0, 0, 5750, 3400, 1, True),
+            ("discord_preview", 5950, 0, 4050, 3400, 2, True),
+            ("recently_played", 0, 3600, 3200, 4300, 3, True),
+            ("quick_access", 3400, 3600, 3200, 4300, 4, True),
+            ("library_status", 6800, 3600, 3200, 4300, 5, True),
+            ("discord_status", 0, 8100, 3200, 1500, 6, True),
+            ("music_status", 3400, 8100, 3200, 1500, 7, True),
+            ("auto_afk", 6800, 8100, 3200, 1500, 8, True),
         ),
     ),
     "Media Focus": _make_layout(
         "Media Focus",
         (
-            (
-                "now_playing",
-                0,
-                0,
-                8,
-                1,
-                True,
-            ),
-            (
-                "discord_preview",
-                0,
-                8,
-                4,
-                1,
-                True,
-            ),
-            (
-                "recently_played",
-                1,
-                0,
-                6,
-                1,
-                True,
-            ),
-            (
-                "library_status",
-                1,
-                6,
-                6,
-                1,
-                True,
-            ),
-            (
-                "quick_access",
-                3,
-                0,
-                4,
-                1,
-                False,
-            ),
-            (
-                "discord_status",
-                2,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
-                "music_status",
-                2,
-                4,
-                4,
-                1,
-                True,
-            ),
-            (
-                "auto_afk",
-                2,
-                8,
-                4,
-                1,
-                True,
-            ),
+            ("now_playing", 0, 0, 6550, 3400, 1, True),
+            ("discord_preview", 6750, 0, 3250, 3400, 2, True),
+            ("recently_played", 0, 3600, 4900, 4300, 3, True),
+            ("library_status", 5100, 3600, 4900, 4300, 4, True),
+            ("quick_access", 0, 3600, 3200, 4300, 5, False),
+            ("discord_status", 0, 8100, 3200, 1500, 6, True),
+            ("music_status", 3400, 8100, 3200, 1500, 7, True),
+            ("auto_afk", 6800, 8100, 3200, 1500, 8, True),
         ),
     ),
     "Compact": _make_layout(
         "Compact",
         (
-            (
-                "now_playing",
-                0,
-                0,
-                6,
-                1,
-                True,
-            ),
-            (
-                "discord_preview",
-                0,
-                6,
-                6,
-                1,
-                True,
-            ),
-            (
-                "recently_played",
-                1,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
-                "quick_access",
-                1,
-                4,
-                4,
-                1,
-                True,
-            ),
-            (
-                "library_status",
-                1,
-                8,
-                4,
-                1,
-                True,
-            ),
-            (
-                "discord_status",
-                2,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
-                "music_status",
-                2,
-                4,
-                4,
-                1,
-                True,
-            ),
-            (
-                "auto_afk",
-                2,
-                8,
-                4,
-                1,
-                True,
-            ),
+            ("now_playing", 0, 0, 4900, 3400, 1, True),
+            ("discord_preview", 5100, 0, 4900, 3400, 2, True),
+            ("recently_played", 0, 3600, 3200, 4300, 3, True),
+            ("quick_access", 3400, 3600, 3200, 4300, 4, True),
+            ("library_status", 6800, 3600, 3200, 4300, 5, True),
+            ("discord_status", 0, 8100, 3200, 1500, 6, True),
+            ("music_status", 3400, 8100, 3200, 1500, 7, True),
+            ("auto_afk", 6800, 8100, 3200, 1500, 8, True),
         ),
     ),
     "Library Focus": _make_layout(
         "Library Focus",
         (
-            (
-                "recently_played",
-                0,
-                0,
-                8,
-                1,
-                True,
-            ),
-            (
-                "library_status",
-                0,
-                8,
-                4,
-                1,
-                True,
-            ),
-            (
-                "now_playing",
-                1,
-                0,
-                8,
-                1,
-                True,
-            ),
-            (
-                "discord_preview",
-                1,
-                8,
-                4,
-                1,
-                True,
-            ),
-            (
-                "quick_access",
-                3,
-                0,
-                4,
-                1,
-                False,
-            ),
-            (
-                "discord_status",
-                2,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
-                "music_status",
-                2,
-                4,
-                4,
-                1,
-                True,
-            ),
-            (
-                "auto_afk",
-                2,
-                8,
-                4,
-                1,
-                True,
-            ),
+            ("recently_played", 0, 0, 6550, 3400, 1, True),
+            ("library_status", 6750, 0, 3250, 3400, 2, True),
+            ("now_playing", 0, 3600, 6550, 4300, 3, True),
+            ("discord_preview", 6750, 3600, 3250, 4300, 4, True),
+            ("quick_access", 0, 3600, 3200, 4300, 5, False),
+            ("discord_status", 0, 8100, 3200, 1500, 6, True),
+            ("music_status", 3400, 8100, 3200, 1500, 7, True),
+            ("auto_afk", 6800, 8100, 3200, 1500, 8, True),
         ),
     ),
     "Minimal": _make_layout(
         "Minimal",
         (
-            (
-                "now_playing",
-                0,
-                0,
-                8,
-                1,
-                True,
-            ),
-            (
-                "discord_preview",
-                0,
-                8,
-                4,
-                1,
-                True,
-            ),
-            (
-                "recently_played",
-                1,
-                0,
-                4,
-                1,
-                False,
-            ),
-            (
-                "quick_access",
-                1,
-                4,
-                4,
-                1,
-                False,
-            ),
-            (
-                "library_status",
-                1,
-                8,
-                4,
-                1,
-                False,
-            ),
-            (
-                "discord_status",
-                2,
-                0,
-                4,
-                1,
-                False,
-            ),
-            (
-                "music_status",
-                2,
-                4,
-                4,
-                1,
-                False,
-            ),
-            (
-                "auto_afk",
-                2,
-                8,
-                4,
-                1,
-                False,
-            ),
+            ("now_playing", 0, 0, 6550, 3400, 1, True),
+            ("discord_preview", 6750, 0, 3250, 3400, 2, True),
+            ("recently_played", 0, 3600, 3200, 4300, 3, False),
+            ("quick_access", 3400, 3600, 3200, 4300, 4, False),
+            ("library_status", 6800, 3600, 3200, 4300, 5, False),
+            ("discord_status", 0, 8100, 3200, 1500, 6, False),
+            ("music_status", 3400, 8100, 3200, 1500, 7, False),
+            ("auto_afk", 6800, 8100, 3200, 1500, 8, False),
         ),
     ),
 }
@@ -838,6 +683,223 @@ def preset_layout(
 
     raise KeyError(
         f"Unknown dashboard preset: {name}"
+    )
+
+
+def _migrate_v1_payload(
+    payload,
+) -> DashboardLayout:
+    locked = _strict_boolean(
+        payload.get(
+            "locked",
+            True,
+        ),
+        "locked",
+    )
+
+    preset_name = str(
+        payload.get(
+            "preset",
+            "Custom",
+        )
+        or "Custom"
+    ).strip()
+
+    if preset_name in PRESET_LAYOUTS:
+        return replace(
+            preset_layout(
+                preset_name
+            ),
+            locked=locked,
+        )
+
+    cards_payload = payload.get(
+        "cards"
+    )
+
+    if not isinstance(
+        cards_payload,
+        list,
+    ):
+        raise ValueError(
+            "Dashboard cards must be a list."
+        )
+
+    row_bands = {
+        0: (0, 3400),
+        1: (3600, 4300),
+        2: (8100, 1500),
+        3: (8100, 1500),
+    }
+
+    migrated_cards = []
+
+    for index, card_payload in enumerate(
+        cards_payload
+    ):
+        if not isinstance(
+            card_payload,
+            dict,
+        ):
+            raise ValueError(
+                "Dashboard card data must be an object."
+            )
+
+        card_id = str(
+            card_payload.get(
+                "card_id",
+                "",
+            )
+        ).strip()
+
+        row = _strict_integer(
+            card_payload.get(
+                "row",
+                0,
+            ),
+            "row",
+        )
+
+        column = _strict_integer(
+            card_payload.get(
+                "column",
+                0,
+            ),
+            "column",
+        )
+
+        column_span = _strict_integer(
+            card_payload.get(
+                "column_span",
+                1,
+            ),
+            "column_span",
+        )
+
+        row_span = _strict_integer(
+            card_payload.get(
+                "row_span",
+                1,
+            ),
+            "row_span",
+        )
+
+        visible = _strict_boolean(
+            card_payload.get(
+                "visible",
+                True,
+            ),
+            "visible",
+        )
+
+        left = round(
+            (
+                column
+                / 12
+            )
+            * CANVAS_UNITS
+        )
+
+        right = round(
+            (
+                (
+                    column
+                    + column_span
+                )
+                / 12
+            )
+            * CANVAS_UNITS
+        )
+
+        horizontal_gap = 80
+
+        x = left + (
+            horizontal_gap
+            if column > 0
+            else 0
+        )
+
+        right -= (
+            horizontal_gap
+            if (
+                column
+                + column_span
+                < 12
+            )
+            else 0
+        )
+
+        width = max(
+            250,
+            right - x,
+        )
+
+        if row in row_bands:
+            y, height = row_bands[
+                row
+            ]
+
+            if row_span > 1:
+                final_row = min(
+                    max(
+                        row_bands
+                    ),
+                    row
+                    + row_span
+                    - 1,
+                )
+
+                final_y, final_height = (
+                    row_bands[
+                        final_row
+                    ]
+                )
+
+                height = (
+                    final_y
+                    + final_height
+                    - y
+                )
+        else:
+            y = min(
+                9000,
+                max(
+                    0,
+                    row * 2200,
+                ),
+            )
+
+            height = min(
+                CANVAS_UNITS - y,
+                max(
+                    900,
+                    row_span * 1800,
+                ),
+            )
+
+        migrated_cards.append(
+            DashboardCardLayout(
+                card_id=card_id,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                z_index=index,
+                visible=visible,
+            )
+        )
+
+    migrated = DashboardLayout(
+        cards=tuple(
+            migrated_cards
+        ),
+        locked=locked,
+        preset="Custom",
+        schema_version=SCHEMA_VERSION,
+    )
+
+    return validate_layout(
+        migrated
     )
 
 
@@ -891,9 +953,32 @@ class DashboardLayoutStore:
                 )
             )
 
-            return DashboardLayout.from_dict(
+            source_version = _strict_integer(
+                payload.get(
+                    "schema_version",
+                    1,
+                ),
+                "schema_version",
+            )
+
+            layout = DashboardLayout.from_dict(
                 payload
             )
+
+            if source_version == 1:
+                self._backup_legacy_file()
+
+                try:
+                    self.save(
+                        layout
+                    )
+                except OSError as error:
+                    print(
+                        "Dashboard layout migration could not "
+                        f"be saved: {error}"
+                    )
+
+            return layout
 
         except (
             OSError,
@@ -976,6 +1061,27 @@ class DashboardLayoutStore:
         return self.apply_preset(
             "Default"
         )
+
+    def _backup_legacy_file(self):
+        if not self.path.exists():
+            return
+
+        timestamp = datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )
+
+        backup_path = self.path.with_name(
+            self.path.name
+            + f".v1_backup_{timestamp}"
+        )
+
+        try:
+            shutil.copy2(
+                self.path,
+                backup_path,
+            )
+        except OSError:
+            pass
 
     def _quarantine_invalid_file(self):
         if not self.path.exists():
