@@ -53,6 +53,12 @@ YUNO_IMAGE_PATH = (
     / "yuno.png"
 )
 
+LAST_PAGE_SETTING_KEY = (
+    "navigation/last_page"
+)
+
+DEFAULT_PAGE_INDEX = 0
+
 
 class NavigationButton(QPushButton):
     def __init__(
@@ -184,7 +190,7 @@ class MainWindow(QMainWindow):
 
         self.connect_services()
         self.apply_saved_settings()
-        self.switch_page(0)
+        self.restore_last_page()
 
     def build_sidebar(
         self,
@@ -524,10 +530,85 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def saved_page_index(
+        self,
+    ) -> int:
+        raw_index = (
+            self.settings_page.store.value(
+                LAST_PAGE_SETTING_KEY,
+                DEFAULT_PAGE_INDEX,
+            )
+        )
+
+        invalid_saved_value = False
+
+        try:
+            page_index = int(
+                raw_index
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            page_index = (
+                DEFAULT_PAGE_INDEX
+            )
+            invalid_saved_value = True
+
+        if not (
+            0
+            <= page_index
+            < self.pages.count()
+        ):
+            page_index = (
+                DEFAULT_PAGE_INDEX
+            )
+            invalid_saved_value = True
+
+        if invalid_saved_value:
+            self.settings_page.store.setValue(
+                LAST_PAGE_SETTING_KEY,
+                page_index,
+            )
+
+            self.settings_page.store.sync()
+
+        return page_index
+
+    def restore_last_page(
+        self,
+    ):
+        self.switch_page(
+            self.saved_page_index(),
+            remember=False,
+        )
+
     def switch_page(
         self,
         page_index: int,
+        remember: bool = True,
     ):
+        try:
+            page_index = int(
+                page_index
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            page_index = (
+                DEFAULT_PAGE_INDEX
+            )
+
+        if not (
+            0
+            <= page_index
+            < self.pages.count()
+        ):
+            page_index = (
+                DEFAULT_PAGE_INDEX
+            )
+
         self.pages.setCurrentIndex(
             page_index
         )
@@ -538,6 +619,14 @@ class MainWindow(QMainWindow):
             button.setChecked(
                 index == page_index
             )
+
+        if remember:
+            self.settings_page.store.setValue(
+                LAST_PAGE_SETTING_KEY,
+                page_index,
+            )
+
+            self.settings_page.store.sync()
 
         if page_index == 3:
             refresh_storage = getattr(
