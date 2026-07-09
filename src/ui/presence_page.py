@@ -224,7 +224,7 @@ class PresencePage(QWidget):
             "presenceInput"
         )
         self.message_input.setPlaceholderText(
-            "Be back later \u2661"
+            "Replies not guaranteed"
         )
         self.message_input.setMaxLength(128)
 

@@ -20,7 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
 - Persistent listening history backed by SQLite.
 - Recently Played artwork caching.
 - Automatic AFK presence with restoration of the previous mode.
-- Theme presets, custom colours, branding text, and sidebar artwork.
+- Theme presets, custom colours, editable title and subtitle, an optional fixed About footer, and sidebar artwork.
 - System tray controls and Windows startup options.
 - Diagnostics, data controls, CSV library export, and settings backup.
 
@@ -53,6 +53,8 @@ The supported application entry point is `main.py`.
 4. Use the Presence page for custom, AFK, streaming, or preset activity modes.
 5. Unlock the Dashboard layout when you want to move, resize, overlap, hide, or reset cards.
 6. Use Settings to control themes, media sources, artwork hosting, startup behaviour, storage, diagnostics, and backups.
+
+The About-page thank-you footer can be shown or hidden, but its wording is fixed as part of the application.
 
 ## Settings backup and restore
 

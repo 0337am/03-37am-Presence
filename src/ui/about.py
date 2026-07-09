@@ -19,7 +19,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.ui.theme import ThemeManager
+from src.ui.theme import (
+    FIXED_ABOUT_FOOTER,
+    ThemeManager,
+)
 from src.version import DISPLAY_VERSION
 
 
@@ -313,7 +316,7 @@ class AboutPage(QWidget):
         )
 
         self.footer_label = QLabel(
-            "Made with pink pixels and far too much music."
+            FIXED_ABOUT_FOOTER
         )
         self.footer_label.setObjectName(
             "aboutFooter"
@@ -554,12 +557,6 @@ class AboutPage(QWidget):
             or "Spotify and Discord companion"
         )
 
-        footer = (
-            branding.get("footer", "")
-            or "Made with pink pixels "
-            "and far too much music."
-        )
-
         self._branding_image_path = str(
             branding.get("image_path", "")
             or ""
@@ -570,7 +567,7 @@ class AboutPage(QWidget):
             subtitle
         )
         self.footer_label.setText(
-            footer
+            FIXED_ABOUT_FOOTER
         )
 
         self.app_name.setVisible(

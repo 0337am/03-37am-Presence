@@ -22,6 +22,8 @@ Released 9 July 2026.
 - Dashboard layouts now persist freeform position, size, visibility, order, and lock state.
 - Existing grid layouts are migrated to the freeform layout format.
 - Settings deep links and sidebar selection remain consistent when reopening the app.
+- Refined the first-run branding and presence text defaults.
+- Made the About-page thank-you footer fixed while keeping its visibility optional.
 
 ### Privacy and security
 

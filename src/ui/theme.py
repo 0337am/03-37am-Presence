@@ -18,11 +18,14 @@ BRANDING_DIRECTORY = (
     APP_DATA_DIRECTORY / "branding"
 )
 
+FIXED_ABOUT_FOOTER = (
+    "Thank you for using 03:37am Presence ♡"
+)
 
 DEFAULT_BRANDING = {
-    "title": "03:37am ♡",
-    "subtitle": "Yuno Presence",
-    "footer": "Love is the strongest signal. ♡",
+    "title": "Username",
+    "subtitle": "03:37am Presence♡",
+    "footer": FIXED_ABOUT_FOOTER,
     "image_path": "",
     "show_title": True,
     "show_subtitle": True,
@@ -109,6 +112,14 @@ class ThemeManager(QObject):
             "Presence",
         )
 
+        # The About-page footer is product copy, not
+        # user branding. Remove values saved by older
+        # versions so they cannot override the fixed text.
+        self.store.remove(
+            "branding/footer"
+        )
+        self.store.sync()
+
     def theme(self) -> dict:
         values = {}
 
@@ -139,7 +150,9 @@ class ThemeManager(QObject):
         }
 
         for key, default in DEFAULT_BRANDING.items():
-            if key in boolean_keys:
+            if key == "footer":
+                values[key] = FIXED_ABOUT_FOOTER
+            elif key in boolean_keys:
                 values[key] = self.store.value(
                     f"branding/{key}",
                     default,
@@ -185,7 +198,10 @@ class ThemeManager(QObject):
         key: str,
         value,
     ):
-        if key not in DEFAULT_BRANDING:
+        if (
+            key not in DEFAULT_BRANDING
+            or key == "footer"
+        ):
             return
 
         self.store.setValue(
@@ -326,6 +342,12 @@ class ThemeManager(QObject):
                     pass
 
         for key, value in DEFAULT_BRANDING.items():
+            if key == "footer":
+                self.store.remove(
+                    "branding/footer"
+                )
+                continue
+
             self.store.setValue(
                 f"branding/{key}",
                 value,

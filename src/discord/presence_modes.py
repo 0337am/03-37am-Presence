@@ -25,19 +25,19 @@ MODE_NAMES = {
 MODE_DEFAULTS = {
     "afk": {
         "title": "Away right now",
-        "message": "Be back later ♡",
+        "message": "Replies not guaranteed",
     },
     "sleep": {
         "title": "Sleeping",
-        "message": "Probably dreaming ♡",
+        "message": "Wont reply until awake",
     },
     "working": {
         "title": "Working",
         "message": "Replies may be slow",
     },
     "custom": {
-        "title": "Custom presence",
-        "message": "Doing something",
+        "title": "Custom Presence",
+        "message": "Custom Presence",
     },
 }
 

@@ -634,6 +634,10 @@ class SettingsBackupManager:
             if key == "image_path":
                 continue
 
+            if key == "footer":
+                values[key] = default
+                continue
+
             if key in boolean_keys:
                 values[key] = (
                     self.settings.value(
@@ -676,6 +680,12 @@ class SettingsBackupManager:
         for key, value in (
             settings["branding"].items()
         ):
+            if key == "footer":
+                self.settings.remove(
+                    "branding/footer"
+                )
+                continue
+
             self.settings.setValue(
                 f"branding/{key}",
                 value,
@@ -962,7 +972,6 @@ class SettingsBackupManager:
         for key in (
             "title",
             "subtitle",
-            "footer",
         ):
             normalized[key] = (
                 cls._require_text(
@@ -972,6 +981,21 @@ class SettingsBackupManager:
                     allow_empty=True,
                 )
             )
+
+        # Schema v1 backups include a footer field.
+        # Validate it for compatibility, then replace it
+        # with the fixed product copy so restores cannot
+        # customise the About-page thank-you text.
+        cls._require_text(
+            data.get("footer"),
+            "branding.footer",
+            maximum_length=80,
+            allow_empty=True,
+        )
+
+        normalized["footer"] = (
+            DEFAULT_BRANDING["footer"]
+        )
 
         for key in (
             "show_title",

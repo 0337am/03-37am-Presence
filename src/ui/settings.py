@@ -248,7 +248,7 @@ class SettingsPage(QWidget):
 
         branding = self.create_card(
             "Branding",
-            "Edit the sidebar text and portrait.",
+            "Edit the sidebar title, subtitle, and portrait.",
         )
 
         branding_layout = branding.layout()
@@ -269,18 +269,10 @@ class SettingsPage(QWidget):
             )
         )
 
-        self.footer_input = self.create_text_field(
-            "Footer text",
-            current_branding["footer"],
-        )
-
         self.title_input.editingFinished.connect(
             self.save_branding_text
         )
         self.subtitle_input.editingFinished.connect(
-            self.save_branding_text
-        )
-        self.footer_input.editingFinished.connect(
             self.save_branding_text
         )
 
@@ -289,9 +281,6 @@ class SettingsPage(QWidget):
         )
         branding_layout.addWidget(
             self.subtitle_input
-        )
-        branding_layout.addWidget(
-            self.footer_input
         )
 
         visibility_row = QHBoxLayout()
@@ -310,7 +299,7 @@ class SettingsPage(QWidget):
             )
         )
         self.show_footer_box = self.create_checkbox(
-            "Show footer",
+            "Show About footer",
             current_branding["show_footer"],
         )
 
@@ -2423,7 +2412,6 @@ class SettingsPage(QWidget):
         values = {
             "title": self.title_input.text().strip(),
             "subtitle": self.subtitle_input.text().strip(),
-            "footer": self.footer_input.text().strip(),
         }
 
         for key, value in values.items():
@@ -2441,6 +2429,7 @@ class SettingsPage(QWidget):
         self.status.setText(
             "Branding text saved."
         )
+
     def change_branding_visibility(
         self,
         key: str,
@@ -2508,10 +2497,6 @@ class SettingsPage(QWidget):
             (
                 self.subtitle_input,
                 branding.get("subtitle", ""),
-            ),
-            (
-                self.footer_input,
-                branding.get("footer", ""),
             ),
         ]
 
