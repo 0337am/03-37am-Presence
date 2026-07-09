@@ -1,4 +1,4 @@
-﻿.env
+.env
 .venv/
 build/
 dist/
@@ -18,3 +18,7 @@ __pycache__/
 /*_current*.py
 /*_redesign.py
 /*.failed_*
+# Local OAuth and token caches
+/.cache
+/.cache-*
+/.cache_*
