@@ -8,7 +8,6 @@ __pycache__/
 *.spec.before_*
 *.before_*
 .cache/
-src/cloudinary_config_local.py
 # Local release and development helpers
 /release/
 /patch_*.py
