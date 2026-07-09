@@ -40,6 +40,10 @@ from src.music.source_preferences import (
     SourcePreferencesStore,
 )
 
+from src.ui.artwork_hosting_card import (
+    ArtworkHostingCard,
+)
+
 from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
@@ -517,6 +521,14 @@ class SettingsPage(QWidget):
 
         sources_layout.addWidget(
             browser_help
+        )
+
+        self.artwork_hosting_card = (
+            ArtworkHostingCard()
+        )
+
+        self.artwork_hosting_card.message_changed.connect(
+            self.set_status_message
         )
 
         afk_preferences = (
@@ -1075,6 +1087,9 @@ class SettingsPage(QWidget):
         root.addWidget(branding)
         root.addWidget(theme_card)
         root.addWidget(sources)
+        root.addWidget(
+            self.artwork_hosting_card
+        )
         root.addWidget(auto_afk)
         root.addWidget(appearance)
         root.addWidget(startup)
@@ -1087,6 +1102,9 @@ class SettingsPage(QWidget):
         self.settings_sections = {
             "theme": theme_card,
             "media_sources": sources,
+            "artwork_hosting": (
+                self.artwork_hosting_card
+            ),
             "auto_afk": auto_afk,
             "data_storage": storage,
             "diagnostics": diagnostics,
@@ -1097,6 +1115,14 @@ class SettingsPage(QWidget):
 
         self.refresh_storage_summary()
         self.refresh_diagnostics()
+
+    def set_status_message(
+        self,
+        message: str,
+    ):
+        self.status.setText(
+            str(message)
+        )
 
     def set_diagnostics_provider(
         self,
@@ -1591,6 +1617,10 @@ class SettingsPage(QWidget):
             "sources": "media_sources",
             "media": "media_sources",
             "media sources": "media_sources",
+            "artwork": "artwork_hosting",
+            "cloudinary": "artwork_hosting",
+            "hosting": "artwork_hosting",
+            "artwork hosting": "artwork_hosting",
             "colours": "theme",
             "colors": "theme",
             "data": "data_storage",
@@ -2369,6 +2399,8 @@ class SettingsPage(QWidget):
         self.top_box.setChecked(False)
         self.hidden_box.setChecked(True)
         self.windows_box.setChecked(False)
+
+        self.artwork_hosting_card.reset_preferences()
 
         self.status.setText(
             "All settings reset."
