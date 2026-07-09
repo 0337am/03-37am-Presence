@@ -111,6 +111,7 @@ class DiscordPresence:
     def _run(self):
         pending_song = _NO_ITEM
         last_presence_key = _NO_ITEM
+        last_playing_state = _NO_ITEM
         last_update_time = 0.0
 
         try:
@@ -123,6 +124,7 @@ class DiscordPresence:
                         continue
 
                     last_presence_key = _NO_ITEM
+                    last_playing_state = _NO_ITEM
                     last_update_time = 0.0
 
                 queued_item = self._get_queued_item(
@@ -146,6 +148,29 @@ class DiscordPresence:
                 if pending_song is _NO_ITEM:
                     continue
 
+                pending_playing_state = getattr(
+                    pending_song,
+                    "playing",
+                    _NO_ITEM,
+                )
+
+                if (
+                    pending_playing_state
+                    is not _NO_ITEM
+                ):
+                    pending_playing_state = bool(
+                        pending_playing_state
+                    )
+
+                playback_state_changed = (
+                    pending_playing_state
+                    is not _NO_ITEM
+                    and last_playing_state
+                    is not _NO_ITEM
+                    and pending_playing_state
+                    != last_playing_state
+                )
+
                 elapsed = (
                     time.monotonic()
                     - last_update_time
@@ -154,6 +179,7 @@ class DiscordPresence:
                 if (
                     elapsed
                     < self.MIN_UPDATE_INTERVAL_SECONDS
+                    and not playback_state_changed
                 ):
                     continue
 
@@ -177,6 +203,9 @@ class DiscordPresence:
                     continue
 
                 last_presence_key = presence_key
+                last_playing_state = (
+                    pending_playing_state
+                )
                 last_update_time = time.monotonic()
                 pending_song = _NO_ITEM
 
