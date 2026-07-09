@@ -30,6 +30,10 @@ from PyQt6.QtWidgets import (
 
 from src.library.history_store import HistoryStore
 from src.system.startup import StartupManager
+from src.system.settings_backup import (
+    SettingsBackupError,
+    SettingsBackupManager,
+)
 from src.ui.theme import (
     DEFAULT_THEME,
     THEME_PRESETS,
@@ -149,6 +153,18 @@ class SettingsPage(QWidget):
 
         self.history_store = (
             HistoryStore()
+        )
+
+        self.settings_backup_manager = (
+            SettingsBackupManager(
+                settings=self.store,
+                source_store=(
+                    self.source_preferences_store
+                ),
+                afk_store=(
+                    self.afk_preferences_store
+                ),
+            )
         )
 
         self.diagnostics_provider = None
@@ -996,6 +1012,119 @@ class SettingsPage(QWidget):
             storage_danger_row
         )
 
+        settings_backup = self.create_card(
+            "Settings Backup & Restore",
+            (
+                "Export a portable copy of your app "
+                "settings or restore one later."
+            ),
+        )
+
+        settings_backup_layout = (
+            settings_backup.layout()
+        )
+
+        backup_privacy_help = QLabel(
+            (
+                "Listening history, artwork cache, "
+                "OAuth tokens, API credentials, "
+                "diagnostics, local file paths, and "
+                "custom sidebar images are never "
+                "included."
+            )
+        )
+        backup_privacy_help.setObjectName(
+            "helpText"
+        )
+        backup_privacy_help.setWordWrap(
+            True
+        )
+
+        self.include_artwork_hosting_box = (
+            self.create_checkbox(
+                (
+                    "Include artwork-hosting "
+                    "account details"
+                ),
+                False,
+            )
+        )
+        self.include_artwork_hosting_box.setToolTip(
+            (
+                "Adds your Cloudinary cloud name "
+                "and unsigned upload preset. "
+                "API keys and secrets are never "
+                "supported."
+            )
+        )
+
+        artwork_backup_help = QLabel(
+            (
+                "Leave this off for a privacy-safe "
+                "backup. Turn it on only when you "
+                "want to move your personal hosting "
+                "configuration to another device."
+            )
+        )
+        artwork_backup_help.setObjectName(
+            "helpText"
+        )
+        artwork_backup_help.setWordWrap(
+            True
+        )
+
+        backup_button_row = QHBoxLayout()
+        backup_button_row.setSpacing(
+            8
+        )
+
+        export_settings_button = QPushButton(
+            "Export settings"
+        )
+        export_settings_button.setObjectName(
+            "secondaryButton"
+        )
+        export_settings_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        export_settings_button.clicked.connect(
+            self.export_settings_backup
+        )
+
+        restore_settings_button = QPushButton(
+            "Restore settings"
+        )
+        restore_settings_button.setObjectName(
+            "secondaryButton"
+        )
+        restore_settings_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        restore_settings_button.clicked.connect(
+            self.restore_settings_backup
+        )
+
+        backup_button_row.addWidget(
+            export_settings_button
+        )
+        backup_button_row.addWidget(
+            restore_settings_button
+        )
+        backup_button_row.addStretch()
+
+        settings_backup_layout.addWidget(
+            backup_privacy_help
+        )
+        settings_backup_layout.addWidget(
+            self.include_artwork_hosting_box
+        )
+        settings_backup_layout.addWidget(
+            artwork_backup_help
+        )
+        settings_backup_layout.addLayout(
+            backup_button_row
+        )
+
         diagnostics = self.create_card(
             "Diagnostics & Support",
             (
@@ -1162,6 +1291,9 @@ class SettingsPage(QWidget):
         root.addWidget(appearance)
         root.addWidget(startup)
         root.addWidget(storage)
+        root.addWidget(
+            settings_backup
+        )
         root.addWidget(diagnostics)
         root.addWidget(self.status)
         root.addLayout(button_row)
@@ -1175,6 +1307,9 @@ class SettingsPage(QWidget):
             ),
             "auto_afk": auto_afk,
             "data_storage": storage,
+            "settings_backup": (
+                settings_backup
+            ),
             "diagnostics": diagnostics,
         }
 
@@ -1577,6 +1712,413 @@ class SettingsPage(QWidget):
                 ),
             )
 
+    @staticmethod
+    def _backup_dialog_directory() -> Path:
+        documents = (
+            Path.home()
+            / "Documents"
+        )
+
+        if documents.exists():
+            return documents
+
+        return Path.home()
+
+    def export_settings_backup(self):
+        include_artwork_hosting = (
+            self.include_artwork_hosting_box
+            .isChecked()
+        )
+
+        if include_artwork_hosting:
+            response = QMessageBox.question(
+                self,
+                "Include personal hosting details?",
+                (
+                    "This backup will include your "
+                    "Cloudinary cloud name and "
+                    "unsigned upload preset."
+                    "\n\n"
+                    "The file will contain personal "
+                    "account identifiers. API keys, "
+                    "secrets, tokens, history, and "
+                    "cached artwork are still "
+                    "excluded."
+                    "\n\n"
+                    "Continue?"
+                ),
+                (
+                    QMessageBox.StandardButton.Yes
+                    | QMessageBox.StandardButton.No
+                ),
+                QMessageBox.StandardButton.No,
+            )
+
+            if (
+                response
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+
+        suggested_path = (
+            self._backup_dialog_directory()
+            / (
+                self.settings_backup_manager
+                .suggested_filename()
+            )
+        )
+
+        selected_path, _ = (
+            QFileDialog.getSaveFileName(
+                self,
+                "Export Settings Backup",
+                str(
+                    suggested_path
+                ),
+                "JSON files (*.json)",
+            )
+        )
+
+        if not selected_path:
+            return
+
+        try:
+            destination = (
+                self.settings_backup_manager
+                .export_backup(
+                    selected_path,
+                    include_artwork_hosting=(
+                        include_artwork_hosting
+                    ),
+                )
+            )
+
+        except SettingsBackupError as error:
+            QMessageBox.warning(
+                self,
+                "Settings backup failed",
+                str(error),
+            )
+            return
+
+        except OSError as error:
+            QMessageBox.warning(
+                self,
+                "Settings backup failed",
+                (
+                    "The backup could not be saved."
+                    "\n\n"
+                    f"{error}"
+                ),
+            )
+            return
+
+        privacy_note = (
+            " Personal artwork-hosting details "
+            "were included."
+            if include_artwork_hosting
+            else (
+                " Personal artwork-hosting details "
+                "were excluded."
+            )
+        )
+
+        self.status.setText(
+            (
+                "Settings backup saved as "
+                f"{destination.name}."
+                + privacy_note
+            )
+        )
+
+    def restore_settings_backup(self):
+        selected_path, _ = (
+            QFileDialog.getOpenFileName(
+                self,
+                "Restore Settings Backup",
+                str(
+                    self._backup_dialog_directory()
+                ),
+                "JSON files (*.json);;All files (*)",
+            )
+        )
+
+        if not selected_path:
+            return
+
+        try:
+            preview = (
+                self.settings_backup_manager
+                .preview_backup(
+                    selected_path
+                )
+            )
+
+        except SettingsBackupError as error:
+            QMessageBox.warning(
+                self,
+                "Invalid settings backup",
+                str(error),
+            )
+            return
+
+        personal_note = (
+            (
+                "\n\nThis backup contains personal "
+                "artwork-hosting account details, "
+                "which will replace the current "
+                "hosting configuration."
+            )
+            if preview.includes_artwork_hosting
+            else (
+                "\n\nArtwork-hosting account "
+                "details are not included, so your "
+                "current hosting configuration will "
+                "be kept."
+            )
+        )
+
+        response = QMessageBox.question(
+            self,
+            "Restore settings?",
+            (
+                "This will replace your theme, "
+                "branding text, media sources, "
+                "Auto AFK settings, dashboard "
+                "layout, window preferences, and "
+                "Windows startup preference."
+                "\n\n"
+                "Listening history and artwork "
+                "cache will not be changed."
+                + personal_note
+                + (
+                    "\n\nA private local safety "
+                    "backup will be created first."
+                    "\n\nContinue?"
+                )
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if (
+            response
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
+        try:
+            result = (
+                self.settings_backup_manager
+                .restore_backup(
+                    selected_path
+                )
+            )
+
+        except SettingsBackupError as error:
+            QMessageBox.warning(
+                self,
+                "Settings restore failed",
+                str(error),
+            )
+            return
+
+        except OSError as error:
+            QMessageBox.warning(
+                self,
+                "Settings restore failed",
+                (
+                    "The settings could not be "
+                    "restored."
+                    "\n\n"
+                    f"{error}"
+                ),
+            )
+            return
+
+        self.refresh_after_settings_restore()
+
+        hosting_note = (
+            (
+                "\n\nArtwork-hosting account "
+                "details were restored."
+            )
+            if result.restored_artwork_hosting
+            else (
+                "\n\nYour existing artwork-hosting "
+                "account details were preserved."
+            )
+        )
+
+        QMessageBox.information(
+            self,
+            "Settings restored",
+            (
+                "Your settings were restored "
+                "successfully."
+                + hosting_note
+                + (
+                    "\n\nRestart 03:37am Presence "
+                    "to apply the restored dashboard "
+                    "layout and every background "
+                    "service setting."
+                    "\n\nA private safety backup "
+                    "was saved in the app data "
+                    "folder."
+                )
+            ),
+        )
+
+        self.status.setText(
+            (
+                "Settings restored. Restart the app "
+                "to finish applying them."
+            )
+        )
+
+    def refresh_after_settings_restore(self):
+        self.theme_manager.theme_changed.emit(
+            self.theme_manager.theme()
+        )
+
+        self.theme_manager.branding_changed.emit(
+            self.theme_manager.branding()
+        )
+
+        source_preferences = (
+            self.source_preferences_store.load()
+        )
+
+        self.spotify_source_box.blockSignals(
+            True
+        )
+        self.browser_source_box.blockSignals(
+            True
+        )
+
+        self.spotify_source_box.setChecked(
+            source_preferences.spotify_enabled
+        )
+        self.browser_source_box.setChecked(
+            source_preferences.browser_enabled
+        )
+
+        self.spotify_source_box.blockSignals(
+            False
+        )
+        self.browser_source_box.blockSignals(
+            False
+        )
+
+        afk_preferences = (
+            self.afk_preferences_store.load()
+        )
+
+        self.auto_afk_box.blockSignals(
+            True
+        )
+        self.afk_timeout_combo.blockSignals(
+            True
+        )
+
+        self.auto_afk_box.setChecked(
+            afk_preferences.enabled
+        )
+
+        timeout_index = (
+            self.afk_timeout_combo.findData(
+                afk_preferences.timeout_minutes
+            )
+        )
+
+        if timeout_index < 0:
+            minutes = (
+                afk_preferences.timeout_minutes
+            )
+
+            timeout_label = (
+                "1 minute"
+                if minutes == 1
+                else f"{minutes} minutes"
+            )
+
+            self.afk_timeout_combo.addItem(
+                timeout_label,
+                minutes,
+            )
+
+            timeout_index = (
+                self.afk_timeout_combo.findData(
+                    minutes
+                )
+            )
+
+        self.afk_timeout_combo.setCurrentIndex(
+            timeout_index
+        )
+        self.afk_timeout_combo.setEnabled(
+            afk_preferences.enabled
+        )
+
+        self.auto_afk_box.blockSignals(
+            False
+        )
+        self.afk_timeout_combo.blockSignals(
+            False
+        )
+
+        self.portrait_box.blockSignals(
+            True
+        )
+        self.top_box.blockSignals(
+            True
+        )
+        self.hidden_box.blockSignals(
+            True
+        )
+        self.windows_box.blockSignals(
+            True
+        )
+
+        self.portrait_box.setChecked(
+            self.show_yuno_portrait
+        )
+        self.top_box.setChecked(
+            self.always_on_top
+        )
+        self.hidden_box.setChecked(
+            self.start_minimized
+        )
+        self.windows_box.setChecked(
+            StartupManager.is_enabled()
+        )
+
+        self.portrait_box.blockSignals(
+            False
+        )
+        self.top_box.blockSignals(
+            False
+        )
+        self.hidden_box.blockSignals(
+            False
+        )
+        self.windows_box.blockSignals(
+            False
+        )
+
+        self.show_portrait_changed.emit(
+            self.show_yuno_portrait
+        )
+        self.always_on_top_changed.emit(
+            self.always_on_top
+        )
+
+        self.refresh_storage_summary()
+        self.refresh_diagnostics()
+
     def clear_artwork_cache(self):
         response = QMessageBox.question(
             self,
@@ -1695,6 +2237,10 @@ class SettingsPage(QWidget):
             "storage": "data_storage",
             "data storage": "data_storage",
             "data & storage": "data_storage",
+            "backup": "settings_backup",
+            "restore": "settings_backup",
+            "settings backup": "settings_backup",
+            "backup & restore": "settings_backup",
             "support": "diagnostics",
             "diagnostic": "diagnostics",
             "diagnostics & support": "diagnostics",

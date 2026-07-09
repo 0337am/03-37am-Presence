@@ -1,0 +1,1238 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from PyQt6.QtCore import QSettings
+
+from src.artwork.cloudinary_preferences import (
+    CloudinaryPreferences,
+    CloudinaryPreferencesStore,
+)
+from src.music.source_preferences import (
+    SourcePreferences,
+    SourcePreferencesStore,
+)
+from src.system.afk_preferences import (
+    AfkPreferences,
+    AfkPreferencesStore,
+)
+from src.system.startup import StartupManager
+from src.ui.dashboard_layout import (
+    DashboardLayout,
+    DashboardLayoutStore,
+)
+from src.ui.theme import (
+    DEFAULT_BRANDING,
+    DEFAULT_THEME,
+    THEME_PRESETS,
+)
+
+
+BACKUP_KIND = "0337am-presence-settings"
+BACKUP_SCHEMA_VERSION = 1
+MAX_BACKUP_BYTES = 1024 * 1024
+
+_COLOUR_PATTERN = re.compile(
+    r"^#[0-9a-fA-F]{6}$"
+)
+
+
+class SettingsBackupError(Exception):
+    """Base error for settings backup operations."""
+
+
+class SettingsBackupValidationError(
+    SettingsBackupError
+):
+    """Raised when a backup file is unsafe or invalid."""
+
+
+@dataclass(frozen=True)
+class SettingsBackupPreview:
+    created_at: str
+    includes_artwork_hosting: bool
+
+
+@dataclass(frozen=True)
+class SettingsRestoreResult:
+    safety_backup_path: Path
+    restored_artwork_hosting: bool
+
+
+class SettingsBackupManager:
+    """
+    Exports and restores the app's portable settings.
+
+    Listening history, artwork caches, OAuth tokens,
+    diagnostics, local file paths, and custom sidebar
+    images are deliberately excluded.
+    """
+
+    def __init__(
+        self,
+        settings: QSettings | None = None,
+        source_store: SourcePreferencesStore | None = None,
+        afk_store: AfkPreferencesStore | None = None,
+        cloudinary_store: CloudinaryPreferencesStore | None = None,
+        dashboard_store: DashboardLayoutStore | None = None,
+    ):
+        self.settings = (
+            settings
+            or QSettings(
+                "0337am",
+                "Presence",
+            )
+        )
+
+        self.source_store = (
+            source_store
+            or SourcePreferencesStore()
+        )
+
+        self.afk_store = (
+            afk_store
+            or AfkPreferencesStore()
+        )
+
+        self.cloudinary_store = (
+            cloudinary_store
+            or CloudinaryPreferencesStore()
+        )
+
+        self.dashboard_store = (
+            dashboard_store
+            or DashboardLayoutStore()
+        )
+
+    @staticmethod
+    def suggested_filename() -> str:
+        timestamp = datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )
+
+        return (
+            "03-37am-presence-settings-"
+            f"{timestamp}.json"
+        )
+
+    def capture(
+        self,
+        include_artwork_hosting: bool = False,
+    ) -> dict:
+        source = self.source_store.load()
+        afk = self.afk_store.load()
+        cloudinary = self.cloudinary_store.load()
+        dashboard = self.dashboard_store.load()
+
+        artwork_hosting = {
+            "included": bool(
+                include_artwork_hosting
+            ),
+        }
+
+        if include_artwork_hosting:
+            artwork_hosting.update(
+                {
+                    "enabled": bool(
+                        cloudinary.enabled
+                    ),
+                    "cloud_name": (
+                        cloudinary.cloud_name
+                    ),
+                    "upload_preset": (
+                        cloudinary.upload_preset
+                    ),
+                }
+            )
+
+        contains_identifiers = bool(
+            include_artwork_hosting
+            and (
+                cloudinary.cloud_name
+                or cloudinary.upload_preset
+            )
+        )
+
+        payload = {
+            "kind": BACKUP_KIND,
+            "schema_version": (
+                BACKUP_SCHEMA_VERSION
+            ),
+            "created_at": (
+                datetime.now(
+                    timezone.utc
+                )
+                .isoformat(
+                    timespec="seconds"
+                )
+            ),
+            "privacy": {
+                "contains_artwork_hosting_identifiers": (
+                    contains_identifiers
+                ),
+                "excluded": [
+                    "listening_history",
+                    "artwork_cache",
+                    "oauth_tokens",
+                    "api_credentials",
+                    "diagnostics",
+                    "local_file_paths",
+                    "custom_sidebar_image",
+                ],
+            },
+            "settings": {
+                "theme": self._capture_theme(),
+                "branding": (
+                    self._capture_branding()
+                ),
+                "window": {
+                    "show_yuno_portrait": (
+                        self.settings.value(
+                            "show_yuno_portrait",
+                            True,
+                            type=bool,
+                        )
+                    ),
+                    "always_on_top": (
+                        self.settings.value(
+                            "always_on_top",
+                            False,
+                            type=bool,
+                        )
+                    ),
+                    "start_minimized": (
+                        self.settings.value(
+                            "start_minimized",
+                            True,
+                            type=bool,
+                        )
+                    ),
+                },
+                "windows_startup": {
+                    "enabled": bool(
+                        StartupManager.is_enabled()
+                    ),
+                },
+                "media_sources": {
+                    "spotify_enabled": (
+                        source.spotify_enabled
+                    ),
+                    "browser_enabled": (
+                        source.browser_enabled
+                    ),
+                },
+                "auto_afk": {
+                    "enabled": afk.enabled,
+                    "timeout_minutes": (
+                        afk.timeout_minutes
+                    ),
+                },
+                "dashboard_layout": (
+                    dashboard.to_dict()
+                ),
+                "artwork_hosting": (
+                    artwork_hosting
+                ),
+            },
+        }
+
+        return self.validate_payload(
+            payload
+        )
+
+    def export_backup(
+        self,
+        destination: Path | str,
+        include_artwork_hosting: bool = False,
+    ) -> Path:
+        payload = self.capture(
+            include_artwork_hosting=(
+                include_artwork_hosting
+            )
+        )
+
+        destination_path = Path(
+            destination
+        )
+
+        if (
+            destination_path.suffix.lower()
+            != ".json"
+        ):
+            destination_path = (
+                destination_path.with_suffix(
+                    ".json"
+                )
+            )
+
+        self._write_payload(
+            destination_path,
+            payload,
+        )
+
+        return destination_path
+
+    def preview_backup(
+        self,
+        source: Path | str,
+    ) -> SettingsBackupPreview:
+        payload = self.read_backup(
+            source
+        )
+
+        artwork_hosting = (
+            payload["settings"][
+                "artwork_hosting"
+            ]
+        )
+
+        return SettingsBackupPreview(
+            created_at=payload[
+                "created_at"
+            ],
+            includes_artwork_hosting=bool(
+                artwork_hosting[
+                    "included"
+                ]
+            ),
+        )
+
+    def restore_backup(
+        self,
+        source: Path | str,
+    ) -> SettingsRestoreResult:
+        payload = self.read_backup(
+            source
+        )
+
+        current_payload = self.capture(
+            include_artwork_hosting=True
+        )
+
+        safety_path = (
+            self._automatic_backup_directory()
+            / (
+                "before_restore_"
+                + datetime.now().strftime(
+                    "%Y%m%d_%H%M%S_%f"
+                )
+                + ".json"
+            )
+        )
+
+        self._write_payload(
+            safety_path,
+            current_payload,
+        )
+
+        try:
+            self._apply_payload(
+                payload
+            )
+
+        except Exception as error:
+            rollback_error = None
+
+            try:
+                self._apply_payload(
+                    current_payload
+                )
+
+            except Exception as caught:
+                rollback_error = caught
+
+            if rollback_error is not None:
+                raise SettingsBackupError(
+                    "The restore failed and the "
+                    "automatic rollback also failed. "
+                    "Your safety backup is stored at "
+                    f"{safety_path}."
+                ) from rollback_error
+
+            raise SettingsBackupError(
+                "The restore failed. Previous "
+                "settings were restored automatically."
+            ) from error
+
+        return SettingsRestoreResult(
+            safety_backup_path=safety_path,
+            restored_artwork_hosting=bool(
+                payload["settings"][
+                    "artwork_hosting"
+                ]["included"]
+            ),
+        )
+
+    def read_backup(
+        self,
+        source: Path | str,
+    ) -> dict:
+        source_path = Path(
+            source
+        )
+
+        try:
+            size = source_path.stat().st_size
+
+        except OSError as error:
+            raise SettingsBackupValidationError(
+                "The backup file could not be read."
+            ) from error
+
+        if size <= 0:
+            raise SettingsBackupValidationError(
+                "The backup file is empty."
+            )
+
+        if size > MAX_BACKUP_BYTES:
+            raise SettingsBackupValidationError(
+                "The backup file is too large."
+            )
+
+        try:
+            raw_text = source_path.read_text(
+                encoding="utf-8"
+            )
+
+            payload = json.loads(
+                raw_text
+            )
+
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The selected file is not a valid "
+                "03:37am Presence settings backup."
+            ) from error
+
+        return self.validate_payload(
+            payload
+        )
+
+    @classmethod
+    def validate_payload(
+        cls,
+        payload,
+    ) -> dict:
+        if not isinstance(
+            payload,
+            dict,
+        ):
+            raise SettingsBackupValidationError(
+                "The backup must contain a JSON object."
+            )
+
+        if payload.get("kind") != BACKUP_KIND:
+            raise SettingsBackupValidationError(
+                "This file is not a 03:37am Presence "
+                "settings backup."
+            )
+
+        schema_version = cls._require_integer(
+            payload.get(
+                "schema_version"
+            ),
+            "schema_version",
+            minimum=1,
+            maximum=BACKUP_SCHEMA_VERSION,
+        )
+
+        if (
+            schema_version
+            != BACKUP_SCHEMA_VERSION
+        ):
+            raise SettingsBackupValidationError(
+                "This settings backup version is "
+                "not supported."
+            )
+
+        created_at = cls._require_text(
+            payload.get(
+                "created_at"
+            ),
+            "created_at",
+            maximum_length=64,
+            allow_empty=False,
+        )
+
+        settings = cls._require_object(
+            payload.get(
+                "settings"
+            ),
+            "settings",
+        )
+
+        theme = cls._validate_theme(
+            settings.get(
+                "theme"
+            )
+        )
+
+        branding = cls._validate_branding(
+            settings.get(
+                "branding"
+            )
+        )
+
+        window = cls._validate_window(
+            settings.get(
+                "window"
+            )
+        )
+
+        windows_startup = (
+            cls._validate_windows_startup(
+                settings.get(
+                    "windows_startup"
+                )
+            )
+        )
+
+        media_sources = (
+            cls._validate_media_sources(
+                settings.get(
+                    "media_sources"
+                )
+            )
+        )
+
+        auto_afk = cls._validate_auto_afk(
+            settings.get(
+                "auto_afk"
+            )
+        )
+
+        dashboard_layout_payload = (
+            cls._require_object(
+                settings.get(
+                    "dashboard_layout"
+                ),
+                "dashboard_layout",
+            )
+        )
+
+        try:
+            dashboard_layout = (
+                DashboardLayout.from_dict(
+                    dashboard_layout_payload
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The dashboard layout in the "
+                "backup is invalid."
+            ) from error
+
+        artwork_hosting = (
+            cls._validate_artwork_hosting(
+                settings.get(
+                    "artwork_hosting"
+                )
+            )
+        )
+
+        return {
+            "kind": BACKUP_KIND,
+            "schema_version": (
+                BACKUP_SCHEMA_VERSION
+            ),
+            "created_at": created_at,
+            "privacy": {
+                "contains_artwork_hosting_identifiers": (
+                    bool(
+                        artwork_hosting[
+                            "included"
+                        ]
+                        and (
+                            artwork_hosting.get(
+                                "cloud_name"
+                            )
+                            or artwork_hosting.get(
+                                "upload_preset"
+                            )
+                        )
+                    )
+                ),
+                "excluded": [
+                    "listening_history",
+                    "artwork_cache",
+                    "oauth_tokens",
+                    "api_credentials",
+                    "diagnostics",
+                    "local_file_paths",
+                    "custom_sidebar_image",
+                ],
+            },
+            "settings": {
+                "theme": theme,
+                "branding": branding,
+                "window": window,
+                "windows_startup": (
+                    windows_startup
+                ),
+                "media_sources": (
+                    media_sources
+                ),
+                "auto_afk": auto_afk,
+                "dashboard_layout": (
+                    dashboard_layout.to_dict()
+                ),
+                "artwork_hosting": (
+                    artwork_hosting
+                ),
+            },
+        }
+
+    def _capture_theme(self) -> dict:
+        values = {}
+
+        for key, default in (
+            DEFAULT_THEME.items()
+        ):
+            if key == "compact":
+                values[key] = (
+                    self.settings.value(
+                        f"theme/{key}",
+                        default,
+                        type=bool,
+                    )
+                )
+            else:
+                values[key] = str(
+                    self.settings.value(
+                        f"theme/{key}",
+                        default,
+                    )
+                )
+
+        return values
+
+    def _capture_branding(self) -> dict:
+        values = {}
+
+        boolean_keys = {
+            "show_title",
+            "show_subtitle",
+            "show_footer",
+        }
+
+        for key, default in (
+            DEFAULT_BRANDING.items()
+        ):
+            if key == "image_path":
+                continue
+
+            if key in boolean_keys:
+                values[key] = (
+                    self.settings.value(
+                        f"branding/{key}",
+                        default,
+                        type=bool,
+                    )
+                )
+            else:
+                values[key] = str(
+                    self.settings.value(
+                        f"branding/{key}",
+                        default,
+                    )
+                    or ""
+                )
+
+        return values
+
+    def _apply_payload(
+        self,
+        payload: dict,
+    ):
+        normalized = self.validate_payload(
+            payload
+        )
+
+        settings = normalized[
+            "settings"
+        ]
+
+        for key, value in (
+            settings["theme"].items()
+        ):
+            self.settings.setValue(
+                f"theme/{key}",
+                value,
+            )
+
+        for key, value in (
+            settings["branding"].items()
+        ):
+            self.settings.setValue(
+                f"branding/{key}",
+                value,
+            )
+
+        for key, value in (
+            settings["window"].items()
+        ):
+            self.settings.setValue(
+                key,
+                value,
+            )
+
+        self.settings.sync()
+
+        if (
+            self.settings.status()
+            != QSettings.Status.NoError
+        ):
+            raise OSError(
+                "Qt settings could not be saved."
+            )
+
+        self.source_store.save(
+            SourcePreferences(
+                spotify_enabled=(
+                    settings[
+                        "media_sources"
+                    ]["spotify_enabled"]
+                ),
+                browser_enabled=(
+                    settings[
+                        "media_sources"
+                    ]["browser_enabled"]
+                ),
+            )
+        )
+
+        self.afk_store.save(
+            AfkPreferences(
+                enabled=(
+                    settings[
+                        "auto_afk"
+                    ]["enabled"]
+                ),
+                timeout_minutes=(
+                    settings[
+                        "auto_afk"
+                    ]["timeout_minutes"]
+                ),
+            )
+        )
+
+        self.dashboard_store.save(
+            DashboardLayout.from_dict(
+                settings[
+                    "dashboard_layout"
+                ]
+            )
+        )
+
+        artwork_hosting = (
+            settings[
+                "artwork_hosting"
+            ]
+        )
+
+        if artwork_hosting[
+            "included"
+        ]:
+            self.cloudinary_store.save(
+                CloudinaryPreferences(
+                    enabled=(
+                        artwork_hosting[
+                            "enabled"
+                        ]
+                    ),
+                    cloud_name=(
+                        artwork_hosting[
+                            "cloud_name"
+                        ]
+                    ),
+                    upload_preset=(
+                        artwork_hosting[
+                            "upload_preset"
+                        ]
+                    ),
+                )
+            )
+
+        startup_ok = (
+            StartupManager.set_enabled(
+                settings[
+                    "windows_startup"
+                ]["enabled"],
+                settings[
+                    "window"
+                ]["start_minimized"],
+            )
+        )
+
+        if not startup_ok:
+            raise OSError(
+                "Windows startup settings could "
+                "not be restored."
+            )
+
+    def _automatic_backup_directory(
+        self,
+    ) -> Path:
+        directory = (
+            self.dashboard_store
+            .path
+            .parent
+            / "settings_restore_backups"
+        )
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return directory
+
+    @classmethod
+    def _write_payload(
+        cls,
+        destination: Path,
+        payload: dict,
+    ):
+        normalized = cls.validate_payload(
+            payload
+        )
+
+        destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        temporary_path = (
+            destination.with_name(
+                destination.name
+                + ".tmp"
+            )
+        )
+
+        text = json.dumps(
+            normalized,
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+
+        encoded_size = len(
+            text.encode(
+                "utf-8"
+            )
+        )
+
+        if encoded_size > MAX_BACKUP_BYTES:
+            raise SettingsBackupError(
+                "The settings backup is too large."
+            )
+
+        try:
+            with temporary_path.open(
+                "w",
+                encoding="utf-8",
+                newline="\n",
+            ) as handle:
+                handle.write(
+                    text
+                )
+                handle.write(
+                    "\n"
+                )
+                handle.flush()
+                os.fsync(
+                    handle.fileno()
+                )
+
+            verification = json.loads(
+                temporary_path.read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            cls.validate_payload(
+                verification
+            )
+
+            os.replace(
+                temporary_path,
+                destination,
+            )
+
+        except Exception:
+            temporary_path.unlink(
+                missing_ok=True
+            )
+            raise
+
+    @classmethod
+    def _validate_theme(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "theme",
+        )
+
+        preset = cls._require_text(
+            data.get("preset"),
+            "theme.preset",
+            maximum_length=40,
+            allow_empty=False,
+        )
+
+        if (
+            preset not in THEME_PRESETS
+            and preset != "Custom"
+        ):
+            raise SettingsBackupValidationError(
+                "The theme preset is invalid."
+            )
+
+        normalized = {
+            "preset": preset,
+        }
+
+        for key in (
+            "background",
+            "sidebar",
+            "card",
+            "card_alt",
+            "accent",
+            "text",
+            "muted",
+            "border",
+        ):
+            colour = cls._require_text(
+                data.get(key),
+                f"theme.{key}",
+                maximum_length=7,
+                allow_empty=False,
+            )
+
+            if not _COLOUR_PATTERN.fullmatch(
+                colour
+            ):
+                raise SettingsBackupValidationError(
+                    f"The theme colour '{key}' "
+                    "is invalid."
+                )
+
+            normalized[key] = (
+                colour.lower()
+            )
+
+        normalized["compact"] = (
+            cls._require_boolean(
+                data.get(
+                    "compact"
+                ),
+                "theme.compact",
+            )
+        )
+
+        return normalized
+
+    @classmethod
+    def _validate_branding(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "branding",
+        )
+
+        normalized = {}
+
+        for key in (
+            "title",
+            "subtitle",
+            "footer",
+        ):
+            normalized[key] = (
+                cls._require_text(
+                    data.get(key),
+                    f"branding.{key}",
+                    maximum_length=80,
+                    allow_empty=True,
+                )
+            )
+
+        for key in (
+            "show_title",
+            "show_subtitle",
+            "show_footer",
+        ):
+            normalized[key] = (
+                cls._require_boolean(
+                    data.get(key),
+                    f"branding.{key}",
+                )
+            )
+
+        return normalized
+
+    @classmethod
+    def _validate_window(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "window",
+        )
+
+        return {
+            key: cls._require_boolean(
+                data.get(key),
+                f"window.{key}",
+            )
+            for key in (
+                "show_yuno_portrait",
+                "always_on_top",
+                "start_minimized",
+            )
+        }
+
+    @classmethod
+    def _validate_windows_startup(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "windows_startup",
+        )
+
+        return {
+            "enabled": cls._require_boolean(
+                data.get("enabled"),
+                "windows_startup.enabled",
+            )
+        }
+
+    @classmethod
+    def _validate_media_sources(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "media_sources",
+        )
+
+        return {
+            "spotify_enabled": (
+                cls._require_boolean(
+                    data.get(
+                        "spotify_enabled"
+                    ),
+                    "media_sources.spotify_enabled",
+                )
+            ),
+            "browser_enabled": (
+                cls._require_boolean(
+                    data.get(
+                        "browser_enabled"
+                    ),
+                    "media_sources.browser_enabled",
+                )
+            ),
+        }
+
+    @classmethod
+    def _validate_auto_afk(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "auto_afk",
+        )
+
+        return {
+            "enabled": cls._require_boolean(
+                data.get("enabled"),
+                "auto_afk.enabled",
+            ),
+            "timeout_minutes": (
+                cls._require_integer(
+                    data.get(
+                        "timeout_minutes"
+                    ),
+                    "auto_afk.timeout_minutes",
+                    minimum=1,
+                    maximum=240,
+                )
+            ),
+        }
+
+    @classmethod
+    def _validate_artwork_hosting(
+        cls,
+        payload,
+    ) -> dict:
+        data = cls._require_object(
+            payload,
+            "artwork_hosting",
+        )
+
+        included = cls._require_boolean(
+            data.get("included"),
+            "artwork_hosting.included",
+        )
+
+        if not included:
+            return {
+                "included": False,
+            }
+
+        enabled = cls._require_boolean(
+            data.get("enabled"),
+            "artwork_hosting.enabled",
+        )
+
+        cloud_name = cls._require_text(
+            data.get("cloud_name"),
+            "artwork_hosting.cloud_name",
+            maximum_length=128,
+            allow_empty=True,
+        )
+
+        upload_preset = cls._require_text(
+            data.get(
+                "upload_preset"
+            ),
+            "artwork_hosting.upload_preset",
+            maximum_length=255,
+            allow_empty=True,
+        )
+
+        if (
+            enabled
+            and (
+                not cloud_name
+                or not upload_preset
+            )
+        ):
+            raise SettingsBackupValidationError(
+                "Artwork hosting cannot be enabled "
+                "without both account fields."
+            )
+
+        return {
+            "included": True,
+            "enabled": enabled,
+            "cloud_name": cloud_name,
+            "upload_preset": upload_preset,
+        }
+
+    @staticmethod
+    def _require_object(
+        value,
+        name: str,
+    ) -> dict:
+        if not isinstance(
+            value,
+            dict,
+        ):
+            raise SettingsBackupValidationError(
+                f"'{name}' must be a JSON object."
+            )
+
+        return value
+
+    @staticmethod
+    def _require_boolean(
+        value,
+        name: str,
+    ) -> bool:
+        if not isinstance(
+            value,
+            bool,
+        ):
+            raise SettingsBackupValidationError(
+                f"'{name}' must be true or false."
+            )
+
+        return value
+
+    @staticmethod
+    def _require_integer(
+        value,
+        name: str,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        if (
+            isinstance(
+                value,
+                bool,
+            )
+            or not isinstance(
+                value,
+                int,
+            )
+            or value < minimum
+            or value > maximum
+        ):
+            raise SettingsBackupValidationError(
+                f"'{name}' must be an integer "
+                f"between {minimum} and {maximum}."
+            )
+
+        return value
+
+    @staticmethod
+    def _require_text(
+        value,
+        name: str,
+        maximum_length: int,
+        allow_empty: bool,
+    ) -> str:
+        if not isinstance(
+            value,
+            str,
+        ):
+            raise SettingsBackupValidationError(
+                f"'{name}' must be text."
+            )
+
+        if (
+            not allow_empty
+            and not value
+        ):
+            raise SettingsBackupValidationError(
+                f"'{name}' cannot be empty."
+            )
+
+        if len(value) > maximum_length:
+            raise SettingsBackupValidationError(
+                f"'{name}' is too long."
+            )
+
+        if any(
+            ord(character) < 32
+            or ord(character) == 127
+            for character in value
+        ):
+            raise SettingsBackupValidationError(
+                f"'{name}' contains invalid characters."
+            )
+
+        return value
