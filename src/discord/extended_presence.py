@@ -102,13 +102,55 @@ class ExtendedDiscordPresence(DiscordPresence):
             update.image_bytes
         )
 
+        artwork_url = None
+
+        try:
+            if (
+                local_image_available
+                and self.artwork_uploader.is_configured
+            ):
+                artwork_url = (
+                    self.artwork_uploader
+                    .get_or_upload(
+                        update.image_bytes
+                    )
+                )
+
+        except Exception as error:
+            print(
+                "Custom artwork upload failed; "
+                "continuing without Discord artwork: "
+                f"{error}"
+            )
+
+        if artwork_url:
+            options["large_image"] = (
+                artwork_url
+            )
+
+            options["large_text"] = (
+                self._discord_text(
+                    update.image_name,
+                    fallback=title,
+                )
+            )
+
         self.rpc.update(**options)
 
-        image_status = (
-            "custom image kept on device"
-            if local_image_available
-            else "without custom image"
-        )
+        if artwork_url:
+            image_status = (
+                "personal Cloudinary image"
+            )
+
+        elif local_image_available:
+            image_status = (
+                "custom image kept on device"
+            )
+
+        else:
+            image_status = (
+                "without custom image"
+            )
 
         print(
             f"Custom Discord presence updated: "
