@@ -572,6 +572,14 @@ PRESET_LAYOUTS = {
             ),
             (
                 "quick_access",
+                3,
+                0,
+                4,
+                1,
+                False,
+            ),
+            (
+                "discord_status",
                 2,
                 0,
                 4,
@@ -579,16 +587,8 @@ PRESET_LAYOUTS = {
                 True,
             ),
             (
-                "discord_status",
-                3,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
                 "music_status",
-                3,
+                2,
                 4,
                 4,
                 1,
@@ -596,7 +596,7 @@ PRESET_LAYOUTS = {
             ),
             (
                 "auto_afk",
-                3,
+                2,
                 8,
                 4,
                 1,
@@ -710,6 +710,14 @@ PRESET_LAYOUTS = {
             ),
             (
                 "quick_access",
+                3,
+                0,
+                4,
+                1,
+                False,
+            ),
+            (
+                "discord_status",
                 2,
                 0,
                 4,
@@ -717,16 +725,8 @@ PRESET_LAYOUTS = {
                 True,
             ),
             (
-                "discord_status",
-                3,
-                0,
-                4,
-                1,
-                True,
-            ),
-            (
                 "music_status",
-                3,
+                2,
                 4,
                 4,
                 1,
@@ -734,7 +734,7 @@ PRESET_LAYOUTS = {
             ),
             (
                 "auto_afk",
-                3,
+                2,
                 8,
                 4,
                 1,

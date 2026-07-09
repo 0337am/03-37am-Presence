@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime
 import hashlib
 from pathlib import Path
@@ -9,19 +10,23 @@ from PyQt6.QtCore import (
     QUrl,
     QThread,
     QTimer,
+    QSignalBlocker,
     pyqtSignal,
     pyqtSlot,
 )
 from PyQt6.QtGui import (
+    QAction,
     QDesktopServices,
     QPixmap,
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QProgressBar,
     QPushButton,
     QSizePolicy,
@@ -46,10 +51,14 @@ from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
 from src.ui.dashboard_layout import (
+    CARD_ORDER,
+    CARD_SPECS,
     GRID_COLUMNS,
     MAX_GRID_ROWS,
     DashboardLayout,
     DashboardLayoutStore,
+    available_presets,
+    preset_layout,
     validate_layout,
 )
 from src.ui.theme import ThemeManager
@@ -346,6 +355,12 @@ class DashboardPage(QWidget):
 
         self.root_layout.addLayout(header)
 
+        self.build_dashboard_layout_toolbar()
+
+        self.root_layout.addWidget(
+            self.layout_toolbar
+        )
+
         self.dashboard_grid = QGridLayout()
         self.dashboard_grid.setContentsMargins(
             0,
@@ -505,6 +520,376 @@ class DashboardPage(QWidget):
             footer
         )
 
+    def build_dashboard_layout_toolbar(self):
+        self.layout_toolbar = QFrame()
+        self.layout_toolbar.setObjectName(
+            "dashboardLayoutToolbar"
+        )
+
+        toolbar_layout = QHBoxLayout(
+            self.layout_toolbar
+        )
+        toolbar_layout.setContentsMargins(
+            10,
+            6,
+            10,
+            6,
+        )
+        toolbar_layout.setSpacing(8)
+
+        toolbar_title = QLabel(
+            "DASHBOARD LAYOUT"
+        )
+        toolbar_title.setObjectName(
+            "layoutToolbarTitle"
+        )
+
+        self.layout_status_label = QLabel(
+            "Locked"
+        )
+        self.layout_status_label.setObjectName(
+            "layoutToolbarStatus"
+        )
+
+        self.layout_preset_combo = QComboBox()
+        self.layout_preset_combo.setObjectName(
+            "layoutPresetCombo"
+        )
+        self.layout_preset_combo.setMinimumWidth(
+            145
+        )
+        self.layout_preset_combo.setPlaceholderText(
+            "Custom"
+        )
+        self.layout_preset_combo.addItems(
+            available_presets()
+        )
+        self.layout_preset_combo.setToolTip(
+            "Choose a dashboard layout preset"
+        )
+        self.layout_preset_combo.currentTextChanged.connect(
+            self.apply_dashboard_preset
+        )
+
+        self.layout_visibility_button = QPushButton(
+            "Cards  \u25be"
+        )
+        self.layout_visibility_button.setObjectName(
+            "layoutMenuButton"
+        )
+        self.layout_visibility_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_visibility_button.setToolTip(
+            "Choose which dashboard cards are visible"
+        )
+
+        self.layout_visibility_menu = QMenu(
+            self.layout_visibility_button
+        )
+
+        self.layout_visibility_actions = {}
+
+        for card_id in CARD_ORDER:
+            action = QAction(
+                CARD_SPECS[
+                    card_id
+                ].title,
+                self.layout_visibility_menu,
+            )
+            action.setCheckable(
+                True
+            )
+            action.toggled.connect(
+                lambda checked,
+                current_card_id=card_id:
+                self.set_dashboard_card_visibility(
+                    current_card_id,
+                    checked,
+                )
+            )
+
+            self.layout_visibility_menu.addAction(
+                action
+            )
+
+            self.layout_visibility_actions[
+                card_id
+            ] = action
+
+        self.layout_visibility_button.setMenu(
+            self.layout_visibility_menu
+        )
+
+        self.layout_reset_button = QPushButton(
+            "Reset"
+        )
+        self.layout_reset_button.setObjectName(
+            "layoutControlButton"
+        )
+        self.layout_reset_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_reset_button.setToolTip(
+            "Restore the default dashboard layout"
+        )
+        self.layout_reset_button.clicked.connect(
+            self.reset_dashboard_layout
+        )
+
+        self.layout_lock_button = QPushButton(
+            "Unlock layout"
+        )
+        self.layout_lock_button.setObjectName(
+            "layoutLockButton"
+        )
+        self.layout_lock_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_lock_button.clicked.connect(
+            self.toggle_dashboard_layout_lock
+        )
+
+        toolbar_layout.addWidget(
+            toolbar_title
+        )
+        toolbar_layout.addWidget(
+            self.layout_status_label
+        )
+        toolbar_layout.addStretch()
+        toolbar_layout.addWidget(
+            self.layout_preset_combo
+        )
+        toolbar_layout.addWidget(
+            self.layout_visibility_button
+        )
+        toolbar_layout.addWidget(
+            self.layout_reset_button
+        )
+        toolbar_layout.addWidget(
+            self.layout_lock_button
+        )
+
+    def apply_dashboard_preset(
+        self,
+        preset_name: str,
+    ):
+        name = str(
+            preset_name
+            or ""
+        ).strip()
+
+        if (
+            not name
+            or self.dashboard_layout_state.locked
+        ):
+            self.sync_dashboard_layout_controls()
+            return
+
+        try:
+            layout = preset_layout(
+                name
+            )
+        except KeyError:
+            self.sync_dashboard_layout_controls()
+            return
+
+        layout = replace(
+            layout,
+            locked=(
+                self.dashboard_layout_state.locked
+            ),
+        )
+
+        self.apply_dashboard_layout(
+            layout,
+            persist=True,
+        )
+
+    def toggle_dashboard_layout_lock(self):
+        updated = replace(
+            self.dashboard_layout_state,
+            locked=(
+                not self.dashboard_layout_state.locked
+            ),
+        )
+
+        self.apply_dashboard_layout(
+            updated,
+            persist=True,
+        )
+
+    def reset_dashboard_layout(self):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        layout = replace(
+            preset_layout(
+                "Default"
+            ),
+            locked=(
+                self.dashboard_layout_state.locked
+            ),
+        )
+
+        self.apply_dashboard_layout(
+            layout,
+            persist=True,
+        )
+
+    def set_dashboard_card_visibility(
+        self,
+        card_id: str,
+        visible: bool,
+    ):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        try:
+            current_card = (
+                self.dashboard_layout_state.card(
+                    card_id
+                )
+            )
+        except KeyError:
+            self.sync_dashboard_layout_controls()
+            return
+
+        visible = bool(
+            visible
+        )
+
+        if current_card.visible == visible:
+            return
+
+        visible_count = sum(
+            1
+            for card in (
+                self.dashboard_layout_state.cards
+            )
+            if card.visible
+        )
+
+        if (
+            not visible
+            and visible_count <= 1
+        ):
+            print(
+                "Dashboard visibility change rejected: "
+                "at least one card must remain visible."
+            )
+            self.sync_dashboard_layout_controls()
+            return
+
+        updated_cards = tuple(
+            replace(
+                card,
+                visible=visible,
+            )
+            if card.card_id == card_id
+            else card
+            for card in (
+                self.dashboard_layout_state.cards
+            )
+        )
+
+        updated = replace(
+            self.dashboard_layout_state,
+            cards=updated_cards,
+            preset="Custom",
+        )
+
+        try:
+            self.apply_dashboard_layout(
+                updated,
+                persist=True,
+            )
+        except ValueError as error:
+            print(
+                "Dashboard visibility change rejected: "
+                f"{error}"
+            )
+            self.sync_dashboard_layout_controls()
+
+    def sync_dashboard_layout_controls(self):
+        if not hasattr(
+            self,
+            "layout_preset_combo",
+        ):
+            return
+
+        preset_names = available_presets()
+
+        preset_blocker = QSignalBlocker(
+            self.layout_preset_combo
+        )
+
+        if (
+            self.dashboard_layout_state.preset
+            in preset_names
+        ):
+            self.layout_preset_combo.setCurrentText(
+                self.dashboard_layout_state.preset
+            )
+        else:
+            self.layout_preset_combo.setCurrentIndex(
+                -1
+            )
+
+        del preset_blocker
+
+        for (
+            card_id,
+            action,
+        ) in self.layout_visibility_actions.items():
+            action_blocker = QSignalBlocker(
+                action
+            )
+
+            action.setChecked(
+                self.dashboard_layout_state.card(
+                    card_id
+                ).visible
+            )
+
+            del action_blocker
+
+        locked = (
+            self.dashboard_layout_state.locked
+        )
+
+        self.layout_status_label.setText(
+            "Locked"
+            if locked
+            else "Editing"
+        )
+
+        self.layout_preset_combo.setEnabled(
+            not locked
+        )
+        self.layout_visibility_button.setEnabled(
+            not locked
+        )
+        self.layout_reset_button.setEnabled(
+            not locked
+        )
+
+        self.layout_lock_button.setText(
+            "Unlock layout"
+            if locked
+            else "Lock layout"
+        )
+
+        self.layout_lock_button.setToolTip(
+            (
+                "Enable dashboard layout editing"
+                if locked
+                else "Prevent accidental layout changes"
+            )
+        )
+
     def apply_dashboard_layout(
         self,
         layout: DashboardLayout,
@@ -605,6 +990,8 @@ class DashboardPage(QWidget):
         self.dashboard_layout_state = (
             validated
         )
+
+        self.sync_dashboard_layout_controls()
 
         self.dashboard_grid.invalidate()
         self.updateGeometry()
@@ -1700,6 +2087,106 @@ class DashboardPage(QWidget):
             QLabel#pageSubtitle {{
                 color: {theme["muted"]};
                 font-size: 11px;
+            }}
+
+            QFrame#dashboardLayoutToolbar {{
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 10px;
+            }}
+
+            QLabel#layoutToolbarTitle {{
+                color: {theme["accent"]};
+                font-size: 8px;
+                font-weight: 750;
+                letter-spacing: 1px;
+            }}
+
+            QLabel#layoutToolbarStatus {{
+                color: {theme["muted"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 6px;
+                padding: 3px 7px;
+                font-size: 8px;
+                font-weight: 700;
+            }}
+
+            QComboBox#layoutPresetCombo,
+            QPushButton#layoutControlButton,
+            QPushButton#layoutMenuButton,
+            QPushButton#layoutLockButton {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 7px;
+                padding: 5px 9px;
+                font-size: 9px;
+                font-weight: 650;
+            }}
+
+            QComboBox#layoutPresetCombo:hover,
+            QPushButton#layoutControlButton:hover,
+            QPushButton#layoutMenuButton:hover,
+            QPushButton#layoutLockButton:hover {{
+                border: 1px solid {theme["accent"]};
+            }}
+
+            QComboBox#layoutPresetCombo:disabled,
+            QPushButton#layoutControlButton:disabled,
+            QPushButton#layoutMenuButton:disabled {{
+                color: {theme["muted"]};
+                background: {theme["background"]};
+            }}
+
+            QComboBox#layoutPresetCombo {{
+                padding-right: 28px;
+            }}
+
+            QComboBox#layoutPresetCombo::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 24px;
+                border: none;
+                background: transparent;
+            }}
+
+            QComboBox#layoutPresetCombo::down-arrow {{
+                width: 8px;
+                height: 8px;
+            }}
+
+            QPushButton#layoutMenuButton {{
+                padding-right: 18px;
+            }}
+
+            QPushButton#layoutMenuButton::menu-indicator {{
+                image: none;
+                width: 0px;
+                height: 0px;
+            }}
+
+            QComboBox#layoutPresetCombo QAbstractItemView {{
+                color: {theme["text"]};
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                selection-background-color: {theme["accent"]};
+            }}
+
+            QMenu {{
+                color: {theme["text"]};
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                padding: 4px;
+            }}
+
+            QMenu::item {{
+                padding: 6px 20px 6px 8px;
+                border-radius: 5px;
+            }}
+
+            QMenu::item:selected {{
+                background: {theme["accent"]};
             }}
 
             QPushButton#cardIconButton {{
