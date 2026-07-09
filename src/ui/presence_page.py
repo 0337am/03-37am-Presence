@@ -669,8 +669,15 @@ class PresencePage(QWidget):
                 border: 1px solid {theme["border"]};
                 border-radius: 9px;
                 padding: {input_padding}px 10px;
-                font-size: 11px;
                 selection-background-color: {theme["accent"]};
+            }}
+
+            QComboBox#modeBox {{
+                font-size: 9pt;
+            }}
+
+            QLineEdit#presenceInput {{
+                font-size: 11px;
             }}
 
             QComboBox#modeBox:hover,
