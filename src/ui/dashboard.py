@@ -45,6 +45,13 @@ from src.system.afk_preferences import (
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
+from src.ui.dashboard_layout import (
+    GRID_COLUMNS,
+    MAX_GRID_ROWS,
+    DashboardLayout,
+    DashboardLayoutStore,
+    validate_layout,
+)
 from src.ui.theme import ThemeManager
 
 
@@ -111,6 +118,14 @@ class DashboardPage(QWidget):
 
         self.afk_preferences_store = (
             AfkPreferencesStore()
+        )
+
+        self.dashboard_layout_store = (
+            DashboardLayoutStore()
+        )
+
+        self.dashboard_layout_state = (
+            self.dashboard_layout_store.load()
         )
 
         self.song = Song(
@@ -331,11 +346,33 @@ class DashboardPage(QWidget):
 
         self.root_layout.addLayout(header)
 
-        self.top_row = QHBoxLayout()
-        self.top_row.setSpacing(10)
+        self.dashboard_grid = QGridLayout()
+        self.dashboard_grid.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        self.dashboard_grid.setHorizontalSpacing(
+            10
+        )
+        self.dashboard_grid.setVerticalSpacing(
+            10
+        )
+
+        for column in range(
+            GRID_COLUMNS
+        ):
+            self.dashboard_grid.setColumnStretch(
+                column,
+                1,
+            )
 
         self.build_now_playing_card()
         self.build_discord_preview_card()
+        self.build_recent_card()
+        self.build_quick_access_card()
+        self.build_library_status_card()
 
         self.now_playing_card.setMinimumHeight(
             220
@@ -343,27 +380,6 @@ class DashboardPage(QWidget):
         self.preview_card.setMinimumHeight(
             220
         )
-
-        self.top_row.addWidget(
-            self.now_playing_card,
-            stretch=5,
-        )
-        self.top_row.addWidget(
-            self.preview_card,
-            stretch=4,
-        )
-
-        self.root_layout.addLayout(
-            self.top_row
-        )
-
-        middle_row = QHBoxLayout()
-        middle_row.setSpacing(10)
-
-        self.build_recent_card()
-        self.build_quick_access_card()
-        self.build_library_status_card()
-
         self.recent_card.setMinimumHeight(
             270
         )
@@ -374,29 +390,8 @@ class DashboardPage(QWidget):
             270
         )
 
-        middle_row.addWidget(
-            self.recent_card,
-            stretch=4,
-        )
-        middle_row.addWidget(
-            self.quick_access_card,
-            stretch=4,
-        )
-        middle_row.addWidget(
-            self.library_status_card,
-            stretch=4,
-        )
-
-        self.root_layout.addLayout(
-            middle_row,
-            stretch=1,
-        )
-
-        self.status_row = QHBoxLayout()
-        self.status_row.setSpacing(8)
-
         (
-            discord_card,
+            self.discord_card,
             self.discord_status,
             self.discord_status_detail,
         ) = self.make_status_card(
@@ -407,7 +402,7 @@ class DashboardPage(QWidget):
         )
 
         (
-            music_card,
+            self.music_card,
             self.music_status,
             self.music_status_detail,
         ) = self.make_status_card(
@@ -418,7 +413,7 @@ class DashboardPage(QWidget):
         )
 
         (
-            afk_card,
+            self.afk_card,
             self.afk_status,
             self.afk_status_detail,
         ) = self.make_status_card(
@@ -432,18 +427,40 @@ class DashboardPage(QWidget):
 
         self.artwork_status = QLabel("")
 
-        self.status_row.addWidget(
-            discord_card
-        )
-        self.status_row.addWidget(
-            music_card
-        )
-        self.status_row.addWidget(
-            afk_card
+        self.dashboard_cards = {
+            "now_playing": (
+                self.now_playing_card
+            ),
+            "discord_preview": (
+                self.preview_card
+            ),
+            "recently_played": (
+                self.recent_card
+            ),
+            "quick_access": (
+                self.quick_access_card
+            ),
+            "library_status": (
+                self.library_status_card
+            ),
+            "discord_status": (
+                self.discord_card
+            ),
+            "music_status": (
+                self.music_card
+            ),
+            "auto_afk": (
+                self.afk_card
+            ),
+        }
+
+        self.apply_dashboard_layout(
+            self.dashboard_layout_state
         )
 
         self.root_layout.addLayout(
-            self.status_row
+            self.dashboard_grid,
+            stretch=1,
         )
 
         footer = QFrame()
@@ -487,6 +504,112 @@ class DashboardPage(QWidget):
         self.root_layout.addWidget(
             footer
         )
+
+    def apply_dashboard_layout(
+        self,
+        layout: DashboardLayout,
+        persist: bool = False,
+    ) -> DashboardLayout:
+        validated = validate_layout(
+            layout
+        )
+
+        if persist:
+            validated = (
+                self.dashboard_layout_store.save(
+                    validated
+                )
+            )
+
+        while self.dashboard_grid.count():
+            self.dashboard_grid.takeAt(
+                0
+            )
+
+        for row in range(
+            MAX_GRID_ROWS
+        ):
+            self.dashboard_grid.setRowStretch(
+                row,
+                0,
+            )
+
+        for card in self.dashboard_cards.values():
+            card.setVisible(
+                False
+            )
+
+        visible_rows = set()
+        flexible_rows = set()
+
+        flexible_cards = {
+            "recently_played",
+            "quick_access",
+            "library_status",
+        }
+
+        for card_layout in validated.cards:
+            card = self.dashboard_cards[
+                card_layout.card_id
+            ]
+
+            if not card_layout.visible:
+                continue
+
+            card.setVisible(
+                True
+            )
+
+            self.dashboard_grid.addWidget(
+                card,
+                card_layout.row,
+                card_layout.column,
+                card_layout.row_span,
+                card_layout.column_span,
+            )
+
+            occupied_rows = range(
+                card_layout.row,
+                (
+                    card_layout.row
+                    + card_layout.row_span
+                ),
+            )
+
+            visible_rows.update(
+                occupied_rows
+            )
+
+            if (
+                card_layout.card_id
+                in flexible_cards
+            ):
+                flexible_rows.update(
+                    occupied_rows
+                )
+
+        if (
+            not flexible_rows
+            and visible_rows
+        ):
+            flexible_rows.add(
+                min(visible_rows)
+            )
+
+        for row in flexible_rows:
+            self.dashboard_grid.setRowStretch(
+                row,
+                1,
+            )
+
+        self.dashboard_layout_state = (
+            validated
+        )
+
+        self.dashboard_grid.invalidate()
+        self.updateGeometry()
+
+        return validated
 
     def build_now_playing_card(self):
         self.now_playing_card = QFrame()
