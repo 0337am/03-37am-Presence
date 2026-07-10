@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QSizePolicy,
@@ -52,17 +53,30 @@ from src.system.afk_preferences import (
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
+from src.ui.custom_cards import (
+    CustomCardStore,
+    LinkCardData,
+    duplicate_link_card as duplicate_link_card_data,
+    normalize_web_url,
+)
 from src.ui.dashboard_layout import (
     CANVAS_UNITS,
     CARD_ORDER,
     CARD_SPECS,
+    DashboardCardLayout,
     DashboardLayout,
     DashboardLayoutStore,
     available_presets,
+    dashboard_card_spec,
+    is_custom_dashboard_card_id,
     move_card_freeform,
     preset_layout,
     resize_card_freeform,
     validate_layout,
+)
+from src.ui.link_cards import (
+    LinkCardDialog,
+    LinkCardWidget,
 )
 from src.ui.theme import ThemeManager
 
@@ -140,6 +154,14 @@ class DashboardPage(QWidget):
             self.dashboard_layout_store.load()
         )
 
+        self.custom_card_store = (
+            CustomCardStore()
+        )
+        self.custom_cards = {
+            card.card_id: card
+            for card in self.custom_card_store.load()
+        }
+
         self.song = Song(
             title="Waiting for media...",
             artist="",
@@ -154,6 +176,8 @@ class DashboardPage(QWidget):
 
         self.dashboard_drag_handles = {}
         self.dashboard_resize_handles = {}
+        self.dashboard_action_handles = {}
+        self.dashboard_delete_handles = {}
 
         self._dashboard_drag_card_id = None
         self._dashboard_drag_origin = None
@@ -485,6 +509,9 @@ class DashboardPage(QWidget):
             ),
         }
 
+        self.build_saved_custom_cards()
+        self.reconcile_custom_card_layouts()
+
         for card in self.dashboard_cards.values():
             card.setParent(
                 self.dashboard_canvas
@@ -543,90 +570,16 @@ class DashboardPage(QWidget):
             footer
         )
 
+
     def create_dashboard_drag_handles(self):
         for (
             card_id,
             card,
         ) in self.dashboard_cards.items():
-            move_handle = QLabel(
-                "MOVE",
-                self.dashboard_canvas,
-            )
-            move_handle.setObjectName(
-                "dashboardDragHandle"
-            )
-            move_handle.setProperty(
-                "cardId",
+            self.create_dashboard_card_handles(
                 card_id,
+                card,
             )
-            move_handle.setProperty(
-                "editorAction",
-                "move",
-            )
-            move_handle.setAlignment(
-                Qt.AlignmentFlag.AlignCenter
-            )
-            move_handle.setCursor(
-                Qt.CursorShape.OpenHandCursor
-            )
-            move_handle.setFixedSize(
-                38,
-                18,
-            )
-            move_handle.setToolTip(
-                "Drag this card anywhere on the dashboard"
-            )
-            move_handle.setAttribute(
-                Qt.WidgetAttribute.WA_Hover,
-                True,
-            )
-            move_handle.installEventFilter(
-                self
-            )
-
-            resize_handle = QLabel(
-                "\u2198",
-                self.dashboard_canvas,
-            )
-            resize_handle.setObjectName(
-                "dashboardResizeHandle"
-            )
-            resize_handle.setProperty(
-                "cardId",
-                card_id,
-            )
-            resize_handle.setProperty(
-                "editorAction",
-                "resize",
-            )
-            resize_handle.setAlignment(
-                Qt.AlignmentFlag.AlignCenter
-            )
-            resize_handle.setCursor(
-                Qt.CursorShape.SizeFDiagCursor
-            )
-            resize_handle.setFixedSize(
-                18,
-                18,
-            )
-            resize_handle.setToolTip(
-                "Drag to resize this dashboard card"
-            )
-            resize_handle.setAttribute(
-                Qt.WidgetAttribute.WA_Hover,
-                True,
-            )
-            resize_handle.installEventFilter(
-                self
-            )
-
-            self.dashboard_drag_handles[
-                card_id
-            ] = move_handle
-
-            self.dashboard_resize_handles[
-                card_id
-            ] = resize_handle
 
         self._dashboard_editor_outline = QFrame(
             self.dashboard_canvas
@@ -642,6 +595,180 @@ class DashboardPage(QWidget):
 
         self.sync_dashboard_drag_handles()
 
+    def create_dashboard_card_handles(
+        self,
+        card_id: str,
+        card,
+    ):
+        if card_id in self.dashboard_drag_handles:
+            return
+
+        move_handle = QLabel(
+            "MOVE",
+            self.dashboard_canvas,
+        )
+        move_handle.setObjectName(
+            "dashboardDragHandle"
+        )
+        move_handle.setProperty(
+            "cardId",
+            card_id,
+        )
+        move_handle.setProperty(
+            "editorAction",
+            "move",
+        )
+        move_handle.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        move_handle.setCursor(
+            Qt.CursorShape.OpenHandCursor
+        )
+        move_handle.setFixedSize(
+            38,
+            18,
+        )
+        move_handle.setToolTip(
+            "Drag this card anywhere on the dashboard"
+        )
+        move_handle.setAttribute(
+            Qt.WidgetAttribute.WA_Hover,
+            True,
+        )
+        move_handle.installEventFilter(
+            self
+        )
+
+        resize_handle = QLabel(
+            "↘",
+            self.dashboard_canvas,
+        )
+        resize_handle.setObjectName(
+            "dashboardResizeHandle"
+        )
+        resize_handle.setProperty(
+            "cardId",
+            card_id,
+        )
+        resize_handle.setProperty(
+            "editorAction",
+            "resize",
+        )
+        resize_handle.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        resize_handle.setCursor(
+            Qt.CursorShape.SizeFDiagCursor
+        )
+        resize_handle.setFixedSize(
+            18,
+            18,
+        )
+        resize_handle.setToolTip(
+            "Drag to resize this dashboard card"
+        )
+        resize_handle.setAttribute(
+            Qt.WidgetAttribute.WA_Hover,
+            True,
+        )
+        resize_handle.installEventFilter(
+            self
+        )
+
+        action_handle = None
+        delete_handle = None
+
+        if is_custom_dashboard_card_id(card_id):
+            action_handle = QPushButton(
+                "⋯",
+                self.dashboard_canvas,
+            )
+            action_handle.setObjectName(
+                "dashboardCustomActionHandle"
+            )
+            action_handle.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+            action_handle.setFixedSize(
+                26,
+                18,
+            )
+            action_handle.setToolTip(
+                "Edit or duplicate this custom card"
+            )
+
+            action_menu = QMenu(action_handle)
+
+            edit_action = QAction(
+                "✎  Edit Link card",
+                action_menu,
+            )
+            edit_action.triggered.connect(
+                lambda checked=False, current_card_id=card_id:
+                self.edit_custom_link_card(
+                    current_card_id
+                )
+            )
+            action_menu.addAction(edit_action)
+
+            duplicate_action = QAction(
+                "⧉  Duplicate Link card",
+                action_menu,
+            )
+            duplicate_action.triggered.connect(
+                lambda checked=False, current_card_id=card_id:
+                self.duplicate_custom_link_card(
+                    current_card_id
+                )
+            )
+            action_menu.addAction(duplicate_action)
+
+            action_handle.setMenu(action_menu)
+
+            delete_handle = QPushButton(
+                "×",
+                self.dashboard_canvas,
+            )
+            delete_handle.setObjectName(
+                "dashboardDeleteHandle"
+            )
+            delete_handle.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+            delete_handle.setFixedSize(
+                18,
+                18,
+            )
+            delete_handle.setToolTip(
+                "Delete this custom card"
+            )
+            delete_handle.clicked.connect(
+                lambda checked=False, current_card_id=card_id:
+                self.confirm_delete_custom_card(
+                    current_card_id
+                )
+            )
+
+        self.dashboard_drag_handles[
+            card_id
+        ] = move_handle
+        self.dashboard_resize_handles[
+            card_id
+        ] = resize_handle
+
+        if action_handle is not None:
+            self.dashboard_action_handles[
+                card_id
+            ] = action_handle
+
+        if delete_handle is not None:
+            self.dashboard_delete_handles[
+                card_id
+            ] = delete_handle
+
+        if card.parentWidget() is not self.dashboard_canvas:
+            card.setParent(self.dashboard_canvas)
+
     def sync_dashboard_drag_handles(self):
         move_handles = getattr(
             self,
@@ -652,6 +779,18 @@ class DashboardPage(QWidget):
         resize_handles = getattr(
             self,
             "dashboard_resize_handles",
+            {},
+        )
+
+        action_handles = getattr(
+            self,
+            "dashboard_action_handles",
+            {},
+        )
+
+        delete_handles = getattr(
+            self,
+            "dashboard_delete_handles",
             {},
         )
 
@@ -682,6 +821,14 @@ class DashboardPage(QWidget):
                 card_id
             )
 
+            action_handle = action_handles.get(
+                card_id
+            )
+
+            delete_handle = delete_handles.get(
+                card_id
+            )
+
             try:
                 card_layout = (
                     self.dashboard_layout_state.card(
@@ -693,6 +840,12 @@ class DashboardPage(QWidget):
 
                 if resize_handle is not None:
                     resize_handle.hide()
+
+                if action_handle is not None:
+                    action_handle.hide()
+
+                if delete_handle is not None:
+                    delete_handle.hide()
 
                 continue
 
@@ -716,9 +869,9 @@ class DashboardPage(QWidget):
             if resize_handle is not None:
                 resize_handle.setVisible(
                     editable
-                    and CARD_SPECS[
+                    and dashboard_card_spec(
                         card_id
-                    ].resizable
+                    ).resizable
                 )
 
                 resize_handle.setCursor(
@@ -727,6 +880,22 @@ class DashboardPage(QWidget):
                         if editable
                         else Qt.CursorShape.ArrowCursor
                     )
+                )
+
+            if action_handle is not None:
+                action_handle.setVisible(
+                    editable
+                )
+                action_handle.setEnabled(
+                    editable
+                )
+
+            if delete_handle is not None:
+                delete_handle.setVisible(
+                    editable
+                )
+                delete_handle.setEnabled(
+                    editable
                 )
 
         if locked:
@@ -757,6 +926,18 @@ class DashboardPage(QWidget):
         resize_handles = getattr(
             self,
             "dashboard_resize_handles",
+            {},
+        )
+
+        action_handles = getattr(
+            self,
+            "dashboard_action_handles",
+            {},
+        )
+
+        delete_handles = getattr(
+            self,
+            "dashboard_delete_handles",
             {},
         )
 
@@ -826,6 +1007,117 @@ class DashboardPage(QWidget):
             )
 
             move_handle.raise_()
+
+            action_handle = action_handles.get(
+                card_id
+            )
+
+            if action_handle is not None:
+                action_x = (
+                    card.x()
+                    - (
+                        action_handle.width()
+                        // 2
+                    )
+                )
+
+                action_y = (
+                    card.y()
+                    - (
+                        action_handle.height()
+                        // 2
+                    )
+                )
+
+                action_x = min(
+                    max(
+                        0,
+                        action_x,
+                    ),
+                    max(
+                        0,
+                        (
+                            canvas_width
+                            - action_handle.width()
+                        ),
+                    ),
+                )
+
+                action_y = min(
+                    max(
+                        0,
+                        action_y,
+                    ),
+                    max(
+                        0,
+                        (
+                            canvas_height
+                            - action_handle.height()
+                        ),
+                    ),
+                )
+
+                action_handle.move(
+                    action_x,
+                    action_y,
+                )
+                action_handle.raise_()
+
+            delete_handle = delete_handles.get(
+                card_id
+            )
+
+            if delete_handle is not None:
+                delete_x = (
+                    card.x()
+                    + card.width()
+                    - (
+                        delete_handle.width()
+                        // 2
+                    )
+                )
+
+                delete_y = (
+                    card.y()
+                    - (
+                        delete_handle.height()
+                        // 2
+                    )
+                )
+
+                delete_x = min(
+                    max(
+                        0,
+                        delete_x,
+                    ),
+                    max(
+                        0,
+                        (
+                            canvas_width
+                            - delete_handle.width()
+                        ),
+                    ),
+                )
+
+                delete_y = min(
+                    max(
+                        0,
+                        delete_y,
+                    ),
+                    max(
+                        0,
+                        (
+                            canvas_height
+                            - delete_handle.height()
+                        ),
+                    ),
+                )
+
+                delete_handle.move(
+                    delete_x,
+                    delete_y,
+                )
+                delete_handle.raise_()
 
             resize_handle = resize_handles.get(
                 card_id
@@ -987,6 +1279,24 @@ class DashboardPage(QWidget):
         if resize_handle is not None:
             resize_handle.raise_()
 
+        action_handle = (
+            self.dashboard_action_handles.get(
+                card_id
+            )
+        )
+
+        if action_handle is not None:
+            action_handle.raise_()
+
+        delete_handle = (
+            self.dashboard_delete_handles.get(
+                card_id
+            )
+        )
+
+        if delete_handle is not None:
+            delete_handle.raise_()
+
     def update_dashboard_editor_outline(self):
         outline = (
             self._dashboard_editor_outline
@@ -1046,6 +1356,24 @@ class DashboardPage(QWidget):
         if resize_handle is not None:
             resize_handle.raise_()
 
+        action_handle = (
+            self.dashboard_action_handles.get(
+                card_id
+            )
+        )
+
+        if action_handle is not None:
+            action_handle.raise_()
+
+        delete_handle = (
+            self.dashboard_delete_handles.get(
+                card_id
+            )
+        )
+
+        if delete_handle is not None:
+            delete_handle.raise_()
+
     def hide_dashboard_editor_outline(self):
         outline = (
             self._dashboard_editor_outline
@@ -1083,12 +1411,15 @@ class DashboardPage(QWidget):
 
         visible_cards = []
 
-        for card_layout in (
+        for layout_order, card_layout in enumerate(
             self.dashboard_layout_state.cards
         ):
-            card = self.dashboard_cards[
+            card = self.dashboard_cards.get(
                 card_layout.card_id
-            ]
+            )
+
+            if card is None:
+                continue
 
             x = round(
                 (
@@ -1159,9 +1490,7 @@ class DashboardPage(QWidget):
                 visible_cards.append(
                     (
                         card_layout.z_index,
-                        CARD_ORDER.index(
-                            card_layout.card_id
-                        ),
+                        layout_order,
                         card,
                     )
                 )
@@ -1230,9 +1559,9 @@ class DashboardPage(QWidget):
 
         self.layout_status_label.setText(
             "Moving "
-            + CARD_SPECS[
+            + dashboard_card_spec(
                 card_id
-            ].title
+            ).title
         )
 
         return self.update_dashboard_live_drag(
@@ -1451,7 +1780,7 @@ class DashboardPage(QWidget):
 
         print(
             "Dashboard card moved freely: "
-            f"{CARD_SPECS[card_id].title}."
+            f"{dashboard_card_spec(card_id).title}."
         )
 
         return True
@@ -1478,13 +1807,19 @@ class DashboardPage(QWidget):
             ),
         }
 
-        if card in responsive_cards:
+        if (
+            card in responsive_cards
+            or isinstance(card, LinkCardWidget)
+        ):
             hint_width = 0
             hint_height = 0
         else:
             hint = card.minimumSizeHint()
             hint_width = hint.width()
             hint_height = hint.height()
+
+        if isinstance(card, LinkCardWidget):
+            return (80, 70)
 
         minimum_width = max(
             180,
@@ -1533,9 +1868,9 @@ class DashboardPage(QWidget):
 
         if (
             not card_layout.visible
-            or not CARD_SPECS[
+            or not dashboard_card_spec(
                 card_id
-            ].resizable
+            ).resizable
         ):
             return False
 
@@ -1562,9 +1897,9 @@ class DashboardPage(QWidget):
 
         self.layout_status_label.setText(
             "Resizing "
-            + CARD_SPECS[
+            + dashboard_card_spec(
                 card_id
-            ].title
+            ).title
         )
 
         return True
@@ -1811,7 +2146,7 @@ class DashboardPage(QWidget):
 
         print(
             "Dashboard card resized freely: "
-            f"{CARD_SPECS[card_id].title}."
+            f"{dashboard_card_spec(card_id).title}."
         )
 
         return True
@@ -2141,6 +2476,40 @@ class DashboardPage(QWidget):
             self.apply_dashboard_preset
         )
 
+
+        self.layout_add_card_button = QPushButton(
+            "Add card  ▾"
+        )
+        self.layout_add_card_button.setObjectName(
+            "layoutMenuButton"
+        )
+        self.layout_add_card_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_add_card_button.setToolTip(
+            "Add a custom card to the dashboard"
+        )
+
+        self.layout_add_card_menu = QMenu(
+            self.layout_add_card_button
+        )
+        self.layout_add_link_action = QAction(
+            "🔗  Link card",
+            self.layout_add_card_menu,
+        )
+        self.layout_add_link_action.setToolTip(
+            "Add a safe http:// or https:// shortcut"
+        )
+        self.layout_add_link_action.triggered.connect(
+            self.add_link_card
+        )
+        self.layout_add_card_menu.addAction(
+            self.layout_add_link_action
+        )
+        self.layout_add_card_button.setMenu(
+            self.layout_add_card_menu
+        )
+
         self.layout_visibility_button = QPushButton(
             "Cards  \u25be"
         )
@@ -2160,32 +2529,18 @@ class DashboardPage(QWidget):
 
         self.layout_visibility_actions = {}
 
+
         for card_id in CARD_ORDER:
-            action = QAction(
-                CARD_SPECS[
-                    card_id
-                ].title,
-                self.layout_visibility_menu,
-            )
-            action.setCheckable(
-                True
-            )
-            action.toggled.connect(
-                lambda checked,
-                current_card_id=card_id:
-                self.set_dashboard_card_visibility(
-                    current_card_id,
-                    checked,
-                )
+            self.register_dashboard_visibility_action(
+                card_id,
+                CARD_SPECS[card_id].title,
             )
 
-            self.layout_visibility_menu.addAction(
-                action
+        for card in self.custom_cards.values():
+            self.register_dashboard_visibility_action(
+                card.card_id,
+                card.title,
             )
-
-            self.layout_visibility_actions[
-                card_id
-            ] = action
 
         self.layout_visibility_button.setMenu(
             self.layout_visibility_menu
@@ -2231,6 +2586,9 @@ class DashboardPage(QWidget):
             self.layout_preset_combo
         )
         toolbar_layout.addWidget(
+            self.layout_add_card_button
+        )
+        toolbar_layout.addWidget(
             self.layout_visibility_button
         )
         toolbar_layout.addWidget(
@@ -2239,6 +2597,699 @@ class DashboardPage(QWidget):
         toolbar_layout.addWidget(
             self.layout_lock_button
         )
+
+
+    def register_dashboard_visibility_action(
+        self,
+        card_id: str,
+        title: str,
+    ):
+        existing = self.layout_visibility_actions.get(
+            card_id
+        )
+
+        if existing is not None:
+            existing.setText(title)
+            return existing
+
+        action = QAction(
+            title,
+            self.layout_visibility_menu,
+        )
+        action.setCheckable(True)
+        action.toggled.connect(
+            lambda checked,
+            current_card_id=card_id:
+            self.set_dashboard_card_visibility(
+                current_card_id,
+                checked,
+            )
+        )
+        self.layout_visibility_menu.addAction(action)
+        self.layout_visibility_actions[card_id] = action
+        return action
+
+    def build_saved_custom_cards(self):
+        for card in self.custom_cards.values():
+            self.dashboard_cards[card.card_id] = (
+                self.create_link_card_widget(card)
+            )
+
+    def create_link_card_widget(
+        self,
+        card: LinkCardData,
+    ) -> LinkCardWidget:
+        widget = LinkCardWidget(
+            card,
+            self.dashboard_canvas,
+        )
+        widget.open_requested.connect(
+            self.open_link_card_url
+        )
+        widget.set_theme(
+            self.theme_manager.theme()
+        )
+        return widget
+
+    def default_custom_card_layout(
+        self,
+        card_id: str,
+        existing_cards=None,
+    ) -> DashboardCardLayout:
+        cards = tuple(
+            self.dashboard_layout_state.cards
+            if existing_cards is None
+            else existing_cards
+        )
+        custom_count = sum(
+            1
+            for card in cards
+            if is_custom_dashboard_card_id(card.card_id)
+        )
+        offset = (custom_count % 8) * 180
+        highest_layer = max(
+            (
+                card.z_index
+                for card in cards
+            ),
+            default=0,
+        )
+
+        return DashboardCardLayout(
+            card_id=card_id,
+            x=3600 + offset,
+            y=2700 + offset,
+            width=2600,
+            height=1900,
+            z_index=highest_layer + 1,
+            visible=True,
+        )
+
+    def reconcile_custom_card_layouts(self):
+        stored_ids = set(self.custom_cards)
+        original_cards = self.dashboard_layout_state.cards
+        reconciled = [
+            card
+            for card in original_cards
+            if (
+                not is_custom_dashboard_card_id(card.card_id)
+                or card.card_id in stored_ids
+            )
+        ]
+        layout_ids = {
+            card.card_id
+            for card in reconciled
+        }
+
+        for card_id in self.custom_cards:
+            if card_id in layout_ids:
+                continue
+
+            reconciled.append(
+                self.default_custom_card_layout(
+                    card_id,
+                    existing_cards=reconciled,
+                )
+            )
+            layout_ids.add(card_id)
+
+        cards = tuple(reconciled)
+
+        if cards == original_cards:
+            return
+
+        updated = replace(
+            self.dashboard_layout_state,
+            cards=cards,
+            preset="Custom",
+        )
+        validated = validate_layout(updated)
+
+        try:
+            validated = self.dashboard_layout_store.save(
+                validated
+            )
+        except OSError as error:
+            print(
+                "Custom dashboard layout repair could not "
+                f"be saved: {error}"
+            )
+
+        self.dashboard_layout_state = validated
+
+    def with_current_custom_layout_cards(
+        self,
+        layout: DashboardLayout,
+    ) -> DashboardLayout:
+        custom_layouts = tuple(
+            card
+            for card in self.dashboard_layout_state.cards
+            if is_custom_dashboard_card_id(card.card_id)
+        )
+
+        if not custom_layouts:
+            return layout
+
+        return replace(
+            layout,
+            cards=layout.cards + custom_layouts,
+            preset="Custom",
+        )
+
+    def add_link_card(self):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        dialog = LinkCardDialog(self)
+
+        if not dialog.exec():
+            return
+
+        card = dialog.card_data()
+
+        if card is None:
+            return
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+
+        try:
+            saved_cards = self.custom_card_store.upsert(card)
+        except (OSError, TypeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "Link card not saved",
+                str(error),
+            )
+            return
+
+        self.custom_cards = {
+            item.card_id: item
+            for item in saved_cards
+        }
+
+        widget = self.create_link_card_widget(card)
+        self.dashboard_cards[card.card_id] = widget
+        self.create_dashboard_card_handles(
+            card.card_id,
+            widget,
+        )
+        self.register_dashboard_visibility_action(
+            card.card_id,
+            card.title,
+        )
+
+        new_layout = replace(
+            self.dashboard_layout_state,
+            cards=(
+                self.dashboard_layout_state.cards
+                + (
+                    self.default_custom_card_layout(
+                        card.card_id
+                    ),
+                )
+            ),
+            preset="Custom",
+        )
+
+        try:
+            self.apply_dashboard_layout(
+                new_layout,
+                persist=True,
+            )
+        except (OSError, TypeError, ValueError) as error:
+            try:
+                self.custom_card_store.save(previous_cards)
+            except OSError:
+                pass
+
+            self.custom_cards = {
+                item.card_id: item
+                for item in previous_cards
+            }
+            self.remove_custom_card_ui(card.card_id)
+
+            QMessageBox.warning(
+                self,
+                "Link card not added",
+                str(error),
+            )
+            return
+
+        self.sync_dashboard_layout_controls()
+        self.schedule_dashboard_geometry_refresh()
+
+    def remove_custom_card_ui(self, card_id: str):
+        widget = self.dashboard_cards.pop(
+            card_id,
+            None,
+        )
+        if widget is not None:
+            widget.hide()
+            widget.deleteLater()
+
+        move_handle = self.dashboard_drag_handles.pop(
+            card_id,
+            None,
+        )
+        if move_handle is not None:
+            move_handle.hide()
+            move_handle.deleteLater()
+
+        resize_handle = self.dashboard_resize_handles.pop(
+            card_id,
+            None,
+        )
+        if resize_handle is not None:
+            resize_handle.hide()
+            resize_handle.deleteLater()
+
+        action_handle = self.dashboard_action_handles.pop(
+            card_id,
+            None,
+        )
+        if action_handle is not None:
+            action_handle.hide()
+            action_handle.deleteLater()
+
+        delete_handle = self.dashboard_delete_handles.pop(
+            card_id,
+            None,
+        )
+        if delete_handle is not None:
+            delete_handle.hide()
+            delete_handle.deleteLater()
+
+        action = self.layout_visibility_actions.pop(
+            card_id,
+            None,
+        )
+        if action is not None:
+            self.layout_visibility_menu.removeAction(action)
+            action.deleteLater()
+
+
+    def edit_custom_link_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return False
+
+        card = self.custom_cards.get(card_id)
+
+        if card is None:
+            return False
+
+        dialog = LinkCardDialog(
+            self,
+            card=card,
+        )
+
+        if not dialog.exec():
+            return False
+
+        updated_card = dialog.card_data()
+
+        if updated_card is None:
+            return False
+
+        return self.save_edited_link_card(
+            updated_card
+        )
+
+    def save_edited_link_card(
+        self,
+        card: LinkCardData,
+    ) -> bool:
+        previous_card = self.custom_cards.get(
+            card.card_id
+        )
+
+        if previous_card is None:
+            return False
+
+        widget = self.dashboard_cards.get(
+            card.card_id
+        )
+
+        if not isinstance(widget, LinkCardWidget):
+            return False
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+
+        try:
+            saved_cards = self.custom_card_store.upsert(
+                card
+            )
+            widget.update_card(card)
+        except (OSError, TypeError, ValueError) as error:
+            rollback_error = None
+
+            try:
+                self.custom_card_store.save(
+                    previous_cards
+                )
+            except (OSError, TypeError, ValueError) as restore_error:
+                rollback_error = restore_error
+
+            try:
+                widget.update_card(previous_card)
+            except (TypeError, ValueError):
+                pass
+
+            message = str(error)
+
+            if rollback_error is not None:
+                message += (
+                    "\n\nThe custom-card rollback also failed: "
+                    f"{rollback_error}"
+                )
+
+            QMessageBox.warning(
+                self,
+                "Link card not updated",
+                message,
+            )
+            return False
+
+        self.custom_cards = {
+            item.card_id: item
+            for item in saved_cards
+        }
+
+        visibility_action = (
+            self.layout_visibility_actions.get(
+                card.card_id
+            )
+        )
+
+        if visibility_action is not None:
+            visibility_action.setText(card.title)
+
+        widget.set_theme(
+            self.theme_manager.theme()
+        )
+        self.schedule_dashboard_geometry_refresh()
+        return True
+
+    def duplicate_custom_card_layout(
+        self,
+        source_layout: DashboardCardLayout,
+        card_id: str,
+    ) -> DashboardCardLayout:
+        offset = 360
+        maximum_x = max(
+            0,
+            CANVAS_UNITS - source_layout.width,
+        )
+        maximum_y = max(
+            0,
+            CANVAS_UNITS - source_layout.height,
+        )
+
+        x = min(
+            maximum_x,
+            source_layout.x + offset,
+        )
+        y = min(
+            maximum_y,
+            source_layout.y + offset,
+        )
+
+        if x == source_layout.x and source_layout.x > 0:
+            x = max(
+                0,
+                source_layout.x - offset,
+            )
+
+        if y == source_layout.y and source_layout.y > 0:
+            y = max(
+                0,
+                source_layout.y - offset,
+            )
+
+        highest_layer = max(
+            (
+                card.z_index
+                for card in self.dashboard_layout_state.cards
+            ),
+            default=0,
+        )
+
+        return replace(
+            source_layout,
+            card_id=card_id,
+            x=x,
+            y=y,
+            z_index=highest_layer + 1,
+            visible=True,
+        )
+
+    def duplicate_custom_link_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return False
+
+        source_card = self.custom_cards.get(
+            card_id
+        )
+
+        if source_card is None:
+            return False
+
+        try:
+            source_layout = (
+                self.dashboard_layout_state.card(
+                    card_id
+                )
+            )
+            duplicated_card = duplicate_link_card_data(
+                source_card
+            )
+            duplicated_layout = (
+                self.duplicate_custom_card_layout(
+                    source_layout,
+                    duplicated_card.card_id,
+                )
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "Link card not duplicated",
+                str(error),
+            )
+            return False
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+        widget = None
+
+        try:
+            saved_cards = self.custom_card_store.upsert(
+                duplicated_card
+            )
+
+            self.custom_cards = {
+                item.card_id: item
+                for item in saved_cards
+            }
+
+            widget = self.create_link_card_widget(
+                duplicated_card
+            )
+            self.dashboard_cards[
+                duplicated_card.card_id
+            ] = widget
+            self.create_dashboard_card_handles(
+                duplicated_card.card_id,
+                widget,
+            )
+            self.register_dashboard_visibility_action(
+                duplicated_card.card_id,
+                duplicated_card.title,
+            )
+
+            new_layout = replace(
+                self.dashboard_layout_state,
+                cards=(
+                    self.dashboard_layout_state.cards
+                    + (duplicated_layout,)
+                ),
+                preset="Custom",
+            )
+
+            self.apply_dashboard_layout(
+                new_layout,
+                persist=True,
+            )
+        except (OSError, TypeError, ValueError) as error:
+            rollback_error = None
+
+            try:
+                self.custom_card_store.save(
+                    previous_cards
+                )
+            except (OSError, TypeError, ValueError) as restore_error:
+                rollback_error = restore_error
+
+            self.custom_cards = {
+                item.card_id: item
+                for item in previous_cards
+            }
+
+            if widget is not None:
+                self.remove_custom_card_ui(
+                    duplicated_card.card_id
+                )
+
+            message = str(error)
+
+            if rollback_error is not None:
+                message += (
+                    "\n\nThe custom-card rollback also failed: "
+                    f"{rollback_error}"
+                )
+
+            QMessageBox.warning(
+                self,
+                "Link card not duplicated",
+                message,
+            )
+            return False
+
+        self.sync_dashboard_layout_controls()
+        self.schedule_dashboard_geometry_refresh()
+        return True
+
+    def confirm_delete_custom_card(
+        self,
+        card_id: str,
+    ):
+        card = self.custom_cards.get(card_id)
+
+        if card is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete Link card",
+            (
+                f'Delete "{card.title}" from the dashboard?\n\n'
+                "This cannot be undone."
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.delete_custom_card(card_id)
+
+    def delete_custom_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        if (
+            not is_custom_dashboard_card_id(card_id)
+            or card_id not in self.custom_cards
+        ):
+            return False
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+
+        new_layout = replace(
+            self.dashboard_layout_state,
+            cards=tuple(
+                card
+                for card in self.dashboard_layout_state.cards
+                if card.card_id != card_id
+            ),
+            preset="Custom",
+        )
+
+        try:
+            validated_layout = validate_layout(
+                new_layout
+            )
+            saved_cards = self.custom_card_store.delete(
+                card_id
+            )
+            saved_layout = self.dashboard_layout_store.save(
+                validated_layout
+            )
+        except (OSError, TypeError, ValueError) as error:
+            rollback_error = None
+
+            try:
+                self.custom_card_store.save(
+                    previous_cards
+                )
+            except (OSError, TypeError, ValueError) as restore_error:
+                rollback_error = restore_error
+
+            message = str(error)
+
+            if rollback_error is not None:
+                message += (
+                    "\n\nThe custom-card rollback also failed: "
+                    f"{rollback_error}"
+                )
+
+            QMessageBox.warning(
+                self,
+                "Link card not deleted",
+                message,
+            )
+            return False
+
+        self.custom_cards = {
+            item.card_id: item
+            for item in saved_cards
+        }
+        self.dashboard_layout_state = saved_layout
+        self.remove_custom_card_ui(card_id)
+        self.sync_dashboard_layout_controls()
+        self.schedule_dashboard_geometry_refresh()
+        return True
+
+    def open_link_card_url(self, url: str):
+        try:
+            safe_url = normalize_web_url(url)
+        except (TypeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "Link cannot be opened",
+                str(error),
+            )
+            return
+
+        opened = QDesktopServices.openUrl(
+            QUrl(safe_url)
+        )
+
+        if not opened:
+            QMessageBox.warning(
+                self,
+                "Link could not be opened",
+                "Windows could not open this address in "
+                "your default browser.",
+            )
 
     def apply_dashboard_preset(
         self,
@@ -2263,6 +3314,10 @@ class DashboardPage(QWidget):
         except KeyError:
             self.sync_dashboard_layout_controls()
             return
+
+        layout = self.with_current_custom_layout_cards(
+            layout
+        )
 
         layout = replace(
             layout,
@@ -2300,10 +3355,14 @@ class DashboardPage(QWidget):
             self.sync_dashboard_layout_controls()
             return
 
-        layout = replace(
+        layout = self.with_current_custom_layout_cards(
             preset_layout(
                 "Default"
-            ),
+            )
+        )
+
+        layout = replace(
+            layout,
             locked=(
                 self.dashboard_layout_state.locked
             ),
@@ -2443,6 +3502,9 @@ class DashboardPage(QWidget):
         )
 
         self.layout_preset_combo.setEnabled(
+            not locked
+        )
+        self.layout_add_card_button.setEnabled(
             not locked
         )
         self.layout_visibility_button.setEnabled(
@@ -3895,6 +4957,28 @@ class DashboardPage(QWidget):
                 border: 1px solid {theme["text"]};
             }}
 
+            QPushButton#dashboardCustomActionHandle,
+            QPushButton#dashboardDeleteHandle {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["accent"]};
+                border-radius: 6px;
+                padding: 0px;
+                font-size: 12px;
+                font-weight: 800;
+            }}
+
+            QPushButton#dashboardCustomActionHandle:hover,
+            QPushButton#dashboardDeleteHandle:hover {{
+                color: {theme["background"]};
+                background: {theme["accent"]};
+            }}
+
+            QPushButton#dashboardCustomActionHandle::menu-indicator {{
+                image: none;
+                width: 0px;
+            }}
+
             QFrame#dashboardCanvas {{
                 background: transparent;
                 border: none;
@@ -4339,6 +5423,10 @@ class DashboardPage(QWidget):
             }}
             """
         )
+
+        for card in self.dashboard_cards.values():
+            if isinstance(card, LinkCardWidget):
+                card.set_theme(theme)
 
         self.schedule_dashboard_geometry_refresh()
 

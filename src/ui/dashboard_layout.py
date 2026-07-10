@@ -7,6 +7,11 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+from src.ui.custom_cards import (
+    MAX_CUSTOM_CARDS,
+    validate_card_id,
+)
+
 
 SCHEMA_VERSION = 2
 CANVAS_UNITS = 10000
@@ -83,6 +88,44 @@ CARD_SPECS = {
 CARD_ORDER = tuple(
     CARD_SPECS.keys()
 )
+
+
+CUSTOM_CARD_SPEC = DashboardCardSpec(
+    card_id="custom",
+    title="Custom card",
+    minimum_column_span=1,
+    maximum_column_span=12,
+    minimum_row_span=1,
+    maximum_row_span=12,
+)
+
+
+def is_custom_dashboard_card_id(
+    card_id: str,
+) -> bool:
+    try:
+        validate_card_id(card_id)
+    except (TypeError, ValueError):
+        return False
+
+    return True
+
+
+def dashboard_card_spec(
+    card_id: str,
+) -> DashboardCardSpec:
+    spec = CARD_SPECS.get(card_id)
+
+    if spec is not None:
+        return spec
+
+    if is_custom_dashboard_card_id(card_id):
+        return replace(
+            CUSTOM_CARD_SPEC,
+            card_id=card_id,
+        )
+
+    raise KeyError(card_id)
 
 
 @dataclass(frozen=True)
@@ -309,21 +352,23 @@ def validate_layout(
             "Unsupported dashboard layout version."
         )
 
-    if len(layout.cards) != len(CARD_ORDER):
+    if len(layout.cards) < len(CARD_ORDER):
         raise ValueError(
-            "The dashboard layout must contain every card."
+            "The dashboard layout must contain every built-in card."
+        )
+
+    if len(layout.cards) > (
+        len(CARD_ORDER)
+        + MAX_CUSTOM_CARDS
+    ):
+        raise ValueError(
+            "The dashboard layout contains too many custom cards."
         )
 
     card_ids = [
         card.card_id
         for card in layout.cards
     ]
-
-    if set(card_ids) != set(CARD_ORDER):
-        raise ValueError(
-            "The dashboard layout contains missing "
-            "or unknown cards."
-        )
 
     if len(card_ids) != len(
         set(card_ids)
@@ -332,10 +377,32 @@ def validate_layout(
             "The dashboard layout contains duplicate cards."
         )
 
+    built_in_ids = {
+        card_id
+        for card_id in card_ids
+        if card_id in CARD_SPECS
+    }
+
+    if built_in_ids != set(CARD_ORDER):
+        raise ValueError(
+            "The dashboard layout contains missing built-in cards."
+        )
+
+    for card_id in card_ids:
+        if card_id in CARD_SPECS:
+            continue
+
+        try:
+            validate_card_id(card_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "The dashboard layout contains an unknown card."
+            ) from error
+
     for card in layout.cards:
-        spec = CARD_SPECS[
+        spec = dashboard_card_spec(
             card.card_id
-        ]
+        )
 
         if not (
             0
@@ -423,9 +490,9 @@ def move_card_freeform(
             "The dashboard card to move is unknown."
         ) from error
 
-    spec = CARD_SPECS[
+    spec = dashboard_card_spec(
         moving_card.card_id
-    ]
+    )
 
     if not moving_card.visible:
         raise ValueError(
@@ -499,9 +566,9 @@ def resize_card_freeform(
             "The dashboard card to resize is unknown."
         ) from error
 
-    spec = CARD_SPECS[
+    spec = dashboard_card_spec(
         resizing_card.card_id
-    ]
+    )
 
     if not resizing_card.visible:
         raise ValueError(
