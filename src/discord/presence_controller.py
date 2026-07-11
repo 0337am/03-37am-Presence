@@ -209,9 +209,9 @@ class PresenceController(QObject):
 
         current_mode = self.active_mode
 
-        if current_mode in {
-            "afk",
-            "disabled",
+        if current_mode not in {
+            "music",
+            "custom",
         }:
             return
 
