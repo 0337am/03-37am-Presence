@@ -41,6 +41,15 @@ from src.discord.presence_presets import (
 from src.ui.theme import ThemeManager
 
 
+ARTWORK_MAX_BYTES = 10 * 1024 * 1024
+ARTWORK_SUPPORTED_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+}
+
+
 class PresencePage(QWidget):
     presets_changed = pyqtSignal()
 
@@ -1823,6 +1832,54 @@ class PresencePage(QWidget):
                 "The artwork folder could not be opened."
             )
 
+    def validate_artwork_source(
+        self,
+        source_path: str,
+    ) -> tuple[bool, str]:
+        path = Path(source_path)
+
+        if not path.is_file():
+            return (
+                False,
+                "The selected artwork file could not be found.",
+            )
+
+        if path.suffix.lower() not in ARTWORK_SUPPORTED_SUFFIXES:
+            return (
+                False,
+                "Artwork must be PNG, JPG, JPEG, or WEBP.",
+            )
+
+        try:
+            byte_count = path.stat().st_size
+        except OSError:
+            return (
+                False,
+                "The selected artwork file could not be read.",
+            )
+
+        if byte_count > ARTWORK_MAX_BYTES:
+            return (
+                False,
+                "Artwork must be 10 MB or smaller. "
+                f"Selected: {self._format_file_size(byte_count)}.",
+            )
+
+        pixmap = QPixmap(
+            str(path)
+        )
+
+        if pixmap.isNull():
+            return (
+                False,
+                "The selected artwork image could not be loaded.",
+            )
+
+        return (
+            True,
+            "",
+        )
+
     def choose_image(self):
         source_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1833,6 +1890,20 @@ class PresencePage(QWidget):
 
         if not source_path:
             return
+
+        valid, validation_message = self.validate_artwork_source(
+            source_path
+        )
+
+        if not valid:
+            self.status_label.setText(
+                validation_message
+            )
+            return
+
+        source_pixmap = QPixmap(
+            source_path
+        )
 
         saved_path = save_mode_image(
             source_path,
@@ -1850,9 +1921,18 @@ class PresencePage(QWidget):
         self.update_image_preview()
         self.update_preview()
 
-        self.status_label.setText(
-            "Image selected. Press Apply to update Discord."
-        )
+        if (
+            source_pixmap.width()
+            and source_pixmap.height()
+            and source_pixmap.width() != source_pixmap.height()
+        ):
+            self.status_label.setText(
+                "Image selected. Square artwork works best on Discord. Press Apply to update Discord."
+            )
+        else:
+            self.status_label.setText(
+                "Image selected. Press Apply to update Discord."
+            )
 
     def remove_image(self):
         remove_mode_image(
@@ -1879,7 +1959,7 @@ class PresencePage(QWidget):
 
             self.image_name.setText("")
             self.image_details.setText(
-                "Choose an image to copy it into the local artwork folder."
+                "PNG, JPG, JPEG, or WEBP ? max 10 MB ? square works best for Discord."
             )
             self.open_image_button.setEnabled(False)
             self.remove_image_button.setEnabled(False)
