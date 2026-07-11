@@ -9,6 +9,12 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
+from src.discord.presence_presets import (
+    MAX_PRESETS as PRESENCE_PRESET_MAX_PRESETS,
+    SCHEMA_VERSION as PRESENCE_PRESET_STORAGE_SCHEMA_VERSION,
+    PresencePresetStore,
+    preset_from_dict,
+)
 from src.artwork.cloudinary_preferences import (
     CloudinaryPreferences,
     CloudinaryPreferencesStore,
@@ -41,7 +47,7 @@ from src.ui.theme import (
 
 
 BACKUP_KIND = "0337am-presence-settings"
-BACKUP_SCHEMA_VERSION = 2
+BACKUP_SCHEMA_VERSION = 3
 MAX_BACKUP_BYTES = 1024 * 1024
 
 _COLOUR_PATTERN = re.compile(
@@ -88,6 +94,7 @@ class SettingsBackupManager:
         cloudinary_store: CloudinaryPreferencesStore | None = None,
         dashboard_store: DashboardLayoutStore | None = None,
         custom_card_store: CustomCardStore | None = None,
+        presence_preset_store: PresencePresetStore | None = None,
     ):
         self.settings = (
             settings
@@ -120,6 +127,11 @@ class SettingsBackupManager:
         self.custom_card_store = (
             custom_card_store
             or CustomCardStore()
+        )
+
+        self.presence_preset_store = (
+            presence_preset_store
+            or PresencePresetStore()
         )
 
     @staticmethod
@@ -192,6 +204,7 @@ class SettingsBackupManager:
                     "listening_history",
                     "artwork_cache",
                     "link_card_icon_cache",
+                    "presence_preset_images",
                     "oauth_tokens",
                     "api_credentials",
                     "diagnostics",
@@ -251,6 +264,9 @@ class SettingsBackupManager:
                 ),
                 "custom_cards": (
                     self._capture_custom_cards()
+                ),
+                "presence_presets": (
+                    self._capture_presence_presets()
                 ),
                 "artwork_hosting": (
                     artwork_hosting
@@ -551,6 +567,14 @@ class SettingsBackupManager:
             )
         )
 
+        presence_presets = (
+            cls._validate_presence_presets(
+                settings.get(
+                    "presence_presets"
+                )
+            )
+        )
+
         cls._validate_custom_layout_membership(
             dashboard_layout,
             custom_cards,
@@ -590,6 +614,7 @@ class SettingsBackupManager:
                     "listening_history",
                     "artwork_cache",
                     "link_card_icon_cache",
+                    "presence_preset_images",
                     "oauth_tokens",
                     "api_credentials",
                     "diagnostics",
@@ -614,6 +639,9 @@ class SettingsBackupManager:
                 "custom_cards": (
                     custom_cards
                 ),
+                "presence_presets": (
+                    presence_presets
+                ),
                 "artwork_hosting": (
                     artwork_hosting
                 ),
@@ -633,6 +661,27 @@ class SettingsBackupManager:
                 card.to_dict()
                 for card in cards
             ],
+        }
+
+    def _capture_presence_presets(
+        self,
+    ) -> dict:
+        presets = []
+
+        for preset in self.presence_preset_store.load():
+            data = preset.to_dict()
+
+            # Presence preset image files and local image paths
+            # are deliberately excluded from portable backups.
+            data["image_path"] = ""
+            presets.append(data)
+
+        return {
+            "schema_version": (
+                PRESENCE_PRESET_STORAGE_SCHEMA_VERSION
+            ),
+            "images_included": False,
+            "presets": presets,
         }
 
     def _capture_theme(self) -> dict:
@@ -790,6 +839,19 @@ class SettingsBackupManager:
 
         self.custom_card_store.save(
             custom_cards
+        )
+
+        presence_presets = tuple(
+            preset_from_dict(
+                item
+            )
+            for item in settings[
+                "presence_presets"
+            ]["presets"]
+        )
+
+        self.presence_preset_store.save(
+            presence_presets
         )
 
         self.dashboard_store.save(
@@ -1234,6 +1296,127 @@ class SettingsBackupManager:
             "cards": [
                 card.to_dict()
                 for card in cards
+            ],
+        }
+
+    @classmethod
+    def _validate_presence_presets(
+        cls,
+        value,
+    ) -> dict:
+        if value is None:
+            value = {
+                "schema_version": (
+                    PRESENCE_PRESET_STORAGE_SCHEMA_VERSION
+                ),
+                "images_included": False,
+                "presets": [],
+            }
+
+        payload = cls._require_object(
+            value,
+            "presence_presets",
+        )
+
+        schema_version = cls._require_integer(
+            payload.get(
+                "schema_version"
+            ),
+            "presence_presets.schema_version",
+            minimum=1,
+            maximum=PRESENCE_PRESET_STORAGE_SCHEMA_VERSION,
+        )
+
+        if (
+            schema_version
+            != PRESENCE_PRESET_STORAGE_SCHEMA_VERSION
+        ):
+            raise SettingsBackupValidationError(
+                "The presence preset backup "
+                "version is not supported."
+            )
+
+        if "images_included" in payload:
+            images_included = cls._require_boolean(
+                payload.get("images_included"),
+                "presence_presets.images_included",
+            )
+        else:
+            images_included = False
+
+        if images_included:
+            raise SettingsBackupValidationError(
+                "Presence preset image backups are "
+                "not supported yet."
+            )
+
+        presets_payload = payload.get(
+            "presets",
+            [],
+        )
+
+        if not isinstance(
+            presets_payload,
+            list,
+        ):
+            raise SettingsBackupValidationError(
+                "Presence presets must be a list."
+            )
+
+        if len(presets_payload) > PRESENCE_PRESET_MAX_PRESETS:
+            raise SettingsBackupValidationError(
+                "The backup contains too many "
+                "presence presets."
+            )
+
+        presets = []
+
+        try:
+            for item in presets_payload:
+                if not isinstance(item, dict):
+                    raise TypeError(
+                        "Presence preset entries "
+                        "must be objects."
+                    )
+
+                if str(
+                    item.get(
+                        "image_path",
+                        "",
+                    )
+                    or ""
+                ).strip():
+                    raise ValueError(
+                        "Presence preset backups "
+                        "cannot contain local "
+                        "image paths."
+                    )
+
+                safe_item = dict(item)
+                safe_item["image_path"] = ""
+                presets.append(
+                    preset_from_dict(
+                        safe_item
+                    )
+                )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The presence presets in the "
+                "backup are invalid."
+            ) from error
+
+        return {
+            "schema_version": (
+                PRESENCE_PRESET_STORAGE_SCHEMA_VERSION
+            ),
+            "images_included": False,
+            "presets": [
+                preset.to_dict()
+                for preset in presets
             ],
         }
 
