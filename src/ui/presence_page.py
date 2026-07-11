@@ -3,6 +3,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import (
     Qt,
+    pyqtSignal,
     pyqtSlot,
 )
 from PyQt6.QtGui import QPixmap
@@ -37,6 +38,8 @@ from src.ui.theme import ThemeManager
 
 
 class PresencePage(QWidget):
+    presets_changed = pyqtSignal()
+
     def __init__(
         self,
         controller,
@@ -240,6 +243,9 @@ class PresencePage(QWidget):
         self.duplicate_preset_button = QPushButton(
             "Duplicate"
         )
+        self.rename_preset_button = QPushButton(
+            "Rename"
+        )
         self.pin_preset_button = QPushButton(
             "Pin"
         )
@@ -252,6 +258,7 @@ class PresencePage(QWidget):
             self.save_preset_button,
             self.update_preset_button,
             self.duplicate_preset_button,
+            self.rename_preset_button,
             self.pin_preset_button,
             self.delete_preset_button,
         ):
@@ -692,6 +699,9 @@ class PresencePage(QWidget):
         self.duplicate_preset_button.clicked.connect(
             self.duplicate_selected_preset
         )
+        self.rename_preset_button.clicked.connect(
+            self.rename_selected_preset
+        )
         self.pin_preset_button.clicked.connect(
             self.toggle_selected_preset_pin
         )
@@ -830,6 +840,7 @@ class PresencePage(QWidget):
             self.apply_preset_button,
             self.update_preset_button,
             self.duplicate_preset_button,
+            self.rename_preset_button,
             self.pin_preset_button,
             self.delete_preset_button,
         ):
@@ -845,9 +856,18 @@ class PresencePage(QWidget):
             self.pin_preset_button.setText(
                 "Pin"
             )
-            self.preset_help.setText(
-                "Save a full presence setup and apply it again later."
+            preset_count = max(
+                self.preset_box.count() - 1,
+                0,
             )
+            if preset_count:
+                self.preset_help.setText(
+                    "Choose a saved preset or save the current setup."
+                )
+            else:
+                self.preset_help.setText(
+                    "No presets yet. Use Save current to create one."
+                )
             return
 
         self.pin_preset_button.setText(
@@ -912,6 +932,7 @@ class PresencePage(QWidget):
             self.refresh_preset_box(
                 preset.preset_id
             )
+            self.presets_changed.emit()
             self.status_label.setText(
                 f"Preset saved: {preset.name}"
             )
@@ -1010,8 +1031,53 @@ class PresencePage(QWidget):
             self.refresh_preset_box(
                 updated.preset_id
             )
+            self.presets_changed.emit()
             self.status_label.setText(
                 f"Preset updated: {updated.name}"
+            )
+
+        except PresencePresetError as error:
+            self.status_label.setText(
+                str(error)
+            )
+
+    def rename_selected_preset(self):
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        name, accepted = QInputDialog.getText(
+            self,
+            "Rename presence preset",
+            "Preset name:",
+            text=preset.name,
+        )
+
+        if not accepted:
+            return
+
+        name = name.strip()
+
+        if not name:
+            self.status_label.setText(
+                "Preset name cannot be empty."
+            )
+            return
+
+        try:
+            updated = self.preset_store.upsert(
+                replace(
+                    preset,
+                    name=name,
+                )
+            )
+            self.refresh_preset_box(
+                updated.preset_id
+            )
+            self.presets_changed.emit()
+            self.status_label.setText(
+                f"Preset renamed: {updated.name}"
             )
 
         except PresencePresetError as error:
@@ -1032,6 +1098,7 @@ class PresencePage(QWidget):
             self.refresh_preset_box(
                 duplicate.preset_id
             )
+            self.presets_changed.emit()
             self.status_label.setText(
                 f"Preset duplicated: {duplicate.name}"
             )
@@ -1055,6 +1122,7 @@ class PresencePage(QWidget):
             self.refresh_preset_box(
                 updated.preset_id
             )
+            self.presets_changed.emit()
             state = (
                 "Pinned"
                 if updated.pinned
@@ -1088,6 +1156,7 @@ class PresencePage(QWidget):
             preset.preset_id
         ):
             self.refresh_preset_box()
+            self.presets_changed.emit()
             self.status_label.setText(
                 f"Preset deleted: {preset.name}"
             )

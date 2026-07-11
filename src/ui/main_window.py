@@ -530,6 +530,16 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def refresh_dashboard_quick_access(self):
+        refresh_quick_access = getattr(
+            self.dashboard_page,
+            "refresh_quick_access_buttons",
+            None,
+        )
+
+        if callable(refresh_quick_access):
+            refresh_quick_access(force=True)
+
     def apply_presence_preset_from_dashboard(
         self,
         preset_id: str,
@@ -1264,6 +1274,9 @@ class MainWindow(QMainWindow):
 
         self.dashboard_page.apply_presence_preset_requested.connect(
             self.apply_presence_preset_from_dashboard
+        )
+        self.presence_page.presets_changed.connect(
+            self.refresh_dashboard_quick_access
         )
 
         self.settings_page.show_portrait_changed.connect(
