@@ -12,6 +12,7 @@ from PyQt6.QtCore import (
     QUrl,
     QThread,
     QTimer,
+    QSettings,
     QSignalBlocker,
     pyqtSignal,
     pyqtSlot,
@@ -203,6 +204,16 @@ class DashboardPage(QWidget):
         self._dashboard_resize_original_geometry = None
 
         self._dashboard_editor_outline = None
+
+        self.dashboard_snap_settings = QSettings()
+        self.dashboard_snap_grid_size = 24
+        self.dashboard_snap_to_grid = bool(
+            self.dashboard_snap_settings.value(
+                "dashboard/snap_to_grid",
+                True,
+                type=bool,
+            )
+        )
 
         self._recent_track_fetch_limit = 24
         self._recent_tracks = []
@@ -1638,6 +1649,18 @@ class DashboardPage(QWidget):
             ),
         )
 
+        clamped_x = self.snap_dashboard_pixel_value(
+            clamped_x,
+            0,
+            maximum_x,
+        )
+
+        clamped_y = self.snap_dashboard_pixel_value(
+            clamped_y,
+            0,
+            maximum_y,
+        )
+
         card.move(
             clamped_x,
             clamped_y,
@@ -1999,6 +2022,18 @@ class DashboardPage(QWidget):
                 minimum_height,
                 requested_height,
             ),
+        )
+
+        width = self.snap_dashboard_pixel_value(
+            width,
+            minimum_width,
+            maximum_width,
+        )
+
+        height = self.snap_dashboard_pixel_value(
+            height,
+            minimum_height,
+            maximum_height,
         )
 
         card.resize(
@@ -2508,6 +2543,24 @@ class DashboardPage(QWidget):
             self.layout_profiles_menu
         )
 
+        self.layout_snap_button = QPushButton(
+            "Snap: On"
+        )
+        self.layout_snap_button.setObjectName(
+            "layoutControlButton"
+        )
+        self.layout_snap_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_snap_button.setCheckable(True)
+        self.layout_snap_button.setToolTip(
+            "Snap cards to a tidy grid while moving or resizing"
+        )
+        self.layout_snap_button.toggled.connect(
+            self.set_dashboard_snap_enabled
+        )
+        self.update_dashboard_snap_button()
+
         self.layout_add_card_button = QPushButton(
             "Add card  ▾"
         )
@@ -2620,6 +2673,9 @@ class DashboardPage(QWidget):
             self.layout_profiles_button
         )
         toolbar_layout.addWidget(
+            self.layout_snap_button
+        )
+        toolbar_layout.addWidget(
             self.layout_add_card_button
         )
         toolbar_layout.addWidget(
@@ -2632,6 +2688,90 @@ class DashboardPage(QWidget):
             self.layout_lock_button
         )
 
+
+    def set_dashboard_snap_enabled(
+        self,
+        enabled: bool,
+    ):
+        self.dashboard_snap_to_grid = bool(
+            enabled
+        )
+
+        self.dashboard_snap_settings.setValue(
+            "dashboard/snap_to_grid",
+            self.dashboard_snap_to_grid,
+        )
+
+        self.update_dashboard_snap_button()
+
+    def update_dashboard_snap_button(self):
+        button = getattr(
+            self,
+            "layout_snap_button",
+            None,
+        )
+
+        if button is None:
+            return
+
+        blocker = QSignalBlocker(
+            button
+        )
+
+        button.setChecked(
+            self.dashboard_snap_to_grid
+        )
+
+        button.setText(
+            "Snap: On"
+            if self.dashboard_snap_to_grid
+            else "Snap: Off"
+        )
+
+        button.setToolTip(
+            "Cards snap to a 24px grid while moving or resizing"
+            if self.dashboard_snap_to_grid
+            else "Cards move and resize freely"
+        )
+
+        del blocker
+
+    def snap_dashboard_pixel_value(
+        self,
+        value: int,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        value = min(
+            maximum,
+            max(
+                minimum,
+                int(value),
+            ),
+        )
+
+        if not self.dashboard_snap_to_grid:
+            return value
+
+        grid_size = max(
+            1,
+            int(
+                self.dashboard_snap_grid_size
+            ),
+        )
+
+        snapped = int(
+            round(value / grid_size)
+            * grid_size
+        )
+
+        return min(
+            maximum,
+            max(
+                minimum,
+                snapped,
+            ),
+        )
 
     def register_dashboard_visibility_action(
         self,
@@ -3825,6 +3965,11 @@ class DashboardPage(QWidget):
         self.layout_profiles_button.setEnabled(
             not locked
         )
+        self.layout_snap_button.setEnabled(
+            not locked
+        )
+        self.update_dashboard_snap_button()
+
         self.layout_add_card_button.setEnabled(
             not locked
         )
