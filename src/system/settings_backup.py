@@ -22,9 +22,16 @@ from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
 from src.system.startup import StartupManager
+from src.ui.custom_cards import (
+    SCHEMA_VERSION as CUSTOM_CARD_STORAGE_SCHEMA_VERSION,
+    CustomCardStore,
+    custom_card_from_dict,
+    validate_custom_cards,
+)
 from src.ui.dashboard_layout import (
     DashboardLayout,
     DashboardLayoutStore,
+    is_custom_dashboard_card_id,
 )
 from src.ui.theme import (
     DEFAULT_BRANDING,
@@ -34,7 +41,7 @@ from src.ui.theme import (
 
 
 BACKUP_KIND = "0337am-presence-settings"
-BACKUP_SCHEMA_VERSION = 1
+BACKUP_SCHEMA_VERSION = 2
 MAX_BACKUP_BYTES = 1024 * 1024
 
 _COLOUR_PATTERN = re.compile(
@@ -80,6 +87,7 @@ class SettingsBackupManager:
         afk_store: AfkPreferencesStore | None = None,
         cloudinary_store: CloudinaryPreferencesStore | None = None,
         dashboard_store: DashboardLayoutStore | None = None,
+        custom_card_store: CustomCardStore | None = None,
     ):
         self.settings = (
             settings
@@ -107,6 +115,11 @@ class SettingsBackupManager:
         self.dashboard_store = (
             dashboard_store
             or DashboardLayoutStore()
+        )
+
+        self.custom_card_store = (
+            custom_card_store
+            or CustomCardStore()
         )
 
     @staticmethod
@@ -178,6 +191,7 @@ class SettingsBackupManager:
                 "excluded": [
                     "listening_history",
                     "artwork_cache",
+                    "link_card_icon_cache",
                     "oauth_tokens",
                     "api_credentials",
                     "diagnostics",
@@ -234,6 +248,9 @@ class SettingsBackupManager:
                 },
                 "dashboard_layout": (
                     dashboard.to_dict()
+                ),
+                "custom_cards": (
+                    self._capture_custom_cards()
                 ),
                 "artwork_hosting": (
                     artwork_hosting
@@ -445,15 +462,6 @@ class SettingsBackupManager:
             maximum=BACKUP_SCHEMA_VERSION,
         )
 
-        if (
-            schema_version
-            != BACKUP_SCHEMA_VERSION
-        ):
-            raise SettingsBackupValidationError(
-                "This settings backup version is "
-                "not supported."
-            )
-
         created_at = cls._require_text(
             payload.get(
                 "created_at"
@@ -535,6 +543,19 @@ class SettingsBackupManager:
                 "backup is invalid."
             ) from error
 
+        custom_cards = (
+            cls._validate_custom_cards(
+                settings.get(
+                    "custom_cards"
+                )
+            )
+        )
+
+        cls._validate_custom_layout_membership(
+            dashboard_layout,
+            custom_cards,
+        )
+
         artwork_hosting = (
             cls._validate_artwork_hosting(
                 settings.get(
@@ -568,6 +589,7 @@ class SettingsBackupManager:
                 "excluded": [
                     "listening_history",
                     "artwork_cache",
+                    "link_card_icon_cache",
                     "oauth_tokens",
                     "api_credentials",
                     "diagnostics",
@@ -589,10 +611,28 @@ class SettingsBackupManager:
                 "dashboard_layout": (
                     dashboard_layout.to_dict()
                 ),
+                "custom_cards": (
+                    custom_cards
+                ),
                 "artwork_hosting": (
                     artwork_hosting
                 ),
             },
+        }
+
+    def _capture_custom_cards(
+        self,
+    ) -> dict:
+        cards = self.custom_card_store.load()
+
+        return {
+            "schema_version": (
+                CUSTOM_CARD_STORAGE_SCHEMA_VERSION
+            ),
+            "cards": [
+                card.to_dict()
+                for card in cards
+            ],
         }
 
     def _capture_theme(self) -> dict:
@@ -737,6 +777,19 @@ class SettingsBackupManager:
                     ]["timeout_minutes"]
                 ),
             )
+        )
+
+        custom_cards = tuple(
+            custom_card_from_dict(
+                item
+            )
+            for item in settings[
+                "custom_cards"
+            ]["cards"]
+        )
+
+        self.custom_card_store.save(
+            custom_cards
         )
 
         self.dashboard_store.save(
@@ -1105,6 +1158,119 @@ class SettingsBackupManager:
                 )
             ),
         }
+
+    @classmethod
+    def _validate_custom_cards(
+        cls,
+        value,
+    ) -> dict:
+        if value is None:
+            value = {
+                "schema_version": (
+                    CUSTOM_CARD_STORAGE_SCHEMA_VERSION
+                ),
+                "cards": [],
+            }
+
+        payload = cls._require_object(
+            value,
+            "custom_cards",
+        )
+
+        schema_version = cls._require_integer(
+            payload.get(
+                "schema_version"
+            ),
+            "custom_cards.schema_version",
+            minimum=1,
+            maximum=CUSTOM_CARD_STORAGE_SCHEMA_VERSION,
+        )
+
+        if (
+            schema_version
+            != CUSTOM_CARD_STORAGE_SCHEMA_VERSION
+        ):
+            raise SettingsBackupValidationError(
+                "The custom Link card backup "
+                "version is not supported."
+            )
+
+        cards_payload = payload.get(
+            "cards",
+            [],
+        )
+
+        if not isinstance(
+            cards_payload,
+            list,
+        ):
+            raise SettingsBackupValidationError(
+                "Custom Link cards must be a list."
+            )
+
+        try:
+            cards = validate_custom_cards(
+                tuple(
+                    custom_card_from_dict(
+                        item
+                    )
+                    for item in cards_payload
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The custom Link cards in the "
+                "backup are invalid."
+            ) from error
+
+        return {
+            "schema_version": (
+                CUSTOM_CARD_STORAGE_SCHEMA_VERSION
+            ),
+            "cards": [
+                card.to_dict()
+                for card in cards
+            ],
+        }
+
+    @classmethod
+    def _validate_custom_layout_membership(
+        cls,
+        dashboard_layout: DashboardLayout,
+        custom_cards: dict,
+    ):
+        card_ids = {
+            str(
+                card.get(
+                    "id",
+                    "",
+                )
+            )
+            for card in custom_cards[
+                "cards"
+            ]
+        }
+
+        orphan_layout_ids = [
+            card.card_id
+            for card in dashboard_layout.cards
+            if (
+                is_custom_dashboard_card_id(
+                    card.card_id
+                )
+                and card.card_id not in card_ids
+            )
+        ]
+
+        if orphan_layout_ids:
+            raise SettingsBackupValidationError(
+                "The backup has custom-card layout "
+                "entries without matching Link cards."
+            )
 
     @classmethod
     def _validate_artwork_hosting(

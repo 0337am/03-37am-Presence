@@ -1015,11 +1015,12 @@ class SettingsPage(QWidget):
 
         backup_privacy_help = QLabel(
             (
+                "Custom Link cards are included. "
                 "Listening history, artwork cache, "
-                "OAuth tokens, API credentials, "
-                "diagnostics, local file paths, and "
-                "custom sidebar images are never "
-                "included."
+                "Link-card icon cache, OAuth tokens, "
+                "API credentials, diagnostics, local "
+                "file paths, and custom sidebar images "
+                "are never included."
             )
         )
         backup_privacy_help.setObjectName(
@@ -1730,9 +1731,9 @@ class SettingsPage(QWidget):
                     "\n\n"
                     "The file will contain personal "
                     "account identifiers. API keys, "
-                    "secrets, tokens, history, and "
-                    "cached artwork are still "
-                    "excluded."
+                    "secrets, tokens, history, cached "
+                    "artwork, and Link-card icons are "
+                    "still excluded."
                     "\n\n"
                     "Continue?"
                 ),
@@ -1874,11 +1875,13 @@ class SettingsPage(QWidget):
                 "This will replace your theme, "
                 "branding text, media sources, "
                 "Auto AFK settings, dashboard "
-                "layout, window preferences, and "
-                "Windows startup preference."
+                "layout, custom Link cards, window "
+                "preferences, and Windows startup "
+                "preference."
                 "\n\n"
-                "Listening history and artwork "
-                "cache will not be changed."
+                "Listening history, artwork cache, "
+                "and Link-card icon cache will not "
+                "be changed."
                 + personal_note
                 + (
                     "\n\nA private local safety "
