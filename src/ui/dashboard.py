@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMenu,
     QMessageBox,
@@ -73,6 +74,11 @@ from src.ui.dashboard_layout import (
     preset_layout,
     resize_card_freeform,
     validate_layout,
+)
+from src.ui.dashboard_profiles import (
+    DashboardLayoutProfile,
+    DashboardLayoutProfileStore,
+    validate_profile_name,
 )
 from src.ui.link_cards import (
     LinkCardDialog,
@@ -148,6 +154,10 @@ class DashboardPage(QWidget):
 
         self.dashboard_layout_store = (
             DashboardLayoutStore()
+        )
+
+        self.dashboard_profile_store = (
+            DashboardLayoutProfileStore()
         )
 
         self.dashboard_layout_state = (
@@ -2476,6 +2486,27 @@ class DashboardPage(QWidget):
             self.apply_dashboard_preset
         )
 
+        self.layout_profiles_button = QPushButton(
+            "Profiles  ▾"
+        )
+        self.layout_profiles_button.setObjectName(
+            "layoutMenuButton"
+        )
+        self.layout_profiles_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_profiles_button.setToolTip(
+            "Save, apply, or delete dashboard layout profiles"
+        )
+        self.layout_profiles_menu = QMenu(
+            self.layout_profiles_button
+        )
+        self.layout_profiles_menu.aboutToShow.connect(
+            self.populate_dashboard_profiles_menu
+        )
+        self.layout_profiles_button.setMenu(
+            self.layout_profiles_menu
+        )
 
         self.layout_add_card_button = QPushButton(
             "Add card  ▾"
@@ -2584,6 +2615,9 @@ class DashboardPage(QWidget):
         toolbar_layout.addStretch()
         toolbar_layout.addWidget(
             self.layout_preset_combo
+        )
+        toolbar_layout.addWidget(
+            self.layout_profiles_button
         )
         toolbar_layout.addWidget(
             self.layout_add_card_button
@@ -2755,6 +2789,290 @@ class DashboardPage(QWidget):
             cards=layout.cards + custom_layouts,
             preset="Custom",
         )
+
+    def dashboard_profile_layout_for_current_cards(
+        self,
+        layout: DashboardLayout,
+    ) -> DashboardLayout:
+        current_custom_layouts = {
+            card.card_id: card
+            for card in self.dashboard_layout_state.cards
+            if is_custom_dashboard_card_id(
+                card.card_id
+            )
+        }
+
+        merged_cards = []
+        used_custom_ids = set()
+
+        for card in layout.cards:
+            if is_custom_dashboard_card_id(
+                card.card_id
+            ):
+                if card.card_id not in self.custom_cards:
+                    continue
+
+                used_custom_ids.add(
+                    card.card_id
+                )
+
+            merged_cards.append(
+                card
+            )
+
+        for card_id in self.custom_cards:
+            if card_id in used_custom_ids:
+                continue
+
+            current_layout = current_custom_layouts.get(
+                card_id
+            )
+
+            if current_layout is None:
+                current_layout = (
+                    self.default_custom_card_layout(
+                        card_id,
+                        existing_cards=merged_cards,
+                    )
+                )
+
+            merged_cards.append(
+                current_layout
+            )
+            used_custom_ids.add(
+                card_id
+            )
+
+        return validate_layout(
+            replace(
+                layout,
+                cards=tuple(
+                    merged_cards
+                ),
+            )
+        )
+
+    def populate_dashboard_profiles_menu(
+        self,
+    ):
+        self.layout_profiles_menu.clear()
+
+        save_action = self.layout_profiles_menu.addAction(
+            "💾  Save current layout..."
+        )
+        save_action.triggered.connect(
+            self.save_current_dashboard_profile
+        )
+
+        profiles = self.dashboard_profile_store.load()
+
+        self.layout_profiles_menu.addSeparator()
+
+        apply_menu = self.layout_profiles_menu.addMenu(
+            "Apply saved profile"
+        )
+        delete_menu = self.layout_profiles_menu.addMenu(
+            "Delete saved profile"
+        )
+
+        if not profiles:
+            empty_apply = apply_menu.addAction(
+                "No saved profiles"
+            )
+            empty_apply.setEnabled(False)
+
+            empty_delete = delete_menu.addAction(
+                "No saved profiles"
+            )
+            empty_delete.setEnabled(False)
+            return
+
+        for profile in profiles:
+            apply_action = apply_menu.addAction(
+                profile.name
+            )
+            apply_action.triggered.connect(
+                lambda checked=False,
+                name=profile.name:
+                self.apply_dashboard_profile(
+                    name
+                )
+            )
+
+            delete_action = delete_menu.addAction(
+                profile.name
+            )
+            delete_action.triggered.connect(
+                lambda checked=False,
+                name=profile.name:
+                self.delete_dashboard_profile(
+                    name
+                )
+            )
+
+    def save_current_dashboard_profile(
+        self,
+    ):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        name, accepted = QInputDialog.getText(
+            self,
+            "Save dashboard profile",
+            "Profile name:",
+        )
+
+        if not accepted:
+            return
+
+        try:
+            profile_name = validate_profile_name(
+                name
+            )
+        except ValueError as error:
+            QMessageBox.warning(
+                self,
+                "Profile not saved",
+                str(error),
+            )
+            return
+
+        existing_names = {
+            profile.name.casefold()
+            for profile in self.dashboard_profile_store.load()
+        }
+
+        if profile_name.casefold() in existing_names:
+            answer = QMessageBox.question(
+                self,
+                "Replace dashboard profile",
+                (
+                    f'Replace the saved "{profile_name}" '
+                    "dashboard profile?"
+                ),
+                (
+                    QMessageBox.StandardButton.Yes
+                    | QMessageBox.StandardButton.No
+                ),
+                QMessageBox.StandardButton.No,
+            )
+
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        profile_layout = replace(
+            self.dashboard_layout_state,
+            preset=f"Profile: {profile_name}",
+        )
+
+        try:
+            self.dashboard_profile_store.upsert(
+                DashboardLayoutProfile(
+                    name=profile_name,
+                    layout=profile_layout,
+                )
+            )
+        except (OSError, TypeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "Profile not saved",
+                str(error),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Dashboard profile saved",
+            f'Saved "{profile_name}".',
+        )
+
+    def apply_dashboard_profile(
+        self,
+        profile_name: str,
+    ):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        try:
+            profile = self.dashboard_profile_store.get(
+                profile_name
+            )
+            layout = (
+                self.dashboard_profile_layout_for_current_cards(
+                    profile.layout
+                )
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "Profile not applied",
+                str(error),
+            )
+            self.sync_dashboard_layout_controls()
+            return
+
+        layout = replace(
+            layout,
+            locked=(
+                self.dashboard_layout_state.locked
+            ),
+            preset=f"Profile: {profile.name}",
+        )
+
+        self.apply_dashboard_layout(
+            layout,
+            persist=True,
+        )
+
+    def delete_dashboard_profile(
+        self,
+        profile_name: str,
+    ):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        try:
+            profile_name = validate_profile_name(
+                profile_name
+            )
+        except ValueError as error:
+            QMessageBox.warning(
+                self,
+                "Profile not deleted",
+                str(error),
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete dashboard profile",
+            (
+                f'Delete the saved "{profile_name}" '
+                "dashboard profile?"
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            self.dashboard_profile_store.delete(
+                profile_name
+            )
+        except (OSError, TypeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "Profile not deleted",
+                str(error),
+            )
 
     def add_link_card(self):
         if self.dashboard_layout_state.locked:
@@ -3502,6 +3820,9 @@ class DashboardPage(QWidget):
         )
 
         self.layout_preset_combo.setEnabled(
+            not locked
+        )
+        self.layout_profiles_button.setEnabled(
             not locked
         )
         self.layout_add_card_button.setEnabled(
