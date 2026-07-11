@@ -1,21 +1,24 @@
 # 03:37am Presence
 
-03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live dashboard, listening history, automatic AFK handling, custom themes, personal artwork hosting, and privacy-aware settings backup and restore.
+03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link cards, listening history, automatic AFK handling, custom themes, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.1.0 highlights
+## v2.2.0 highlights
 
-- A freeform dashboard canvas with movable, resizable, overlapping, hideable, and lockable cards.
-- Responsive Recently Played and Quick Access cards that adapt to their available space.
-- Optional personal Cloudinary artwork hosting for music and custom presences.
-- Paused tracks remain visible instead of disappearing from Discord.
-- Portable settings backup and restore with validation, rollback, and private-by-default exports.
-- The app remembers the last page you had open.
+- Custom Dashboard Link cards with safe web-only URLs.
+- Optional website favicon fetching, local icon caching, and tiny-card fallbacks.
+- Link card edit, duplicate, delete, hide, restore, move, resize, and overlap controls.
+- Dashboard layout profiles for saving and restoring different card arrangements.
+- Snap-to-grid controls for tidier Dashboard editing.
+- Settings backups now include custom Link cards while excluding local favicon caches.
+- Auto AFK now respects intentional Sleep, Working, AFK, and Disabled modes.
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
 
 ## Core features
 
 - Discord Rich Presence for Spotify and supported browser media.
+- Custom Dashboard Link cards with optional website icons.
+- Dashboard layout profiles and snap-to-grid editing.
 - Custom presence modes and presets.
 - Persistent listening history backed by SQLite.
 - Recently Played artwork caching.
@@ -51,19 +54,20 @@ The supported application entry point is `main.py`.
 2. Start 03:37am Presence.
 3. Play media in Spotify or a supported browser.
 4. Use the Presence page for custom, AFK, streaming, or preset activity modes.
-5. Unlock the Dashboard layout when you want to move, resize, overlap, hide, or reset cards.
+5. Unlock the Dashboard layout when you want to move, resize, overlap, hide, restore, delete, snap, profile, or reset cards.
 6. Use Settings to control themes, media sources, artwork hosting, startup behaviour, storage, diagnostics, and backups.
 
 The About-page thank-you footer can be shown or hidden, but its wording is fixed as part of the application.
 
 ## Settings backup and restore
 
-Settings backups are versioned JSON files. By default they include portable UI, theme, branding text, media-source, Auto AFK, window, startup, and dashboard-layout settings.
+Settings backups are versioned JSON files. By default they include portable UI, theme, branding text, media-source, Auto AFK, window, startup, dashboard-layout, layout-profile, and custom Link-card settings.
 
 The following are always excluded:
 
 - Listening history.
 - Artwork cache files.
+- Link-card favicon/icon cache files.
 - OAuth tokens and API credentials.
 - Diagnostics.
 - Local file paths.
@@ -73,7 +77,7 @@ Artwork-hosting identifiers are excluded unless the user explicitly enables the 
 
 ## Local data and privacy
 
-App-managed data such as the Library database, artwork cache, dashboard layout, logs, and private restore snapshots is stored under:
+App-managed data such as the Library database, artwork cache, Link-card icon cache, dashboard layout, layout profiles, logs, and private restore snapshots is stored under:
 
 ```text
 %LOCALAPPDATA%\0337am Presence

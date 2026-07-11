@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.2.0 - Custom Dashboard Update
+
+Released 11 July 2026.
+
+### Added
+
+- Added custom user-created Link cards for the Dashboard.
+- Added safe web-only Link card destinations with support for `http://` and `https://`.
+- Added Link card editing, duplication, deletion, hiding, restoring, moving, resizing, and overlapping.
+- Added optional website favicon fetching for Link cards, with local caching and tiny-card fallbacks.
+- Added responsive Link card layouts for tiny, small, medium, and large card sizes.
+- Added Dashboard layout profiles so users can save, apply, and delete named layouts.
+- Added snap-to-grid controls for cleaner Dashboard card movement and resizing.
+- Added settings backup and restore support for custom Link cards.
+
+### Improved
+
+- Dashboard customisation now supports user-created cards alongside the built-in Dashboard cards.
+- Settings backups now preserve custom Link cards while still excluding local favicon/icon caches.
+- Layout profiles preserve card positions, sizes, visibility, overlap, order, and custom Link-card placement.
+- Auto AFK now only activates from Music and Custom modes, so Sleep, Working, AFK, and Disabled modes are not overridden automatically.
+- Link cards use the user-entered emoji first, then a fetched website icon, then a domain-letter fallback.
+
+### Privacy and security
+
+- Link cards only support normal web URLs in this release.
+- Unsafe destinations such as local files, scripts, shell commands, executables, private-network redirects, and unsupported URI schemes are rejected.
+- Link-card favicon caches remain local and are excluded from settings backups and public release files.
+- Imported custom Link cards are validated before restore.
+
+### Upgrade notes
+
+- Existing v2.1 Dashboard layouts continue to load normally.
+- Existing settings backups remain restorable.
+- Custom Link cards are included in new v2.2 settings backups.
+- Website favicons may need to be fetched again after restoring settings because icon caches are intentionally not exported.
+
 ## v2.1.0 - Personal Presence Update
 
 Released 9 July 2026.
