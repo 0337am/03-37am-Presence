@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from PyQt6.QtCore import (
@@ -11,8 +12,10 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -24,6 +27,10 @@ from src.discord.presence_modes import (
     PresenceMode,
     remove_mode_image,
     save_mode_image,
+)
+from src.discord.presence_presets import (
+    PresencePresetError,
+    PresencePresetStore,
 )
 from src.ui.theme import ThemeManager
 
@@ -43,6 +50,9 @@ class PresencePage(QWidget):
             theme_manager
             or ThemeManager(self)
         )
+
+        self.preset_store = PresencePresetStore()
+        self._loading_preset_box = False
 
         self.image_path = ""
         self._editor_image_size = 108
@@ -172,6 +182,108 @@ class PresencePage(QWidget):
 
         self.root_layout.addWidget(
             self.mode_card
+        )
+
+        self.presets_card = QFrame()
+        self.presets_card.setObjectName(
+            "presenceCard"
+        )
+
+        presets_layout = QVBoxLayout(
+            self.presets_card
+        )
+        presets_layout.setContentsMargins(
+            16,
+            14,
+            16,
+            14,
+        )
+        presets_layout.setSpacing(8)
+
+        presets_header = QHBoxLayout()
+        presets_header.setSpacing(10)
+
+        presets_label = QLabel(
+            "Presence presets"
+        )
+        presets_label.setObjectName(
+            "fieldTitle"
+        )
+
+        self.preset_box = QComboBox()
+        self.preset_box.setObjectName(
+            "presetBox"
+        )
+        self.preset_box.setMinimumWidth(220)
+
+        presets_header.addWidget(
+            presets_label
+        )
+        presets_header.addStretch()
+        presets_header.addWidget(
+            self.preset_box
+        )
+
+        presets_buttons = QHBoxLayout()
+        presets_buttons.setSpacing(7)
+
+        self.apply_preset_button = QPushButton(
+            "Apply preset"
+        )
+        self.save_preset_button = QPushButton(
+            "Save current"
+        )
+        self.update_preset_button = QPushButton(
+            "Update"
+        )
+        self.duplicate_preset_button = QPushButton(
+            "Duplicate"
+        )
+        self.pin_preset_button = QPushButton(
+            "Pin"
+        )
+        self.delete_preset_button = QPushButton(
+            "Delete"
+        )
+
+        for button in (
+            self.apply_preset_button,
+            self.save_preset_button,
+            self.update_preset_button,
+            self.duplicate_preset_button,
+            self.pin_preset_button,
+            self.delete_preset_button,
+        ):
+            button.setObjectName(
+                "secondaryButton"
+            )
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+            presets_buttons.addWidget(
+                button
+            )
+
+        self.preset_help = QLabel(
+            "Save a full presence setup and apply it again later."
+        )
+        self.preset_help.setObjectName(
+            "presetHelp"
+        )
+        self.preset_help.setWordWrap(True)
+
+        presets_layout.addLayout(
+            presets_header
+        )
+        presets_layout.addLayout(
+            presets_buttons
+        )
+        presets_layout.addWidget(
+            self.preset_help
+        )
+
+        self.root_layout.addWidget(
+            self.presets_card
         )
 
         self.content_row = QHBoxLayout()
@@ -532,6 +644,28 @@ class PresencePage(QWidget):
             self.on_mode_changed
         )
 
+        self.preset_box.currentIndexChanged.connect(
+            self.on_preset_changed
+        )
+        self.apply_preset_button.clicked.connect(
+            self.apply_selected_preset
+        )
+        self.save_preset_button.clicked.connect(
+            self.save_current_as_preset
+        )
+        self.update_preset_button.clicked.connect(
+            self.update_selected_preset
+        )
+        self.duplicate_preset_button.clicked.connect(
+            self.duplicate_selected_preset
+        )
+        self.pin_preset_button.clicked.connect(
+            self.toggle_selected_preset_pin
+        )
+        self.delete_preset_button.clicked.connect(
+            self.delete_selected_preset
+        )
+
         self.title_input.textChanged.connect(
             self.update_preview
         )
@@ -559,6 +693,365 @@ class PresencePage(QWidget):
         self.apply_branding(
             self.theme_manager.branding()
         )
+
+    def refresh_preset_box(
+        self,
+        select_id: str = "",
+    ):
+        previous_id = (
+            select_id
+            or self.selected_preset_id()
+        )
+
+        presets = self.preset_store.load()
+        presets = sorted(
+            presets,
+            key=lambda preset: (
+                not preset.pinned,
+                preset.name.lower(),
+            ),
+        )
+
+        self._loading_preset_box = True
+        self.preset_box.blockSignals(True)
+        self.preset_box.clear()
+        self.preset_box.addItem(
+            "No preset selected",
+            "",
+        )
+
+        for preset in presets:
+            prefix = "? " if preset.pinned else ""
+            self.preset_box.addItem(
+                f"{prefix}{preset.name}",
+                preset.preset_id,
+            )
+
+        index = self.preset_box.findData(
+            previous_id
+        )
+
+        if index < 0:
+            index = 0
+
+        self.preset_box.setCurrentIndex(
+            index
+        )
+        self.preset_box.blockSignals(False)
+        self._loading_preset_box = False
+
+        self.update_preset_buttons()
+
+    def selected_preset_id(self) -> str:
+        if not hasattr(
+            self,
+            "preset_box",
+        ):
+            return ""
+
+        return str(
+            self.preset_box.currentData()
+            or ""
+        )
+
+    def selected_preset(self):
+        preset_id = self.selected_preset_id()
+
+        if not preset_id:
+            return None
+
+        return self.preset_store.get(
+            preset_id
+        )
+
+    def current_editor_presence_mode(
+        self,
+    ) -> PresenceMode:
+        return PresenceMode(
+            mode=self.current_mode,
+            title=self.title_input.text().strip(),
+            message=self.message_input.text().strip(),
+            image_path=self.image_path,
+            show_elapsed=(
+                self.elapsed_box.isChecked()
+            ),
+        )
+
+    def on_preset_changed(self, *_):
+        if self._loading_preset_box:
+            return
+
+        self.update_preset_buttons()
+
+    def update_preset_buttons(self):
+        preset = self.selected_preset()
+        has_preset = preset is not None
+
+        for button in (
+            self.apply_preset_button,
+            self.update_preset_button,
+            self.duplicate_preset_button,
+            self.pin_preset_button,
+            self.delete_preset_button,
+        ):
+            button.setEnabled(
+                has_preset
+            )
+
+        self.save_preset_button.setEnabled(
+            True
+        )
+
+        if preset is None:
+            self.pin_preset_button.setText(
+                "Pin"
+            )
+            self.preset_help.setText(
+                "Save a full presence setup and apply it again later."
+            )
+            return
+
+        self.pin_preset_button.setText(
+            "Unpin" if preset.pinned else "Pin"
+        )
+        self.preset_help.setText(
+            f"Selected: {preset.name} ({MODE_NAMES.get(preset.mode, preset.mode)})"
+        )
+
+    def save_current_as_preset(self):
+        mode_name = MODE_NAMES.get(
+            self.current_mode,
+            self.current_mode.title(),
+        )
+        default_name = (
+            self.title_input.text().strip()
+            or mode_name
+        )
+
+        name, accepted = QInputDialog.getText(
+            self,
+            "Save presence preset",
+            "Preset name:",
+            text=default_name,
+        )
+
+        if not accepted:
+            return
+
+        name = name.strip()
+
+        if not name:
+            self.status_label.setText(
+                "Preset name cannot be empty."
+            )
+            return
+
+        try:
+            presence_mode = (
+                self.current_editor_presence_mode()
+            )
+            preset = self.preset_store.create(
+                name=name,
+                presence_mode=presence_mode,
+            )
+
+            copied_image_path = (
+                self.preset_store.copy_image_for_preset(
+                    presence_mode.image_path,
+                    preset.preset_id,
+                )
+            )
+
+            if copied_image_path:
+                preset = self.preset_store.upsert(
+                    replace(
+                        preset,
+                        image_path=copied_image_path,
+                    )
+                )
+
+            self.refresh_preset_box(
+                preset.preset_id
+            )
+            self.status_label.setText(
+                f"Preset saved: {preset.name}"
+            )
+
+        except PresencePresetError as error:
+            self.status_label.setText(
+                str(error)
+            )
+
+    def apply_selected_preset(self):
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        presence_mode = preset.to_presence_mode()
+        index = self.mode_box.findData(
+            presence_mode.mode
+        )
+
+        if index >= 0:
+            self.mode_box.blockSignals(True)
+            self.mode_box.setCurrentIndex(
+                index
+            )
+            self.mode_box.blockSignals(False)
+
+        self.title_input.blockSignals(True)
+        self.message_input.blockSignals(True)
+        self.elapsed_box.blockSignals(True)
+
+        self.title_input.setText(
+            presence_mode.title
+        )
+        self.message_input.setText(
+            presence_mode.message
+        )
+        self.elapsed_box.setChecked(
+            presence_mode.show_elapsed
+        )
+
+        self.title_input.blockSignals(False)
+        self.message_input.blockSignals(False)
+        self.elapsed_box.blockSignals(False)
+
+        self.image_path = presence_mode.image_path
+
+        self.update_editor_state()
+        self.update_image_preview()
+        self.update_preview()
+
+        self.controller.apply_mode(
+            presence_mode
+        )
+
+        self.status_label.setText(
+            f"Preset applied: {preset.name}"
+        )
+
+    def update_selected_preset(self):
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Update presence preset",
+            f"Replace '{preset.name}' with the current editor values?",
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            presence_mode = (
+                self.current_editor_presence_mode()
+            )
+            copied_image_path = (
+                self.preset_store.copy_image_for_preset(
+                    presence_mode.image_path,
+                    preset.preset_id,
+                )
+            )
+
+            if copied_image_path:
+                presence_mode.image_path = copied_image_path
+
+            updated = self.preset_store.update_from_mode(
+                preset.preset_id,
+                name=preset.name,
+                presence_mode=presence_mode,
+                pinned=preset.pinned,
+            )
+
+            self.refresh_preset_box(
+                updated.preset_id
+            )
+            self.status_label.setText(
+                f"Preset updated: {updated.name}"
+            )
+
+        except PresencePresetError as error:
+            self.status_label.setText(
+                str(error)
+            )
+
+    def duplicate_selected_preset(self):
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        try:
+            duplicate = self.preset_store.duplicate(
+                preset.preset_id
+            )
+            self.refresh_preset_box(
+                duplicate.preset_id
+            )
+            self.status_label.setText(
+                f"Preset duplicated: {duplicate.name}"
+            )
+
+        except PresencePresetError as error:
+            self.status_label.setText(
+                str(error)
+            )
+
+    def toggle_selected_preset_pin(self):
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        try:
+            updated = self.preset_store.set_pinned(
+                preset.preset_id,
+                not preset.pinned,
+            )
+            self.refresh_preset_box(
+                updated.preset_id
+            )
+            state = (
+                "Pinned"
+                if updated.pinned
+                else "Unpinned"
+            )
+            self.status_label.setText(
+                f"{state}: {updated.name}"
+            )
+
+        except PresencePresetError as error:
+            self.status_label.setText(
+                str(error)
+            )
+
+    def delete_selected_preset(self):
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete presence preset",
+            f"Delete '{preset.name}'?",
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        if self.preset_store.delete(
+            preset.preset_id
+        ):
+            self.refresh_preset_box()
+            self.status_label.setText(
+                f"Preset deleted: {preset.name}"
+            )
 
     @pyqtSlot(dict)
     def apply_theme(self, theme: dict):
@@ -648,6 +1141,7 @@ class PresencePage(QWidget):
             }}
 
             QLabel#modeHelp,
+            QLabel#presetHelp,
             QLabel#imageName,
             QLabel#presenceStatus {{
                 color: {theme["muted"]};
@@ -663,6 +1157,7 @@ class PresencePage(QWidget):
             }}
 
             QComboBox#modeBox,
+            QComboBox#presetBox,
             QLineEdit#presenceInput {{
                 color: {theme["text"]};
                 background: {theme["card_alt"]};
@@ -672,7 +1167,8 @@ class PresencePage(QWidget):
                 selection-background-color: {theme["accent"]};
             }}
 
-            QComboBox#modeBox {{
+            QComboBox#modeBox,
+            QComboBox#presetBox {{
                 font-size: 9pt;
             }}
 
@@ -682,12 +1178,15 @@ class PresencePage(QWidget):
 
             QComboBox#modeBox:hover,
             QComboBox#modeBox:focus,
+            QComboBox#presetBox:hover,
+            QComboBox#presetBox:focus,
             QLineEdit#presenceInput:hover,
             QLineEdit#presenceInput:focus {{
                 border: 1px solid {theme["accent"]};
             }}
 
-            QComboBox#modeBox::drop-down {{
+            QComboBox#modeBox::drop-down,
+            QComboBox#presetBox::drop-down {{
                 border: none;
                 width: 22px;
             }}
@@ -836,6 +1335,7 @@ class PresencePage(QWidget):
         self.load_mode(active_mode)
         self.update_editor_state()
         self.update_preview()
+        self.refresh_preset_box()
 
     def on_mode_changed(self, *_):
         self.load_mode(
