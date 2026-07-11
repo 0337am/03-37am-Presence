@@ -3,10 +3,14 @@ from pathlib import Path
 
 from PyQt6.QtCore import (
     Qt,
+    QUrl,
     pyqtSignal,
     pyqtSlot,
 )
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import (
+    QDesktopServices,
+    QPixmap,
+)
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -396,7 +400,7 @@ class PresencePage(QWidget):
         image_layout.setSpacing(8)
 
         image_heading = QLabel(
-            "Custom image"
+            "Artwork manager"
         )
         image_heading.setObjectName(
             "cardHeading"
@@ -425,6 +429,17 @@ class PresencePage(QWidget):
         )
         self.image_name.setWordWrap(True)
 
+        self.image_details = QLabel(
+            "Choose an image to preview it here."
+        )
+        self.image_details.setObjectName(
+            "imageDetails"
+        )
+        self.image_details.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.image_details.setWordWrap(True)
+
         image_buttons = QHBoxLayout()
         image_buttons.setSpacing(7)
 
@@ -435,6 +450,26 @@ class PresencePage(QWidget):
             "secondaryButton"
         )
         self.choose_image_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.open_image_button = QPushButton(
+            "Open image"
+        )
+        self.open_image_button.setObjectName(
+            "secondaryButton"
+        )
+        self.open_image_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.open_artwork_folder_button = QPushButton(
+            "Open folder"
+        )
+        self.open_artwork_folder_button.setObjectName(
+            "secondaryButton"
+        )
+        self.open_artwork_folder_button.setCursor(
             Qt.CursorShape.PointingHandCursor
         )
 
@@ -452,6 +487,12 @@ class PresencePage(QWidget):
             self.choose_image_button
         )
         image_buttons.addWidget(
+            self.open_image_button
+        )
+        image_buttons.addWidget(
+            self.open_artwork_folder_button
+        )
+        image_buttons.addWidget(
             self.remove_image_button
         )
 
@@ -464,6 +505,9 @@ class PresencePage(QWidget):
         )
         image_layout.addWidget(
             self.image_name
+        )
+        image_layout.addWidget(
+            self.image_details
         )
         image_layout.addLayout(
             image_buttons
@@ -721,6 +765,12 @@ class PresencePage(QWidget):
 
         self.choose_image_button.clicked.connect(
             self.choose_image
+        )
+        self.open_image_button.clicked.connect(
+            self.open_selected_image
+        )
+        self.open_artwork_folder_button.clicked.connect(
+            self.open_artwork_folder
         )
         self.remove_image_button.clicked.connect(
             self.remove_image
@@ -1251,6 +1301,7 @@ class PresencePage(QWidget):
             QLabel#modeHelp,
             QLabel#presetHelp,
             QLabel#imageName,
+            QLabel#imageDetails,
             QLabel#presenceStatus {{
                 color: {theme["muted"]};
                 font-size: 10px;
@@ -1511,11 +1562,22 @@ class PresencePage(QWidget):
         self.message_input.setEnabled(editable)
         self.elapsed_box.setEnabled(editable)
 
+        has_image = bool(
+            self.image_path
+            and Path(self.image_path).exists()
+        )
+
         self.choose_image_button.setEnabled(
             editable
         )
-        self.remove_image_button.setEnabled(
+        self.open_image_button.setEnabled(
+            editable and has_image
+        )
+        self.open_artwork_folder_button.setEnabled(
             editable
+        )
+        self.remove_image_button.setEnabled(
+            editable and has_image
         )
 
         mode_name = self.mode_box.currentText()
@@ -1696,6 +1758,71 @@ class PresencePage(QWidget):
             "Music presence enabled."
         )
 
+    def _format_file_size(
+        self,
+        byte_count: int,
+    ) -> str:
+        size = float(byte_count)
+
+        for unit in (
+            "B",
+            "KB",
+            "MB",
+            "GB",
+        ):
+            if size < 1024 or unit == "GB":
+                if unit == "B":
+                    return f"{int(size)} {unit}"
+
+                return f"{size:.1f} {unit}"
+
+            size /= 1024
+
+        return f"{byte_count} B"
+
+    def open_selected_image(self):
+        path = Path(self.image_path)
+
+        if not path.exists():
+            self.status_label.setText(
+                "No artwork image is selected."
+            )
+            return
+
+        opened = QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(path))
+        )
+
+        if opened:
+            self.status_label.setText(
+                "Artwork image opened."
+            )
+        else:
+            self.status_label.setText(
+                "The artwork image could not be opened."
+            )
+
+    def open_artwork_folder(self):
+        PRESENCE_IMAGE_DIRECTORY.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        opened = QDesktopServices.openUrl(
+            QUrl.fromLocalFile(
+                str(PRESENCE_IMAGE_DIRECTORY)
+            )
+        )
+
+        if opened:
+            self.status_label.setText(
+                "Artwork folder opened."
+            )
+        else:
+            self.status_label.setText(
+                "The artwork folder could not be opened."
+            )
+
     def choose_image(self):
         source_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1751,6 +1878,11 @@ class PresencePage(QWidget):
             )
 
             self.image_name.setText("")
+            self.image_details.setText(
+                "Choose an image to copy it into the local artwork folder."
+            )
+            self.open_image_button.setEnabled(False)
+            self.remove_image_button.setEnabled(False)
 
             self.preview_image.clear()
 
@@ -1792,6 +1924,11 @@ class PresencePage(QWidget):
             self.image_name.setText(
                 path.name
             )
+            self.image_details.setText(
+                "This image could not be loaded."
+            )
+            self.open_image_button.setEnabled(False)
+            self.remove_image_button.setEnabled(True)
             return
 
         editor_pixmap = pixmap.scaled(
@@ -1818,9 +1955,22 @@ class PresencePage(QWidget):
             preview_pixmap
         )
 
+        file_size = self._format_file_size(
+            path.stat().st_size
+        )
         self.image_name.setText(
             path.name
         )
+        self.image_details.setText(
+            f"{pixmap.width()} ? {pixmap.height()} px ? {file_size}"
+        )
+
+        editable = self.current_mode not in {
+            "music",
+            "disabled",
+        }
+        self.open_image_button.setEnabled(editable)
+        self.remove_image_button.setEnabled(editable)
 
     def apply_presence(self):
         presence_mode = PresenceMode(
