@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 
 from src.discord.presence_modes import (
     MODE_NAMES,
+    PRESENCE_IMAGE_DIRECTORY,
     PresenceMode,
     remove_mode_image,
     save_mode_image,
@@ -616,6 +617,32 @@ class PresencePage(QWidget):
         )
         self.status_label.setWordWrap(True)
 
+        self.reset_custom_button = QPushButton(
+            "Reset Custom"
+        )
+        self.reset_custom_button.setObjectName(
+            "secondaryButton"
+        )
+        self.reset_custom_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.reset_custom_button.setToolTip(
+            "Clear saved Custom presence text, timer, and image."
+        )
+
+        self.music_mode_button = QPushButton(
+            "Back to Music"
+        )
+        self.music_mode_button.setObjectName(
+            "secondaryButton"
+        )
+        self.music_mode_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.music_mode_button.setToolTip(
+            "Switch back to Music presence."
+        )
+
         self.apply_button = QPushButton(
             "Apply to Discord"
         )
@@ -629,6 +656,12 @@ class PresencePage(QWidget):
         bottom_layout.addWidget(
             self.status_label,
             stretch=1,
+        )
+        bottom_layout.addWidget(
+            self.reset_custom_button
+        )
+        bottom_layout.addWidget(
+            self.music_mode_button
         )
         bottom_layout.addWidget(
             self.apply_button
@@ -681,6 +714,12 @@ class PresencePage(QWidget):
         )
         self.remove_image_button.clicked.connect(
             self.remove_image
+        )
+        self.reset_custom_button.clicked.connect(
+            self.reset_custom_presence
+        )
+        self.music_mode_button.clicked.connect(
+            self.switch_to_music_presence
         )
         self.apply_button.clicked.connect(
             self.apply_presence
@@ -1513,6 +1552,80 @@ class PresencePage(QWidget):
             self.preview_image.setText(
                 mode_name[:5]
             )
+
+    def reset_custom_presence(self):
+        answer = QMessageBox.question(
+            self,
+            "Reset Custom presence",
+            "Clear the saved Custom presence title, message, timer, and image?",
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        store = getattr(
+            self.controller,
+            "store",
+            None,
+        )
+
+        if store is None:
+            self.status_label.setText(
+                "Local presence settings were not available."
+            )
+            return
+
+        old_image_path = str(
+            store.value(
+                "presence/custom/image_path",
+                "",
+            )
+            or ""
+        )
+
+        remove_mode_image(
+            old_image_path
+        )
+
+        if PRESENCE_IMAGE_DIRECTORY.exists():
+            for candidate in PRESENCE_IMAGE_DIRECTORY.glob(
+                "custom.*"
+            ):
+                try:
+                    candidate.unlink()
+                except OSError:
+                    pass
+
+        for key in (
+            "presence/custom/title",
+            "presence/custom/message",
+            "presence/custom/image_path",
+            "presence/custom/show_elapsed",
+        ):
+            store.remove(key)
+
+        store.sync()
+
+        self.controller.apply_mode(
+            PresenceMode(
+                mode="music"
+            )
+        )
+        self.load_active_mode()
+        self.status_label.setText(
+            "Custom presence reset. Music presence is active."
+        )
+
+    def switch_to_music_presence(self):
+        self.controller.apply_mode(
+            PresenceMode(
+                mode="music"
+            )
+        )
+        self.load_active_mode()
+        self.status_label.setText(
+            "Music presence enabled."
+        )
 
     def choose_image(self):
         source_path, _ = QFileDialog.getOpenFileName(
