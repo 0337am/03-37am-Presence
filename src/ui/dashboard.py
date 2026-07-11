@@ -49,6 +49,12 @@ from src.music.song import Song
 from src.music.source_preferences import (
     SourcePreferencesStore,
 )
+from src.discord.presence_modes import (
+    MODE_NAMES,
+)
+from src.discord.presence_presets import (
+    PresencePresetStore,
+)
 from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
@@ -127,6 +133,7 @@ class DashboardPage(QWidget):
     # V2_THREE_COLUMN_POLISH
     navigate_requested = pyqtSignal(int)
     settings_section_requested = pyqtSignal(str)
+    apply_presence_preset_requested = pyqtSignal(str)
 
     def __init__(
         self,
@@ -151,6 +158,10 @@ class DashboardPage(QWidget):
 
         self.afk_preferences_store = (
             AfkPreferencesStore()
+        )
+
+        self.presence_preset_store = (
+            PresencePresetStore()
         )
 
         self.dashboard_layout_store = (
@@ -4702,81 +4713,153 @@ class DashboardPage(QWidget):
             8
         )
 
-        button_definitions = [
-            (
-                "♙",
-                "AFK",
-                "Set AFK presence",
-                1,
-            ),
-            (
-                "✎",
-                "Custom",
-                "Create a presence",
-                1,
-            ),
-            (
-                "★",
-                "Presets",
-                "Manage presence modes",
-                1,
-            ),
-            (
-                "⚙",
-                "Settings",
-                "Configure application",
-                3,
-            ),
-        ]
-
         self.quick_access_buttons = []
-
-        for (
-            icon,
-            title,
-            detail,
-            page_index,
-        ) in button_definitions:
-            button = QPushButton()
-            button.setObjectName(
-                "quickButton"
-            )
-            button.setCursor(
-                Qt.CursorShape.PointingHandCursor
-            )
-            button.setSizePolicy(
-                QSizePolicy.Policy.Expanding,
-                QSizePolicy.Policy.Expanding,
-            )
-            button.setMinimumHeight(0)
-            button.setToolTip(
-                f"{title}: {detail}"
-            )
-
-            button.clicked.connect(
-                lambda checked=False,
-                index=page_index:
-                self.navigate_requested.emit(
-                    index
-                )
-            )
-
-            self.quick_access_buttons.append(
-                {
-                    "button": button,
-                    "icon": icon,
-                    "title": title,
-                    "detail": detail,
-                }
-            )
 
         layout.addLayout(
             self.quick_access_grid,
             stretch=1,
         )
 
-        self.update_quick_access_layout(
+        self.refresh_quick_access_buttons(
             force=True
+        )
+
+    def _make_quick_access_button(
+        self,
+        *,
+        icon: str,
+        title: str,
+        detail: str,
+        callback,
+    ) -> dict:
+        button = QPushButton()
+        button.setObjectName(
+            "quickButton"
+        )
+        button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        button.setMinimumHeight(0)
+        button.setToolTip(
+            f"{title}: {detail}"
+        )
+        button.clicked.connect(callback)
+
+        return {
+            "button": button,
+            "icon": icon,
+            "title": title,
+            "detail": detail,
+        }
+
+    def refresh_quick_access_buttons(
+        self,
+        force: bool = False,
+    ):
+        if not hasattr(
+            self,
+            "quick_access_grid",
+        ):
+            return
+
+        while self.quick_access_grid.count():
+            item = self.quick_access_grid.takeAt(0)
+            widget = item.widget()
+
+            if widget is not None:
+                widget.setParent(None)
+
+        for item in getattr(
+            self,
+            "quick_access_buttons",
+            [],
+        ):
+            button = item.get(
+                "button"
+            )
+
+            if button is not None:
+                button.deleteLater()
+
+        self.quick_access_buttons = []
+
+        page_buttons = [
+            (
+                chr(0x2659),
+                "AFK",
+                "Set AFK presence",
+                1,
+            ),
+            (
+                chr(0x270E),
+                "Custom",
+                "Create a presence",
+                1,
+            ),
+            (
+                chr(0x2605),
+                "Presets",
+                "Manage presence modes",
+                1,
+            ),
+            (
+                chr(0x2699),
+                "Settings",
+                "Configure application",
+                3,
+            ),
+        ]
+
+        for (
+            icon,
+            title,
+            detail,
+            page_index,
+        ) in page_buttons:
+            self.quick_access_buttons.append(
+                self._make_quick_access_button(
+                    icon=icon,
+                    title=title,
+                    detail=detail,
+                    callback=(
+                        lambda checked=False,
+                        index=page_index:
+                        self.navigate_requested.emit(
+                            index
+                        )
+                    ),
+                )
+            )
+
+        for preset in self.presence_preset_store.pinned():
+            mode_name = MODE_NAMES.get(
+                preset.mode,
+                preset.mode.title(),
+            )
+
+            self.quick_access_buttons.append(
+                self._make_quick_access_button(
+                    icon=chr(0x2605),
+                    title=preset.name,
+                    detail=f"Apply {mode_name}",
+                    callback=(
+                        lambda checked=False,
+                        preset_id=preset.preset_id:
+                        self.apply_presence_preset_requested.emit(
+                            preset_id
+                        )
+                    ),
+                )
+            )
+
+        self._quick_access_layout_mode = None
+
+        self.update_quick_access_layout(
+            force=force,
         )
 
     def recent_track_capacity(self) -> int:

@@ -530,6 +530,40 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def apply_presence_preset_from_dashboard(
+        self,
+        preset_id: str,
+    ):
+        preset = self.dashboard_page.presence_preset_store.get(
+            preset_id
+        )
+
+        if preset is None:
+            refresh_quick_access = getattr(
+                self.dashboard_page,
+                "refresh_quick_access_buttons",
+                None,
+            )
+
+            if callable(refresh_quick_access):
+                refresh_quick_access(force=True)
+
+            return
+
+        presence_mode = preset.to_presence_mode()
+        self.presence_controller.apply_mode(
+            presence_mode
+        )
+
+        self.presence_page.load_active_mode()
+        self.presence_page.refresh_preset_box(
+            preset.preset_id
+        )
+        self.dashboard_page.refresh_quick_access_buttons(
+            force=True
+        )
+        self.refresh_discord_status()
+
     def saved_page_index(
         self,
     ) -> int:
@@ -627,6 +661,20 @@ class MainWindow(QMainWindow):
             )
 
             self.settings_page.store.sync()
+
+        if page_index == 0:
+            refresh_quick_access = getattr(
+                self.dashboard_page,
+                "refresh_quick_access_buttons",
+                None,
+            )
+
+            if callable(
+                refresh_quick_access
+            ):
+                refresh_quick_access(
+                    force=True
+                )
 
         if page_index == 3:
             refresh_storage = getattr(
@@ -1212,6 +1260,10 @@ class MainWindow(QMainWindow):
 
         self.dashboard_page.settings_section_requested.connect(
             self.open_settings_section
+        )
+
+        self.dashboard_page.apply_presence_preset_requested.connect(
+            self.apply_presence_preset_from_dashboard
         )
 
         self.settings_page.show_portrait_changed.connect(
