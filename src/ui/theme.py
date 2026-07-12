@@ -18,6 +18,19 @@ BRANDING_DIRECTORY = (
     APP_DATA_DIRECTORY / "branding"
 )
 
+ATMOSPHERE_DIRECTORY = (
+    APP_DATA_DIRECTORY / "atmosphere"
+)
+
+BACKGROUND_IMAGE_MAX_BYTES = 12 * 1024 * 1024
+
+BACKGROUND_IMAGE_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+}
+
 FIXED_ABOUT_FOOTER = (
     "Thank you for using 03:37am Presence ♡"
 )
@@ -44,6 +57,22 @@ DEFAULT_THEME = {
     "muted": "#bca9ce",
     "border": "#5c4777",
     "compact": True,
+}
+
+
+DEFAULT_ATMOSPHERE = {
+    "enabled": False,
+    "image_path": "",
+    "blur": 18,
+    "opacity": 45,
+    "dim": 55,
+}
+
+
+ATMOSPHERE_RANGES = {
+    "blur": (0, 40),
+    "opacity": (0, 100),
+    "dim": (0, 90),
 }
 
 
@@ -103,6 +132,7 @@ THEME_PRESETS = {
 class ThemeManager(QObject):
     theme_changed = pyqtSignal(dict)
     branding_changed = pyqtSignal(dict)
+    atmosphere_changed = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -137,6 +167,79 @@ class ThemeManager(QObject):
                         default,
                     )
                 )
+
+        return values
+
+    @staticmethod
+    def _clamp_integer(
+        value,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            number = int(value)
+        except (
+            TypeError,
+            ValueError,
+        ):
+            number = minimum
+
+        return max(
+            minimum,
+            min(
+                maximum,
+                number,
+            ),
+        )
+
+    def atmosphere(self) -> dict:
+        values = {}
+
+        for key, default in DEFAULT_ATMOSPHERE.items():
+            if key == "enabled":
+                values[key] = self.store.value(
+                    f"atmosphere/{key}",
+                    default,
+                    type=bool,
+                )
+                continue
+
+            if key == "image_path":
+                image_path = str(
+                    self.store.value(
+                        f"atmosphere/{key}",
+                        default,
+                    )
+                    or ""
+                )
+
+                if (
+                    image_path
+                    and not Path(image_path).exists()
+                ):
+                    image_path = ""
+
+                values[key] = image_path
+                continue
+
+            if key in ATMOSPHERE_RANGES:
+                minimum, maximum = ATMOSPHERE_RANGES[
+                    key
+                ]
+                values[key] = self._clamp_integer(
+                    self.store.value(
+                        f"atmosphere/{key}",
+                        default,
+                    ),
+                    minimum,
+                    maximum,
+                )
+                continue
+
+            values[key] = self.store.value(
+                f"atmosphere/{key}",
+                default,
+            )
 
         return values
 
@@ -193,6 +296,40 @@ class ThemeManager(QObject):
             self.theme()
         )
 
+    def set_atmosphere_value(
+        self,
+        key: str,
+        value,
+    ):
+        if key not in DEFAULT_ATMOSPHERE:
+            return
+
+        if key == "enabled":
+            value = bool(value)
+
+        elif key == "image_path":
+            value = str(value or "")
+
+        elif key in ATMOSPHERE_RANGES:
+            minimum, maximum = ATMOSPHERE_RANGES[
+                key
+            ]
+            value = self._clamp_integer(
+                value,
+                minimum,
+                maximum,
+            )
+
+        self.store.setValue(
+            f"atmosphere/{key}",
+            value,
+        )
+
+        self.store.sync()
+        self.atmosphere_changed.emit(
+            self.atmosphere()
+        )
+
     def set_branding_value(
         self,
         key: str,
@@ -239,6 +376,135 @@ class ThemeManager(QObject):
         self.store.sync()
         self.theme_changed.emit(
             self.theme()
+        )
+
+    def validate_background_image_source(
+        self,
+        source_path: str,
+    ) -> tuple[bool, str]:
+        source = Path(source_path)
+
+        if not source.is_file():
+            return (
+                False,
+                "The selected background image could not be found.",
+            )
+
+        if source.suffix.lower() not in BACKGROUND_IMAGE_SUFFIXES:
+            return (
+                False,
+                "Background images must be PNG, JPG, JPEG, or WEBP.",
+            )
+
+        try:
+            byte_count = source.stat().st_size
+        except OSError:
+            return (
+                False,
+                "The selected background image could not be read.",
+            )
+
+        if byte_count > BACKGROUND_IMAGE_MAX_BYTES:
+            return (
+                False,
+                "Background images must be 12 MB or smaller.",
+            )
+
+        return (
+            True,
+            "",
+        )
+
+    def save_background_image(
+        self,
+        source_path: str,
+    ) -> str:
+        valid, _message = self.validate_background_image_source(
+            source_path
+        )
+
+        if not valid:
+            return ""
+
+        source = Path(source_path)
+        suffix = source.suffix.lower()
+
+        try:
+            ATMOSPHERE_DIRECTORY.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            for old_image in ATMOSPHERE_DIRECTORY.glob(
+                "background.*"
+            ):
+                try:
+                    old_image.unlink()
+                except OSError:
+                    pass
+
+            destination = (
+                ATMOSPHERE_DIRECTORY
+                / f"background{suffix}"
+            )
+
+            shutil.copy2(
+                source,
+                destination,
+            )
+
+            self.store.setValue(
+                "atmosphere/image_path",
+                str(destination),
+            )
+            self.store.setValue(
+                "atmosphere/enabled",
+                True,
+            )
+            self.store.sync()
+            self.atmosphere_changed.emit(
+                self.atmosphere()
+            )
+
+            return str(destination)
+
+        except OSError:
+            return ""
+
+    def reset_background_image(self):
+        atmosphere = self.atmosphere()
+        image_path = Path(
+            atmosphere.get(
+                "image_path",
+                "",
+            )
+        )
+
+        if image_path.exists():
+            try:
+                image_path.unlink()
+            except OSError:
+                pass
+
+        for old_image in ATMOSPHERE_DIRECTORY.glob(
+            "background.*"
+        ):
+            try:
+                old_image.unlink()
+            except OSError:
+                pass
+
+        self.store.setValue(
+            "atmosphere/image_path",
+            "",
+        )
+        self.store.setValue(
+            "atmosphere/enabled",
+            False,
+        )
+        self.store.sync()
+        self.atmosphere_changed.emit(
+            self.atmosphere()
         )
 
     def save_branding_image(
@@ -312,6 +578,20 @@ class ThemeManager(QObject):
         self.set_branding_value(
             "image_path",
             "",
+        )
+
+    def reset_atmosphere(self):
+        self.reset_background_image()
+
+        for key, value in DEFAULT_ATMOSPHERE.items():
+            self.store.setValue(
+                f"atmosphere/{key}",
+                value,
+            )
+
+        self.store.sync()
+        self.atmosphere_changed.emit(
+            self.atmosphere()
         )
 
     def reset_theme(self):
