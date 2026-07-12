@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -35,6 +36,8 @@ from src.system.settings_backup import (
     SettingsBackupManager,
 )
 from src.ui.theme import (
+    ATMOSPHERE_RANGES,
+    DEFAULT_ATMOSPHERE,
     DEFAULT_THEME,
     THEME_PRESETS,
     ThemeManager,
@@ -142,6 +145,8 @@ class SettingsPage(QWidget):
         )
 
         self.color_buttons = {}
+        self.atmosphere_sliders = {}
+        self.atmosphere_value_labels = {}
 
         self.source_preferences_store = (
             SourcePreferencesStore()
@@ -177,6 +182,9 @@ class SettingsPage(QWidget):
         )
         self.theme_manager.branding_changed.connect(
             self.refresh_branding_fields
+        )
+        self.theme_manager.atmosphere_changed.connect(
+            self.refresh_atmosphere_fields
         )
 
         self.on_theme_changed(
@@ -529,6 +537,184 @@ class SettingsPage(QWidget):
             )
 
         theme_layout.addLayout(colour_grid)
+
+        atmosphere_card = self.create_card(
+            "Atmosphere",
+            (
+                "Choose a local background image "
+                "and tune how strongly it appears."
+            ),
+        )
+
+        atmosphere_layout = atmosphere_card.layout()
+        current_atmosphere = (
+            self.theme_manager.atmosphere()
+        )
+
+        self.atmosphere_enabled_box = (
+            self.create_checkbox(
+                "Enable custom background",
+                current_atmosphere.get(
+                    "enabled",
+                    DEFAULT_ATMOSPHERE["enabled"],
+                ),
+            )
+        )
+        self.atmosphere_enabled_box.toggled.connect(
+            self.change_atmosphere_enabled
+        )
+
+        atmosphere_help = QLabel(
+            (
+                "Background images stay local on this "
+                "device and are not exported in settings backups."
+            )
+        )
+        atmosphere_help.setObjectName(
+            "helpText"
+        )
+        atmosphere_help.setWordWrap(True)
+
+        atmosphere_button_row = QHBoxLayout()
+        atmosphere_button_row.setSpacing(10)
+
+        self.choose_background_button = QPushButton(
+            "Choose background"
+        )
+        self.choose_background_button.setObjectName(
+            "secondaryButton"
+        )
+        self.choose_background_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.choose_background_button.clicked.connect(
+            self.choose_atmosphere_background
+        )
+
+        self.reset_background_button = QPushButton(
+            "Reset background"
+        )
+        self.reset_background_button.setObjectName(
+            "secondaryButton"
+        )
+        self.reset_background_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.reset_background_button.clicked.connect(
+            self.reset_atmosphere_background
+        )
+
+        atmosphere_button_row.addWidget(
+            self.choose_background_button
+        )
+        atmosphere_button_row.addWidget(
+            self.reset_background_button
+        )
+        atmosphere_button_row.addStretch()
+
+        self.atmosphere_image_label = QLabel()
+        self.atmosphere_image_label.setObjectName(
+            "helpText"
+        )
+        self.atmosphere_image_label.setWordWrap(True)
+
+        atmosphere_layout.addWidget(
+            self.atmosphere_enabled_box
+        )
+        atmosphere_layout.addWidget(
+            atmosphere_help
+        )
+        atmosphere_layout.addLayout(
+            atmosphere_button_row
+        )
+        atmosphere_layout.addWidget(
+            self.atmosphere_image_label
+        )
+
+        atmosphere_controls = (
+            (
+                "blur",
+                "Blur",
+                "px",
+            ),
+            (
+                "opacity",
+                "Image opacity",
+                "%",
+            ),
+            (
+                "dim",
+                "Dim overlay",
+                "%",
+            ),
+        )
+
+        for key, label_text, suffix in atmosphere_controls:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+
+            label = QLabel(label_text)
+            label.setObjectName("fieldLabel")
+            label.setMinimumWidth(110)
+
+            slider = QSlider(
+                Qt.Orientation.Horizontal
+            )
+            slider.setObjectName(
+                "atmosphereSlider"
+            )
+            slider.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+
+            minimum, maximum = ATMOSPHERE_RANGES[key]
+            slider.setRange(
+                minimum,
+                maximum,
+            )
+            slider.setValue(
+                current_atmosphere.get(
+                    key,
+                    DEFAULT_ATMOSPHERE[key],
+                )
+            )
+
+            value_label = QLabel()
+            value_label.setObjectName(
+                "helpText"
+            )
+            value_label.setMinimumWidth(54)
+            value_label.setAlignment(
+                Qt.AlignmentFlag.AlignRight
+                | Qt.AlignmentFlag.AlignVCenter
+            )
+
+            self.atmosphere_sliders[key] = slider
+            self.atmosphere_value_labels[key] = (
+                value_label,
+                suffix,
+            )
+
+            slider.valueChanged.connect(
+                lambda value, slider_key=key:
+                self.change_atmosphere_slider(
+                    slider_key,
+                    value,
+                )
+            )
+
+            row.addWidget(label)
+            row.addWidget(
+                slider,
+                stretch=1,
+            )
+            row.addWidget(value_label)
+
+            atmosphere_layout.addLayout(row)
+
+        self.refresh_atmosphere_fields(
+            current_atmosphere
+        )
 
         source_preferences = (
             self.source_preferences_store.load()
@@ -1273,6 +1459,7 @@ class SettingsPage(QWidget):
 
         root.addWidget(branding)
         root.addWidget(theme_card)
+        root.addWidget(atmosphere_card)
         root.addWidget(sources)
         root.addWidget(
             self.artwork_hosting_card
@@ -1291,6 +1478,7 @@ class SettingsPage(QWidget):
 
         self.settings_sections = {
             "theme": theme_card,
+            "atmosphere": atmosphere_card,
             "media_sources": sources,
             "artwork_hosting": (
                 self.artwork_hosting_card
@@ -2551,6 +2739,143 @@ class SettingsPage(QWidget):
                 "Using the default Yuno image"
             )
 
+    def refresh_atmosphere_fields(
+        self,
+        atmosphere: dict,
+    ):
+        enabled = bool(
+            atmosphere.get(
+                "enabled",
+                False,
+            )
+        )
+        image_path = str(
+            atmosphere.get(
+                "image_path",
+                "",
+            )
+            or ""
+        )
+
+        self.atmosphere_enabled_box.blockSignals(True)
+        self.atmosphere_enabled_box.setChecked(
+            enabled
+        )
+        self.atmosphere_enabled_box.blockSignals(False)
+
+        if image_path:
+            self.atmosphere_image_label.setText(
+                f"Using: {Path(image_path).name}"
+            )
+        else:
+            self.atmosphere_image_label.setText(
+                "No custom background selected."
+            )
+
+        self.reset_background_button.setEnabled(
+            bool(image_path)
+        )
+
+        for key, slider in self.atmosphere_sliders.items():
+            value = int(
+                atmosphere.get(
+                    key,
+                    DEFAULT_ATMOSPHERE[key],
+                )
+            )
+
+            slider.blockSignals(True)
+            slider.setValue(value)
+            slider.setEnabled(enabled)
+            slider.blockSignals(False)
+
+            label, suffix = self.atmosphere_value_labels[
+                key
+            ]
+            label.setText(
+                f"{value}{suffix}"
+            )
+            label.setEnabled(enabled)
+
+    def choose_atmosphere_background(self):
+        selected_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose background image",
+            "",
+            (
+                "Images (*.png *.jpg *.jpeg *.webp);;"
+                "All files (*)"
+            ),
+        )
+
+        if not selected_path:
+            return
+
+        valid, message = (
+            self.theme_manager.validate_background_image_source(
+                selected_path
+            )
+        )
+
+        if not valid:
+            self.status.setText(message)
+            return
+
+        saved_path = (
+            self.theme_manager.save_background_image(
+                selected_path
+            )
+        )
+
+        if not saved_path:
+            self.status.setText(
+                "The selected background could not be saved."
+            )
+            return
+
+        self.status.setText(
+            "Background saved. It will appear when Atmosphere rendering is enabled."
+        )
+
+    def reset_atmosphere_background(self):
+        self.theme_manager.reset_background_image()
+
+        self.status.setText(
+            "Custom background removed."
+        )
+
+    def change_atmosphere_enabled(
+        self,
+        checked: bool,
+    ):
+        self.theme_manager.set_atmosphere_value(
+            "enabled",
+            checked,
+        )
+
+        if checked:
+            self.status.setText(
+                "Atmosphere background enabled."
+            )
+        else:
+            self.status.setText(
+                "Atmosphere background disabled."
+            )
+
+    def change_atmosphere_slider(
+        self,
+        key: str,
+        value: int,
+    ):
+        self.theme_manager.set_atmosphere_value(
+            key,
+            value,
+        )
+
+        self.status.setText(
+            "Atmosphere setting saved."
+        )
+
     def change_theme_preset(
         self,
         preset_name: str,
@@ -2888,6 +3213,30 @@ class SettingsPage(QWidget):
                 selection-background-color: {theme["accent"]};
             }}
 
+            QSlider#atmosphereSlider::groove:horizontal {{
+                height: 7px;
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 4px;
+            }}
+
+            QSlider#atmosphereSlider::handle:horizontal {{
+                width: 18px;
+                height: 18px;
+                margin: -6px 0;
+                background: {theme["accent"]};
+                border: 1px solid {theme["text"]};
+                border-radius: 9px;
+            }}
+
+            QSlider#atmosphereSlider::handle:horizontal:hover {{
+                border: 2px solid {theme["text"]};
+            }}
+
+            QSlider#atmosphereSlider:disabled {{
+                opacity: 0.55;
+            }}
+
             QCheckBox {{
                 color: {theme["text"]};
                 background: {theme["card_alt"]};
@@ -3018,13 +3367,15 @@ class SettingsPage(QWidget):
 
     def reset_theme(self):
         self.theme_manager.reset_theme()
+        self.theme_manager.reset_atmosphere()
 
         self.status.setText(
-            "Theme reset to Yuno."
+            "Theme and Atmosphere reset to default."
         )
 
     def reset_settings(self):
         self.theme_manager.reset_theme()
+        self.theme_manager.reset_atmosphere()
         self.theme_manager.reset_branding()
 
         self.portrait_box.setChecked(True)
