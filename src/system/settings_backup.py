@@ -39,6 +39,13 @@ from src.ui.dashboard_layout import (
     DashboardLayoutStore,
     is_custom_dashboard_card_id,
 )
+from src.ui.dashboard_profiles import (
+    MAX_LAYOUT_PROFILES as DASHBOARD_LAYOUT_PROFILE_MAX_PROFILES,
+    SCHEMA_VERSION as DASHBOARD_LAYOUT_PROFILE_STORAGE_SCHEMA_VERSION,
+    DashboardLayoutProfile,
+    DashboardLayoutProfileStore,
+    validate_profiles,
+)
 from src.ui.theme import (
     DEFAULT_BRANDING,
     DEFAULT_THEME,
@@ -47,7 +54,7 @@ from src.ui.theme import (
 
 
 BACKUP_KIND = "0337am-presence-settings"
-BACKUP_SCHEMA_VERSION = 3
+BACKUP_SCHEMA_VERSION = 4
 MAX_BACKUP_BYTES = 1024 * 1024
 
 _COLOUR_PATTERN = re.compile(
@@ -93,6 +100,7 @@ class SettingsBackupManager:
         afk_store: AfkPreferencesStore | None = None,
         cloudinary_store: CloudinaryPreferencesStore | None = None,
         dashboard_store: DashboardLayoutStore | None = None,
+        dashboard_profile_store: DashboardLayoutProfileStore | None = None,
         custom_card_store: CustomCardStore | None = None,
         presence_preset_store: PresencePresetStore | None = None,
     ):
@@ -124,6 +132,11 @@ class SettingsBackupManager:
             or DashboardLayoutStore()
         )
 
+        self.dashboard_profile_store = (
+            dashboard_profile_store
+            or DashboardLayoutProfileStore()
+        )
+
         self.custom_card_store = (
             custom_card_store
             or CustomCardStore()
@@ -153,6 +166,9 @@ class SettingsBackupManager:
         afk = self.afk_store.load()
         cloudinary = self.cloudinary_store.load()
         dashboard = self.dashboard_store.load()
+        dashboard_profiles = (
+            self.dashboard_profile_store.load()
+        )
 
         artwork_hosting = {
             "included": bool(
@@ -261,6 +277,11 @@ class SettingsBackupManager:
                 },
                 "dashboard_layout": (
                     dashboard.to_dict()
+                ),
+                "dashboard_layout_profiles": (
+                    self._capture_dashboard_layout_profiles(
+                        dashboard_profiles
+                    )
                 ),
                 "custom_cards": (
                     self._capture_custom_cards()
@@ -567,6 +588,14 @@ class SettingsBackupManager:
             )
         )
 
+        dashboard_layout_profiles = (
+            cls._validate_dashboard_layout_profiles(
+                settings.get(
+                    "dashboard_layout_profiles"
+                )
+            )
+        )
+
         presence_presets = (
             cls._validate_presence_presets(
                 settings.get(
@@ -579,6 +608,18 @@ class SettingsBackupManager:
             dashboard_layout,
             custom_cards,
         )
+
+        for profile_payload in dashboard_layout_profiles[
+            "profiles"
+        ]:
+            cls._validate_custom_layout_membership(
+                DashboardLayout.from_dict(
+                    profile_payload[
+                        "layout"
+                    ]
+                ),
+                custom_cards,
+            )
 
         artwork_hosting = (
             cls._validate_artwork_hosting(
@@ -636,6 +677,9 @@ class SettingsBackupManager:
                 "dashboard_layout": (
                     dashboard_layout.to_dict()
                 ),
+                "dashboard_layout_profiles": (
+                    dashboard_layout_profiles
+                ),
                 "custom_cards": (
                     custom_cards
                 ),
@@ -646,6 +690,24 @@ class SettingsBackupManager:
                     artwork_hosting
                 ),
             },
+        }
+
+    def _capture_dashboard_layout_profiles(
+        self,
+        profiles,
+    ) -> dict:
+        validated = validate_profiles(
+            profiles
+        )
+
+        return {
+            "schema_version": (
+                DASHBOARD_LAYOUT_PROFILE_STORAGE_SCHEMA_VERSION
+            ),
+            "profiles": [
+                profile.to_dict()
+                for profile in validated
+            ],
         }
 
     def _capture_custom_cards(
@@ -860,6 +922,19 @@ class SettingsBackupManager:
                     "dashboard_layout"
                 ]
             )
+        )
+
+        dashboard_profiles = tuple(
+            DashboardLayoutProfile.from_dict(
+                item
+            )
+            for item in settings[
+                "dashboard_layout_profiles"
+            ]["profiles"]
+        )
+
+        self.dashboard_profile_store.save(
+            dashboard_profiles
         )
 
         artwork_hosting = (
@@ -1417,6 +1492,90 @@ class SettingsBackupManager:
             "presets": [
                 preset.to_dict()
                 for preset in presets
+            ],
+        }
+
+    @classmethod
+    def _validate_dashboard_layout_profiles(
+        cls,
+        value,
+    ) -> dict:
+        if value is None:
+            value = {
+                "schema_version": (
+                    DASHBOARD_LAYOUT_PROFILE_STORAGE_SCHEMA_VERSION
+                ),
+                "profiles": [],
+            }
+
+        payload = cls._require_object(
+            value,
+            "dashboard_layout_profiles",
+        )
+
+        schema_version = cls._require_integer(
+            payload.get(
+                "schema_version"
+            ),
+            "dashboard_layout_profiles.schema_version",
+            minimum=1,
+            maximum=DASHBOARD_LAYOUT_PROFILE_STORAGE_SCHEMA_VERSION,
+        )
+
+        if (
+            schema_version
+            != DASHBOARD_LAYOUT_PROFILE_STORAGE_SCHEMA_VERSION
+        ):
+            raise SettingsBackupValidationError(
+                "The dashboard layout profile "
+                "backup version is not supported."
+            )
+
+        profiles_payload = payload.get(
+            "profiles",
+            [],
+        )
+
+        if not isinstance(
+            profiles_payload,
+            list,
+        ):
+            raise SettingsBackupValidationError(
+                "Dashboard layout profiles must be a list."
+            )
+
+        if len(profiles_payload) > DASHBOARD_LAYOUT_PROFILE_MAX_PROFILES:
+            raise SettingsBackupValidationError(
+                "The backup contains too many "
+                "dashboard layout profiles."
+            )
+
+        try:
+            profiles = validate_profiles(
+                tuple(
+                    DashboardLayoutProfile.from_dict(
+                        item
+                    )
+                    for item in profiles_payload
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The dashboard layout profiles in "
+                "the backup are invalid."
+            ) from error
+
+        return {
+            "schema_version": (
+                DASHBOARD_LAYOUT_PROFILE_STORAGE_SCHEMA_VERSION
+            ),
+            "profiles": [
+                profile.to_dict()
+                for profile in profiles
             ],
         }
 
