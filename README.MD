@@ -2,17 +2,13 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link cards, listening history, automatic AFK handling, custom themes, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.2.0 highlights
+## v2.3.0 highlights
 
-- Custom Dashboard Link cards with safe web-only URLs.
-- Optional website favicon fetching, local icon caching, and tiny-card fallbacks.
-- Link card edit, duplicate, delete, hide, restore, move, resize, and overlap controls.
-- Dashboard layout profiles for saving and restoring different card arrangements.
-- Snap-to-grid controls for tidier Dashboard editing.
-- Settings backups now include custom Link cards while excluding local favicon caches.
-- Auto AFK now respects intentional Sleep, Working, AFK, and Disabled modes.
-
-See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
+- Presence Presets let you save, apply, update, duplicate, rename, pin, unpin, and delete reusable presence setups.
+- Dashboard Quick Access can show pinned Presence Presets for fast switching.
+- The Presence page now includes reset controls for clearing Custom presence data and returning to Music presence.
+- The Artwork Manager shows local image details, opens selected artwork, opens the artwork folder, and validates imports before copying.
+- Settings backups now cover Dashboard layouts, Dashboard Layout Profiles, custom Link cards, and Presence Presets while still excluding local artwork/icon caches.
 
 ## Core features
 
@@ -61,7 +57,7 @@ The About-page thank-you footer can be shown or hidden, but its wording is fixed
 
 ## Settings backup and restore
 
-Settings backups are versioned JSON files. By default they include portable UI, theme, branding text, media-source, Auto AFK, window, startup, dashboard-layout, layout-profile, and custom Link-card settings.
+Settings backups are versioned JSON files. By default they include portable UI, theme, branding text, media-source, Auto AFK, window, startup, dashboard-layout, Dashboard Layout Profile, custom Link-card, and Presence Preset settings. Local artwork files, preset image files, favicon caches, OAuth tokens, credentials, and local paths stay private on the device.
 
 The following are always excluded:
 

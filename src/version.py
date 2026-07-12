@@ -1,5 +1,5 @@
-APP_VERSION = "2.2.0"
-RELEASE_NAME = "Custom Dashboard Update"
+APP_VERSION = "2.3.0"
+RELEASE_NAME = "Presence Studio Update"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

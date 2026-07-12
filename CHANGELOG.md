@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.3.0 - Presence Studio Update
+
+Released 12 July 2026.
+
+### Added
+
+- Added Presence Presets so users can save, apply, update, duplicate, rename, pin, unpin, and delete reusable presence setups.
+- Added pinned Presence Presets to Dashboard Quick Access for fast mode switching.
+- Added Presence reset controls for clearing Custom presence data and returning to Music presence.
+- Added an Artwork Manager area on the Presence page with image preview details, file size, dimensions, open-image, and open-folder actions.
+- Added artwork import guardrails for supported image formats, broken image files, oversized images, and non-square Discord artwork tips.
+- Added settings backup and restore support for Presence Presets.
+- Added settings backup and restore support for Dashboard Layout Profiles.
+
+### Improved
+
+- Dashboard Quick Access now refreshes when Presence Presets are renamed, pinned, unpinned, deleted, or applied.
+- Presence Preset empty states, button states, and status messages are clearer.
+- Settings backups now cover Dashboard layouts, Dashboard Layout Profiles, custom Link cards, and Presence Presets together.
+- Artwork controls now give clearer local-file feedback before Discord is updated.
+
+### Privacy and security
+
+- Presence Preset image files stay local and are excluded from settings backups.
+- Local preset artwork paths are rejected during settings backup validation.
+- Link-card favicon caches remain local and are excluded from settings backups.
+- Artwork import only accepts PNG, JPG, JPEG, and WEBP images up to 10 MB.
+
+### Upgrade notes
+
+- Existing v2.2 Dashboard layouts, Link cards, and Layout Profiles continue to load normally.
+- Existing v2.2 and v2.3 settings backups remain restorable.
+- Presence Presets are included in new v2.3 settings backups, but preset image files are intentionally not exported.
+- A restart is recommended after restoring settings so every service and Dashboard component reloads the restored values.
+
 ## v2.2.0 - Custom Dashboard Update
 
 Released 11 July 2026.
