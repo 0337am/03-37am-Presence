@@ -1,14 +1,14 @@
 # 03:37am Presence
 
-03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link cards, listening history, automatic AFK handling, custom themes, personal artwork hosting, and privacy-aware settings backup and restore.
+03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link cards, listening history, automatic AFK handling, custom themes, custom blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.3.0 highlights
+## v2.4.0 highlights
 
-- Presence Presets let you save, apply, update, duplicate, rename, pin, unpin, and delete reusable presence setups.
-- Dashboard Quick Access can show pinned Presence Presets for fast switching.
-- The Presence page now includes reset controls for clearing Custom presence data and returning to Music presence.
-- The Artwork Manager shows local image details, opens selected artwork, opens the artwork folder, and validates imports before copying.
-- Settings backups now cover Dashboard layouts, Dashboard Layout Profiles, custom Link cards, and Presence Presets while still excluding local artwork/icon caches.
+- Atmosphere backgrounds let you choose a local image, blur it, dim it, and tune its visibility behind the app.
+- Dashboard, Presence, and Settings cards now use a softer glass look so custom backgrounds can show through while text stays readable.
+- Atmosphere sliders support live preview with cached rendering for smoother adjustment.
+- Background images stay local to the device and are never included in settings backups.
+- Settings backups now include Atmosphere blur, opacity, and dim values while excluding the custom background image and local file path.
 
 ## Core features
 
@@ -57,7 +57,7 @@ The About-page thank-you footer can be shown or hidden, but its wording is fixed
 
 ## Settings backup and restore
 
-Settings backups are versioned JSON files. By default they include portable UI, theme, branding text, media-source, Auto AFK, window, startup, dashboard-layout, Dashboard Layout Profile, custom Link-card, and Presence Preset settings. Local artwork files, preset image files, favicon caches, OAuth tokens, credentials, and local paths stay private on the device.
+Settings backups are versioned JSON files. By default they include portable UI, theme, Atmosphere slider, branding text, media-source, Auto AFK, window, startup, dashboard-layout, Dashboard Layout Profile, custom Link-card, and Presence Preset settings. Local artwork files, preset image files, Atmosphere background images, favicon caches, OAuth tokens, credentials, and local paths stay private on the device.
 
 The following are always excluded:
 
@@ -67,6 +67,7 @@ The following are always excluded:
 - OAuth tokens and API credentials.
 - Diagnostics.
 - Local file paths.
+- Custom Atmosphere background images.
 - Custom sidebar image files.
 
 Artwork-hosting identifiers are excluded unless the user explicitly enables the opt-in checkbox before export. Every restore is validated first, and the app creates a private local safety snapshot before changing settings.

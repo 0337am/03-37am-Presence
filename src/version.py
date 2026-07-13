@@ -1,5 +1,5 @@
-APP_VERSION = "2.3.0"
-RELEASE_NAME = "Presence Studio Update"
+APP_VERSION = "2.4.0"
+RELEASE_NAME = "Atmosphere Update"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

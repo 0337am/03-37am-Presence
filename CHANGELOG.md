@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.4.0 - Atmosphere Update
+
+Released 13 July 2026.
+
+### Added
+
+- Added custom Atmosphere backgrounds with local image import, validation, blur, opacity, dim overlay, enable, and reset controls.
+- Added a background renderer with cached source images and cached blurred output for smoother live adjustment.
+- Added glass-style Dashboard, Presence, and Settings cards so custom backgrounds can show through.
+- Added Atmosphere values to settings backups while excluding custom background images and local file paths.
+
+### Improved
+
+- Improved Atmosphere slider behaviour with live preview, clearer labels, larger handles, and reduced repaint lag.
+- Clarified Settings Backup & Restore copy so users know Atmosphere backgrounds are local-only and must be chosen again on each device.
+
+### Privacy and security
+
+- Custom Atmosphere background images are stored locally and are never exported in settings backups.
+- Atmosphere restores blur, opacity, and dim values only. Restoring a backup clears the local background path and disables Atmosphere until a new image is chosen.
+
+### Upgrade notes
+
+- Existing v2.3 settings continue to load normally.
+- Existing settings backups remain restorable.
+
 ## v2.3.0 - Presence Studio Update
 
 Released 12 July 2026.
