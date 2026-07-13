@@ -3,13 +3,21 @@ from pathlib import Path
 from PyQt6.QtCore import (
     Qt,
     QTimer,
+    QRectF,
     pyqtSlot,
 )
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import (
+    QColor,
+    QPainter,
+    QPixmap,
+)
 from PyQt6.QtWidgets import (
     QCheckBox,
     QApplication,
     QFrame,
+    QGraphicsBlurEffect,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -58,6 +66,265 @@ LAST_PAGE_SETTING_KEY = (
 )
 
 DEFAULT_PAGE_INDEX = 0
+
+
+class AtmosphereLayer(QWidget):
+    def __init__(
+        self,
+        parent=None,
+    ):
+        super().__init__(parent)
+
+        self.setObjectName(
+            "atmosphereLayer"
+        )
+        self.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+
+        self._atmosphere = {}
+        self._source_image_path = ""
+        self._source_pixmap = QPixmap()
+        self._background_cache_key = None
+        self._background_cache = QPixmap()
+
+    def set_atmosphere(
+        self,
+        atmosphere: dict,
+    ):
+        old_image_path = str(
+            self._atmosphere.get(
+                "image_path",
+                "",
+            )
+            or ""
+        )
+
+        self._atmosphere = dict(
+            atmosphere or {}
+        )
+
+        new_image_path = str(
+            self._atmosphere.get(
+                "image_path",
+                "",
+            )
+            or ""
+        )
+
+        if new_image_path != old_image_path:
+            self._source_image_path = ""
+            self._source_pixmap = QPixmap()
+            self._background_cache_key = None
+            self._background_cache = QPixmap()
+
+        self.setVisible(
+            self.has_active_atmosphere()
+        )
+        self.update()
+
+    def has_active_atmosphere(self) -> bool:
+        if not bool(
+            self._atmosphere.get(
+                "enabled",
+                False,
+            )
+        ):
+            return False
+
+        image_path = str(
+            self._atmosphere.get(
+                "image_path",
+                "",
+            )
+            or ""
+        )
+
+        return bool(
+            image_path
+            and Path(image_path).exists()
+        )
+
+    def _blur_pixmap(
+        self,
+        pixmap: QPixmap,
+        radius: int,
+    ) -> QPixmap:
+        if radius <= 0 or pixmap.isNull():
+            return pixmap
+
+        scene = QGraphicsScene()
+        item = QGraphicsPixmapItem(pixmap)
+
+        effect = QGraphicsBlurEffect()
+        effect.setBlurRadius(radius)
+        item.setGraphicsEffect(effect)
+
+        scene.addItem(item)
+
+        result = QPixmap(
+            pixmap.size()
+        )
+        result.fill(
+            Qt.GlobalColor.transparent
+        )
+
+        painter = QPainter(result)
+        scene.render(
+            painter,
+            QRectF(result.rect()),
+            QRectF(pixmap.rect()),
+        )
+        painter.end()
+
+        return result
+
+    def _background_pixmap(self) -> QPixmap:
+        if not self.has_active_atmosphere():
+            return QPixmap()
+
+        image_path = Path(
+            str(
+                self._atmosphere.get(
+                    "image_path",
+                    "",
+                )
+                or ""
+            )
+        )
+
+        rect = self.rect()
+
+        if rect.isEmpty():
+            return QPixmap()
+
+        current_path = str(image_path)
+
+        if current_path != self._source_image_path:
+            self._source_image_path = current_path
+            self._source_pixmap = QPixmap(
+                current_path
+            )
+            self._background_cache_key = None
+            self._background_cache = QPixmap()
+
+        if self._source_pixmap.isNull():
+            return QPixmap()
+
+        blur = int(
+            self._atmosphere.get(
+                "blur",
+                0,
+            )
+            or 0
+        )
+
+        cache_key = (
+            current_path,
+            rect.width(),
+            rect.height(),
+            blur,
+        )
+
+        if (
+            cache_key == self._background_cache_key
+            and not self._background_cache.isNull()
+        ):
+            return self._background_cache
+
+        scaled = self._source_pixmap.scaled(
+            rect.size(),
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+        scaled = self._blur_pixmap(
+            scaled,
+            blur,
+        )
+
+        self._background_cache_key = cache_key
+        self._background_cache = scaled
+
+        return scaled
+
+    def paintEvent(self, event):
+        if not self.has_active_atmosphere():
+            return
+
+        scaled = self._background_pixmap()
+
+        if scaled.isNull():
+            return
+
+        rect = self.rect()
+
+        if rect.isEmpty():
+            return
+
+        opacity = max(
+            0,
+            min(
+                100,
+                int(
+                    self._atmosphere.get(
+                        "opacity",
+                        45,
+                    )
+                    or 0
+                ),
+            ),
+        )
+
+        dim = max(
+            0,
+            min(
+                90,
+                int(
+                    self._atmosphere.get(
+                        "dim",
+                        55,
+                    )
+                    or 0
+                ),
+            ),
+        )
+
+        x = int(
+            (rect.width() - scaled.width()) / 2
+        )
+        y = int(
+            (rect.height() - scaled.height()) / 2
+        )
+
+        painter = QPainter(self)
+        painter.setRenderHint(
+            QPainter.RenderHint.SmoothPixmapTransform,
+            True,
+        )
+        painter.setOpacity(
+            opacity / 100
+        )
+        painter.drawPixmap(
+            x,
+            y,
+            scaled,
+        )
+        painter.setOpacity(1)
+
+        if dim:
+            painter.fillRect(
+                rect,
+                QColor(
+                    0,
+                    0,
+                    0,
+                    int(255 * (dim / 100)),
+                ),
+            )
+
+        painter.end()
 
 
 class NavigationButton(QPushButton):
@@ -165,6 +432,12 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(root)
 
+        self.atmosphere_layer = AtmosphereLayer(root)
+        self.atmosphere_layer.setGeometry(
+            root.rect()
+        )
+        self.atmosphere_layer.lower()
+
         main_layout = QHBoxLayout(root)
         main_layout.setContentsMargins(
             0,
@@ -187,10 +460,77 @@ class MainWindow(QMainWindow):
         self.apply_branding(
             self.theme_manager.branding()
         )
+        self.apply_atmosphere(
+            self.theme_manager.atmosphere()
+        )
 
         self.connect_services()
         self.apply_saved_settings()
         self.restore_last_page()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_atmosphere_geometry()
+
+    def update_atmosphere_geometry(self):
+        layer = getattr(
+            self,
+            "atmosphere_layer",
+            None,
+        )
+        root = self.centralWidget()
+
+        if layer is None or root is None:
+            return
+
+        layer.setGeometry(
+            root.rect()
+        )
+        layer.lower()
+
+    @staticmethod
+    def _with_alpha(
+        colour: str,
+        alpha: float,
+    ) -> str:
+        value = str(colour or "").strip()
+
+        if value.startswith("#"):
+            value = value[1:]
+
+        if len(value) != 6:
+            return colour
+
+        try:
+            red = int(value[0:2], 16)
+            green = int(value[2:4], 16)
+            blue = int(value[4:6], 16)
+        except ValueError:
+            return colour
+
+        channel = max(
+            0,
+            min(
+                255,
+                int(255 * alpha),
+            ),
+        )
+
+        return (
+            f"rgba({red}, {green}, {blue}, {channel})"
+        )
+
+    def atmosphere_is_active(self) -> bool:
+        layer = getattr(
+            self,
+            "atmosphere_layer",
+            None,
+        )
+
+        return bool(
+            layer is not None
+            and layer.has_active_atmosphere()
+        )
 
     def build_sidebar(
         self,
@@ -994,6 +1334,25 @@ class MainWindow(QMainWindow):
         )
 
     @pyqtSlot(dict)
+    def apply_atmosphere(
+        self,
+        atmosphere: dict,
+    ):
+        was_active = self.atmosphere_is_active()
+
+        self.atmosphere_layer.set_atmosphere(
+            atmosphere
+        )
+        self.update_atmosphere_geometry()
+
+        is_active = self.atmosphere_is_active()
+
+        if was_active != is_active:
+            self.apply_theme(
+                self.theme_manager.theme()
+            )
+
+    @pyqtSlot(dict)
     def apply_theme(
         self,
         theme: dict,
@@ -1003,6 +1362,38 @@ class MainWindow(QMainWindow):
                 "compact",
                 True,
             )
+        )
+
+        atmosphere_active = self.atmosphere_is_active()
+        root_background = (
+            "transparent"
+            if atmosphere_active
+            else theme["background"]
+        )
+        pages_background = root_background
+        sidebar_background = (
+            self._with_alpha(
+                theme["sidebar"],
+                0.80,
+            )
+            if atmosphere_active
+            else theme["sidebar"]
+        )
+        panel_background = (
+            self._with_alpha(
+                theme["card"],
+                0.66,
+            )
+            if atmosphere_active
+            else theme["card"]
+        )
+        panel_alt_background = (
+            self._with_alpha(
+                theme["card_alt"],
+                0.72,
+            )
+            if atmosphere_active
+            else theme["card_alt"]
         )
 
         self.compact_mode_button.blockSignals(
@@ -1017,13 +1408,16 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet(
             f"""
-            QMainWindow,
-            QWidget#root {{
+            QMainWindow {{
                 background: {theme["background"]};
             }}
 
+            QWidget#root {{
+                background: {root_background};
+            }}
+
             QFrame#sidebar {{
-                background: {theme["sidebar"]};
+                background: {sidebar_background};
                 border-right: 1px solid {theme["border"]};
             }}
 
@@ -1065,12 +1459,12 @@ class MainWindow(QMainWindow):
             }}
 
             QPushButton#navigationButton:hover {{
-                background: {theme["card"]};
+                background: {panel_background};
                 border: 1px solid {theme["border"]};
             }}
 
             QPushButton#navigationButton:checked {{
-                background: {theme["card_alt"]};
+                background: {panel_alt_background};
                 border: 1px solid {theme["accent"]};
             }}
 
@@ -1091,7 +1485,7 @@ class MainWindow(QMainWindow):
             }}
 
             QFrame#compactPanel {{
-                background: {theme["card"]};
+                background: {panel_background};
                 border: 1px solid {theme["border"]};
                 border-radius: 10px;
             }}
@@ -1128,7 +1522,7 @@ class MainWindow(QMainWindow):
 
             QPushButton#sidebarThemeButton {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {panel_alt_background};
                 border: 1px solid {theme["border"]};
                 border-radius: 8px;
                 font-size: 8px;
@@ -1140,7 +1534,7 @@ class MainWindow(QMainWindow):
             }}
 
             QStackedWidget#pages {{
-                background: {theme["background"]};
+                background: {pages_background};
             }}
             """
         )
@@ -1297,6 +1691,10 @@ class MainWindow(QMainWindow):
 
         self.theme_manager.branding_changed.connect(
             self.apply_branding
+        )
+
+        self.theme_manager.atmosphere_changed.connect(
+            self.apply_atmosphere
         )
 
         self.discord.connect()

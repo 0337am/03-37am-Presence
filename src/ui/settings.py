@@ -55,6 +55,38 @@ from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
 
+def colour_with_alpha(
+    colour: str,
+    alpha: float,
+) -> str:
+    value = str(colour or "").strip()
+
+    if value.startswith("#"):
+        value = value[1:]
+
+    if len(value) != 6:
+        return colour
+
+    try:
+        red = int(value[0:2], 16)
+        green = int(value[2:4], 16)
+        blue = int(value[4:6], 16)
+    except ValueError:
+        return colour
+
+    channel = max(
+        0,
+        min(
+            255,
+            int(255 * alpha),
+        ),
+    )
+
+    return (
+        f"rgba({red}, {green}, {blue}, {channel})"
+    )
+
+
 class SleekComboBox(QComboBox):
     def __init__(
         self,
@@ -147,6 +179,13 @@ class SettingsPage(QWidget):
         self.color_buttons = {}
         self.atmosphere_sliders = {}
         self.atmosphere_value_labels = {}
+        self._pending_atmosphere_slider_key = ""
+        self._atmosphere_preview_timer = QTimer(self)
+        self._atmosphere_preview_timer.setSingleShot(True)
+        self._atmosphere_preview_timer.setInterval(32)
+        self._atmosphere_preview_timer.timeout.connect(
+            self.commit_pending_atmosphere_slider
+        )
 
         self.source_preferences_store = (
             SourcePreferencesStore()
@@ -666,6 +705,8 @@ class SettingsPage(QWidget):
             slider.setCursor(
                 Qt.CursorShape.PointingHandCursor
             )
+            slider.setMinimumHeight(34)
+            slider.setTracking(True)
 
             minimum, maximum = ATMOSPHERE_RANGES[key]
             slider.setRange(
@@ -695,11 +736,25 @@ class SettingsPage(QWidget):
                 suffix,
             )
 
-            slider.valueChanged.connect(
+            slider.sliderMoved.connect(
                 lambda value, slider_key=key:
-                self.change_atmosphere_slider(
+                self.preview_atmosphere_slider(
                     slider_key,
                     value,
+                )
+            )
+            slider.valueChanged.connect(
+                lambda value, slider_key=key:
+                self.update_atmosphere_slider_label(
+                    slider_key,
+                    value,
+                )
+            )
+            slider.sliderReleased.connect(
+                lambda slider_key=key, slider_widget=slider:
+                self.commit_atmosphere_slider(
+                    slider_key,
+                    slider_widget,
                 )
             )
 
@@ -2862,19 +2917,95 @@ class SettingsPage(QWidget):
                 "Atmosphere background disabled."
             )
 
+    def update_atmosphere_slider_label(
+        self,
+        key: str,
+        value: int,
+    ):
+        if key not in self.atmosphere_value_labels:
+            return
+
+        label, suffix = self.atmosphere_value_labels[
+            key
+        ]
+        label.setText(
+            f"{int(value)}{suffix}"
+        )
+
+    def preview_atmosphere_slider(
+        self,
+        key: str,
+        value: int,
+    ):
+        self.update_atmosphere_slider_label(
+            key,
+            value,
+        )
+        self._pending_atmosphere_slider_key = key
+
+        if not self._atmosphere_preview_timer.isActive():
+            self._atmosphere_preview_timer.start()
+
+    def commit_pending_atmosphere_slider(self):
+        key = self._pending_atmosphere_slider_key
+
+        if not key:
+            return
+
+        slider = self.atmosphere_sliders.get(
+            key
+        )
+
+        if slider is None:
+            return
+
+        self.change_atmosphere_slider(
+            key,
+            slider.value(),
+            quiet=True,
+        )
+
+    def commit_atmosphere_slider(
+        self,
+        key: str,
+        slider,
+    ):
+        value = int(
+            slider.sliderPosition()
+        )
+
+        slider.blockSignals(True)
+        slider.setValue(value)
+        slider.blockSignals(False)
+
+        self.update_atmosphere_slider_label(
+            key,
+            value,
+        )
+
+        self._pending_atmosphere_slider_key = ""
+        self._atmosphere_preview_timer.stop()
+
+        self.change_atmosphere_slider(
+            key,
+            value,
+        )
+
     def change_atmosphere_slider(
         self,
         key: str,
         value: int,
+        quiet: bool = False,
     ):
         self.theme_manager.set_atmosphere_value(
             key,
             value,
         )
 
-        self.status.setText(
-            "Atmosphere setting saved."
-        )
+        if not quiet:
+            self.status.setText(
+                "Atmosphere setting saved."
+            )
 
     def change_theme_preset(
         self,
@@ -3112,11 +3243,21 @@ class SettingsPage(QWidget):
             9 if compact else 12
         )
 
+        card_glass = colour_with_alpha(
+            theme["card"],
+            0.66,
+        )
+        card_alt_glass = colour_with_alpha(
+            theme["card_alt"],
+            0.72,
+        )
+        page_background = "transparent"
+
         self.setStyleSheet(
             f"""
             QScrollArea#settingsScroll,
             QWidget#settingsContent {{
-                background: {theme["background"]};
+                background: {page_background};
                 border: none;
             }}
 
@@ -3134,7 +3275,7 @@ class SettingsPage(QWidget):
             }}
 
             QFrame#settingsCard {{
-                background: {theme["card"]};
+                background: {card_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 14px;
             }}
@@ -3164,7 +3305,7 @@ class SettingsPage(QWidget):
             QLineEdit#textField,
             QComboBox#presetCombo {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 9px;
                 padding: {field_padding}px;
@@ -3208,22 +3349,26 @@ class SettingsPage(QWidget):
 
             QComboBox#presetCombo QAbstractItemView {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 selection-background-color: {theme["accent"]};
             }}
 
+            QSlider#atmosphereSlider {{
+                min-height: 34px;
+            }}
+
             QSlider#atmosphereSlider::groove:horizontal {{
                 height: 7px;
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 4px;
             }}
 
             QSlider#atmosphereSlider::handle:horizontal {{
-                width: 18px;
-                height: 18px;
-                margin: -6px 0;
+                width: 20px;
+                height: 20px;
+                margin: -7px 0;
                 background: {theme["accent"]};
                 border: 1px solid {theme["text"]};
                 border-radius: 9px;
@@ -3239,7 +3384,7 @@ class SettingsPage(QWidget):
 
             QCheckBox {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 9px;
                 padding: {checkbox_padding}px;
@@ -3265,7 +3410,7 @@ class SettingsPage(QWidget):
 
             QPushButton#secondaryButton {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 9px;
                 padding: 8px 13px;
@@ -3286,7 +3431,7 @@ class SettingsPage(QWidget):
             }}
 
             QPushButton#dangerButton:hover {{
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
             }}
             """
         )

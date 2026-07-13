@@ -50,6 +50,38 @@ ARTWORK_SUPPORTED_SUFFIXES = {
 }
 
 
+def colour_with_alpha(
+    colour: str,
+    alpha: float,
+) -> str:
+    value = str(colour or "").strip()
+
+    if value.startswith("#"):
+        value = value[1:]
+
+    if len(value) != 6:
+        return colour
+
+    try:
+        red = int(value[0:2], 16)
+        green = int(value[2:4], 16)
+        blue = int(value[4:6], 16)
+    except ValueError:
+        return colour
+
+    channel = max(
+        0,
+        min(
+            255,
+            int(255 * alpha),
+        ),
+    )
+
+    return (
+        f"rgba({red}, {green}, {blue}, {channel})"
+    )
+
+
 class PresencePage(QWidget):
     presets_changed = pyqtSignal()
 
@@ -1261,10 +1293,20 @@ class PresencePage(QWidget):
             self._preview_image_size,
         )
 
+        card_glass = colour_with_alpha(
+            theme["card"],
+            0.66,
+        )
+        card_alt_glass = colour_with_alpha(
+            theme["card_alt"],
+            0.72,
+        )
+        page_background = "transparent"
+
         self.setStyleSheet(
             f"""
             QWidget#presenceRoot {{
-                background: {theme["background"]};
+                background: {page_background};
             }}
 
             QLabel#presenceTitle {{
@@ -1280,7 +1322,7 @@ class PresencePage(QWidget):
 
             QLabel#activeBadge {{
                 color: {theme["accent"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 9px;
                 padding: 5px 10px;
@@ -1290,7 +1332,7 @@ class PresencePage(QWidget):
 
             QFrame#presenceCard,
             QFrame#previewCard {{
-                background: {theme["card"]};
+                background: {card_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 14px;
             }}
@@ -1328,7 +1370,7 @@ class PresencePage(QWidget):
             QComboBox#presetBox,
             QLineEdit#presenceInput {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 9px;
                 padding: {input_padding}px 10px;
@@ -1361,7 +1403,7 @@ class PresencePage(QWidget):
 
             QComboBox QAbstractItemView {{
                 color: {theme["text"]};
-                background: {theme["card"]};
+                background: {card_glass};
                 border: 1px solid {theme["border"]};
                 selection-color: {theme["text"]};
                 selection-background-color: {theme["accent"]};
@@ -1394,7 +1436,7 @@ class PresencePage(QWidget):
 
             QPushButton#secondaryButton {{
                 color: {theme["text"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 8px;
                 padding: 7px 10px;
@@ -1449,7 +1491,7 @@ class PresencePage(QWidget):
 
             QLabel#previewMode {{
                 color: {theme["accent"]};
-                background: {theme["card_alt"]};
+                background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 7px;
                 padding: 3px 7px;
