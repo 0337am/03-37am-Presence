@@ -1256,12 +1256,13 @@ class SettingsPage(QWidget):
 
         backup_privacy_help = QLabel(
             (
-                "Custom Link cards are included. "
-                "Listening history, artwork cache, "
-                "Link-card icon cache, OAuth tokens, "
-                "API credentials, diagnostics, local "
-                "file paths, and custom sidebar images "
-                "are never included."
+                "Custom Link cards and Atmosphere slider "
+                "values are included. Listening history, "
+                "artwork cache, Link-card icon cache, "
+                "OAuth tokens, API credentials, "
+                "diagnostics, local file paths, custom "
+                "sidebar images, and custom Atmosphere "
+                "backgrounds are never included."
             )
         )
         backup_privacy_help.setObjectName(
@@ -1301,6 +1302,20 @@ class SettingsPage(QWidget):
             "helpText"
         )
         artwork_backup_help.setWordWrap(
+            True
+        )
+
+        atmosphere_backup_help = QLabel(
+            (
+                "Atmosphere restores blur, opacity, "
+                "and dim values only. Choose the "
+                "background image again on each device."
+            )
+        )
+        atmosphere_backup_help.setObjectName(
+            "helpText"
+        )
+        atmosphere_backup_help.setWordWrap(
             True
         )
 
@@ -1351,6 +1366,9 @@ class SettingsPage(QWidget):
         )
         settings_backup_layout.addWidget(
             artwork_backup_help
+        )
+        settings_backup_layout.addWidget(
+            atmosphere_backup_help
         )
         settings_backup_layout.addLayout(
             backup_button_row
