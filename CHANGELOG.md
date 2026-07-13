@@ -13,6 +13,7 @@ Released 13 July 2026.
 
 ### Improved
 
+- Replaced the default branding image with the app icon and removed the Yuno theme preset from the Theme picker.
 - Improved Atmosphere slider behaviour with live preview, clearer labels, larger handles, and reduced repaint lag.
 - Clarified Settings Backup & Restore copy so users know Atmosphere backgrounds are local-only and must be chosen again on each device.
 
@@ -185,6 +186,7 @@ Released 9 July 2026.
 
 ### Fixed
 
+- Fixed the About branding image to use the built-in app icon instead of saved custom portrait paths.
 - Branding text unexpectedly resetting.
 - Sidebar and Dashboard themes not updating together.
 - Corrupted navigation symbols.

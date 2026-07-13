@@ -19,7 +19,7 @@
 - Persistent listening history backed by SQLite.
 - Recently Played artwork caching.
 - Automatic AFK presence with restoration of the previous mode.
-- Theme presets, custom colours, editable title and subtitle, an optional fixed About footer, and sidebar artwork.
+- Theme presets, custom colours, editable title and subtitle, an optional fixed About footer, and fixed app-icon About artwork.
 - System tray controls and Windows startup options.
 - Diagnostics, data controls, CSV library export, and settings backup.
 

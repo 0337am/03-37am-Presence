@@ -29,8 +29,8 @@ from src.version import DISPLAY_VERSION
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 YUNO_IMAGE_PATH = (
     PROJECT_ROOT
-    / "assets"
-    / "yuno.png"
+    / "icons"
+    / "app_icon.png"
 )
 
 
@@ -600,23 +600,14 @@ class AboutPage(QWidget):
         self.update_portrait()
 
     def update_portrait(self):
-        custom_path = Path(
-            self._branding_image_path
-        )
-
-        if custom_path.exists():
-            image_path = custom_path
-        else:
-            image_path = YUNO_IMAGE_PATH
-
         pixmap = QPixmap(
-            str(image_path)
+            str(YUNO_IMAGE_PATH)
         )
 
         if pixmap.isNull():
             self.portrait.clear()
             self.portrait.setText(
-                "Branding image\nnot found"
+                "App icon\nnot found"
             )
             return
 

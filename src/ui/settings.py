@@ -434,7 +434,7 @@ class SettingsPage(QWidget):
             )
         else:
             self.image_path_label.setText(
-                "Using the default Yuno image"
+                "About uses the app icon by default"
             )
 
         self.image_path_label.setObjectName(
@@ -472,7 +472,7 @@ class SettingsPage(QWidget):
 
         current_preset = current_theme.get(
             "preset",
-            "Yuno",
+            "Midnight",
         )
 
         preset_index = (
@@ -2742,7 +2742,7 @@ class SettingsPage(QWidget):
         self.theme_manager.reset_branding_image()
 
         self.image_path_label.setText(
-            "Using the default Yuno image"
+            "About uses the app icon by default"
         )
 
         self.status.setText(
@@ -2809,7 +2809,7 @@ class SettingsPage(QWidget):
             )
         else:
             self.image_path_label.setText(
-                "Using the default Yuno image"
+                "About uses the app icon by default"
             )
 
     def refresh_atmosphere_fields(

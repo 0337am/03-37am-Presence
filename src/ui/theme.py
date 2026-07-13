@@ -47,15 +47,15 @@ DEFAULT_BRANDING = {
 
 
 DEFAULT_THEME = {
-    "preset": "Yuno",
-    "background": "#140812",
-    "sidebar": "#210b1a",
-    "card": "#352747",
-    "card_alt": "#3e2e54",
-    "accent": "#ff79b9",
-    "text": "#fff5fb",
-    "muted": "#bca9ce",
-    "border": "#5c4777",
+    "preset": "Midnight",
+    "background": "#0b1020",
+    "sidebar": "#11182b",
+    "card": "#182139",
+    "card_alt": "#202b49",
+    "accent": "#6ea8ff",
+    "text": "#f5f7ff",
+    "muted": "#9ba9c5",
+    "border": "#2d3b60",
     "compact": True,
 }
 
@@ -77,16 +77,6 @@ ATMOSPHERE_RANGES = {
 
 
 THEME_PRESETS = {
-    "Yuno": {
-        "background": "#140812",
-        "sidebar": "#210b1a",
-        "card": "#352747",
-        "card_alt": "#3e2e54",
-        "accent": "#ff79b9",
-        "text": "#fff5fb",
-        "muted": "#bca9ce",
-        "border": "#5c4777",
-    },
     "Midnight": {
         "background": "#0b1020",
         "sidebar": "#11182b",
@@ -148,6 +138,51 @@ class ThemeManager(QObject):
         self.store.remove(
             "branding/footer"
         )
+
+        if (
+            str(
+                self.store.value(
+                    "theme/preset",
+                    "",
+                )
+                or ""
+            )
+            == "Yuno"
+        ):
+            self.store.setValue(
+                "theme/preset",
+                "Custom",
+            )
+
+        self.store.remove(
+            "branding/image_path"
+        )
+
+        branding_image_path = str(
+            self.store.value(
+                "branding/image_path",
+                "",
+            )
+            or ""
+        )
+
+        normalized_branding_image_path = (
+            branding_image_path.replace(
+                "\\",
+                "/",
+            ).lower()
+        )
+
+        if (
+            "assets/yuno.png"
+            in normalized_branding_image_path
+            or "icons/yuno.ico"
+            in normalized_branding_image_path
+        ):
+            self.store.remove(
+                "branding/image_path"
+            )
+
         self.store.sync()
 
     def theme(self) -> dict:
@@ -167,6 +202,19 @@ class ThemeManager(QObject):
                         default,
                     )
                 )
+
+        preset = values.get(
+            "preset",
+            DEFAULT_THEME["preset"],
+        )
+
+        if (
+            preset not in THEME_PRESETS
+            and preset != "Custom"
+        ):
+            values["preset"] = DEFAULT_THEME[
+                "preset"
+            ]
 
         return values
 

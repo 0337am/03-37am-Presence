@@ -783,6 +783,9 @@ class SettingsBackupManager:
                     )
                 )
 
+        if values.get("preset") == "Yuno":
+            values["preset"] = "Custom"
+
         return values
 
     def _capture_atmosphere(self) -> dict:
@@ -1214,6 +1217,9 @@ class SettingsBackupManager:
             maximum_length=40,
             allow_empty=False,
         )
+
+        if preset == "Yuno":
+            preset = "Custom"
 
         if (
             preset not in THEME_PRESETS
