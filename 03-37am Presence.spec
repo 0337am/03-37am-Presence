@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_all
 datas = [
     ("assets", "assets"),
     ("icons/app_icon.ico", "icons"),
+    ("icons/app_icon.png", "icons"),
 ]
 
 binaries = []
