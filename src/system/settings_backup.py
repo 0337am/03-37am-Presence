@@ -47,6 +47,8 @@ from src.ui.dashboard_profiles import (
     validate_profiles,
 )
 from src.ui.theme import (
+    ATMOSPHERE_RANGES,
+    DEFAULT_ATMOSPHERE,
     DEFAULT_BRANDING,
     DEFAULT_THEME,
     THEME_PRESETS,
@@ -54,7 +56,7 @@ from src.ui.theme import (
 
 
 BACKUP_KIND = "0337am-presence-settings"
-BACKUP_SCHEMA_VERSION = 4
+BACKUP_SCHEMA_VERSION = 5
 MAX_BACKUP_BYTES = 1024 * 1024
 
 _COLOUR_PATTERN = re.compile(
@@ -89,8 +91,9 @@ class SettingsBackupManager:
     Exports and restores the app's portable settings.
 
     Listening history, artwork caches, OAuth tokens,
-    diagnostics, local file paths, and custom sidebar
-    images are deliberately excluded.
+    diagnostics, local file paths, custom sidebar
+    images, and custom atmosphere backgrounds are
+    deliberately excluded.
     """
 
     def __init__(
@@ -226,10 +229,14 @@ class SettingsBackupManager:
                     "diagnostics",
                     "local_file_paths",
                     "custom_sidebar_image",
+                    "custom_atmosphere_background",
                 ],
             },
             "settings": {
                 "theme": self._capture_theme(),
+                "atmosphere": (
+                    self._capture_atmosphere()
+                ),
                 "branding": (
                     self._capture_branding()
                 ),
@@ -527,6 +534,12 @@ class SettingsBackupManager:
             )
         )
 
+        atmosphere = cls._validate_atmosphere(
+            settings.get(
+                "atmosphere"
+            )
+        )
+
         window = cls._validate_window(
             settings.get(
                 "window"
@@ -661,10 +674,12 @@ class SettingsBackupManager:
                     "diagnostics",
                     "local_file_paths",
                     "custom_sidebar_image",
+                    "custom_atmosphere_background",
                 ],
             },
             "settings": {
                 "theme": theme,
+                "atmosphere": atmosphere,
                 "branding": branding,
                 "window": window,
                 "windows_startup": (
@@ -770,6 +785,26 @@ class SettingsBackupManager:
 
         return values
 
+    def _capture_atmosphere(self) -> dict:
+        values = {
+            "background_image_included": False,
+            "enabled": self.settings.value(
+                "atmosphere/enabled",
+                DEFAULT_ATMOSPHERE["enabled"],
+                type=bool,
+            ),
+        }
+
+        for key in ATMOSPHERE_RANGES:
+            values[key] = self.settings.value(
+                f"atmosphere/{key}",
+                DEFAULT_ATMOSPHERE[key],
+            )
+
+        return self._validate_atmosphere(
+            values
+        )
+
     def _capture_branding(self) -> dict:
         values = {}
 
@@ -841,6 +876,26 @@ class SettingsBackupManager:
                 f"branding/{key}",
                 value,
             )
+
+        # Atmosphere background images are local-only and
+        # are deliberately not exported. Restore visual
+        # tuning, but clear the image path and leave the
+        # feature disabled until the user chooses a new
+        # background on this device.
+        for key in ATMOSPHERE_RANGES:
+            self.settings.setValue(
+                f"atmosphere/{key}",
+                settings["atmosphere"][key],
+            )
+
+        self.settings.setValue(
+            "atmosphere/image_path",
+            "",
+        )
+        self.settings.setValue(
+            "atmosphere/enabled",
+            False,
+        )
 
         for key, value in (
             settings["window"].items()
@@ -1077,6 +1132,71 @@ class SettingsBackupManager:
                 missing_ok=True
             )
             raise
+
+    @classmethod
+    def _validate_atmosphere(
+        cls,
+        payload,
+    ) -> dict:
+        if payload is None:
+            payload = {}
+
+        payload = cls._require_object(
+            payload,
+            "atmosphere",
+        )
+
+        enabled = payload.get(
+            "enabled",
+            DEFAULT_ATMOSPHERE["enabled"],
+        )
+
+        if not isinstance(
+            enabled,
+            bool,
+        ):
+            raise SettingsBackupValidationError(
+                "Atmosphere enabled must be true or false."
+            )
+
+        background_image_included = payload.get(
+            "background_image_included",
+            False,
+        )
+
+        if background_image_included is not False:
+            raise SettingsBackupValidationError(
+                "Atmosphere background images are not "
+                "supported in portable backups."
+            )
+
+        if "image_path" in payload:
+            raise SettingsBackupValidationError(
+                "Atmosphere image paths are not "
+                "allowed in portable backups."
+            )
+
+        values = {
+            "enabled": enabled,
+            "background_image_included": False,
+        }
+
+        for key, (
+            minimum,
+            maximum,
+        ) in ATMOSPHERE_RANGES.items():
+            values[key] = cls._require_integer(
+                payload.get(
+                    key,
+                    DEFAULT_ATMOSPHERE[key],
+                ),
+                f"atmosphere.{key}",
+                minimum=minimum,
+                maximum=maximum,
+            )
+
+        return values
+
 
     @classmethod
     def _validate_theme(
