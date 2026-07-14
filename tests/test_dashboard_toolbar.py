@@ -23,6 +23,40 @@ from src.ui.dashboard_layout import (
 
 
 class _ToolbarStub(QWidget):
+    setup_dashboard_history_shortcuts = (
+        DashboardPage
+        .setup_dashboard_history_shortcuts
+    )
+
+    dashboard_history_focus_blocks_shortcuts = (
+        DashboardPage
+        .dashboard_history_focus_blocks_shortcuts
+    )
+
+    update_dashboard_history_shortcut_state = (
+        DashboardPage
+        .update_dashboard_history_shortcut_state
+    )
+
+    handle_dashboard_history_focus_changed = (
+        DashboardPage
+        .handle_dashboard_history_focus_changed
+    )
+
+    trigger_dashboard_history_shortcut = (
+        DashboardPage
+        .trigger_dashboard_history_shortcut
+    )
+
+    trigger_dashboard_undo_shortcut = (
+        DashboardPage
+        .trigger_dashboard_undo_shortcut
+    )
+
+    trigger_dashboard_redo_shortcut = (
+        DashboardPage
+        .trigger_dashboard_redo_shortcut
+    )
     update_dashboard_layout_toolbar_responsive_state = (
         DashboardPage
         .update_dashboard_layout_toolbar_responsive_state
@@ -267,7 +301,7 @@ class DashboardToolbarTests(unittest.TestCase):
         )
         self.assertEqual(
             widget.layout_undo_button.toolTip(),
-            "Undo card move",
+            "Undo card move (Ctrl+Z)",
         )
 
         widget.close()

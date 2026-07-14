@@ -21,6 +21,8 @@ from PyQt6.QtGui import (
     QAction,
     QDesktopServices,
     QPixmap,
+    QKeySequence,
+    QShortcut,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -38,6 +40,10 @@ from PyQt6.QtWidgets import (
     QStyle,
     QVBoxLayout,
     QWidget,
+    QAbstractSpinBox,
+    QLineEdit,
+    QPlainTextEdit,
+    QTextEdit,
 )
 
 from src.library.history_store import (
@@ -3372,6 +3378,7 @@ class DashboardPage(QWidget):
             self.layout_toolbar_controls_layout
         )
 
+        self.setup_dashboard_history_shortcuts()
         self.update_dashboard_layout_toolbar_responsive_state()
         self.update_dashboard_history_controls()
 
@@ -5121,6 +5128,248 @@ class DashboardPage(QWidget):
                 "your default browser.",
             )
 
+    def setup_dashboard_history_shortcuts(
+        self,
+    ):
+        existing = getattr(
+            self,
+            "dashboard_undo_shortcut",
+            None,
+        )
+
+        if existing is not None:
+            self.update_dashboard_history_shortcut_state()
+            return
+
+        self.dashboard_undo_shortcut = QShortcut(
+            QKeySequence(
+                "Ctrl+Z"
+            ),
+            self,
+        )
+        self.dashboard_undo_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.dashboard_undo_shortcut.setAutoRepeat(
+            False
+        )
+        self.dashboard_undo_shortcut.activated.connect(
+            self.trigger_dashboard_undo_shortcut
+        )
+
+        self.dashboard_redo_shortcut = QShortcut(
+            QKeySequence(
+                "Ctrl+Y"
+            ),
+            self,
+        )
+        self.dashboard_redo_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.dashboard_redo_shortcut.setAutoRepeat(
+            False
+        )
+        self.dashboard_redo_shortcut.activated.connect(
+            self.trigger_dashboard_redo_shortcut
+        )
+
+        self.dashboard_alternate_redo_shortcut = (
+            QShortcut(
+                QKeySequence(
+                    "Ctrl+Shift+Z"
+                ),
+                self,
+            )
+        )
+        self.dashboard_alternate_redo_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.dashboard_alternate_redo_shortcut.setAutoRepeat(
+            False
+        )
+        self.dashboard_alternate_redo_shortcut.activated.connect(
+            self.trigger_dashboard_redo_shortcut
+        )
+
+        application = QApplication.instance()
+
+        if (
+            application is not None
+            and not getattr(
+                self,
+                "_dashboard_history_focus_connected",
+                False,
+            )
+        ):
+            application.focusChanged.connect(
+                self.handle_dashboard_history_focus_changed
+            )
+
+            self._dashboard_history_focus_connected = True
+
+        self.update_dashboard_history_shortcut_state()
+
+    def dashboard_history_focus_blocks_shortcuts(
+        self,
+        focused_widget=None,
+    ) -> bool:
+        if focused_widget is None:
+            focused_widget = QApplication.focusWidget()
+
+        if focused_widget is None:
+            return False
+
+        if isinstance(
+            focused_widget,
+            (
+                QLineEdit,
+                QTextEdit,
+                QPlainTextEdit,
+                QAbstractSpinBox,
+            ),
+        ):
+            return True
+
+        if (
+            isinstance(
+                focused_widget,
+                QComboBox,
+            )
+            and focused_widget.isEditable()
+        ):
+            return True
+
+        return False
+
+    def update_dashboard_history_shortcut_state(
+        self,
+        focused_widget=None,
+    ):
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        locked = bool(
+            layout is None
+            or layout.locked
+        )
+
+        blocked = (
+            self.dashboard_history_focus_blocks_shortcuts(
+                focused_widget
+            )
+        )
+
+        undo_available = bool(
+            not locked
+            and not blocked
+            and getattr(
+                self,
+                "_dashboard_layout_undo_stack",
+                [],
+            )
+        )
+
+        redo_available = bool(
+            not locked
+            and not blocked
+            and getattr(
+                self,
+                "_dashboard_layout_redo_stack",
+                [],
+            )
+        )
+
+        undo_shortcut = getattr(
+            self,
+            "dashboard_undo_shortcut",
+            None,
+        )
+
+        if undo_shortcut is not None:
+            undo_shortcut.setEnabled(
+                undo_available
+            )
+
+        for attribute_name in (
+            "dashboard_redo_shortcut",
+            "dashboard_alternate_redo_shortcut",
+        ):
+            redo_shortcut = getattr(
+                self,
+                attribute_name,
+                None,
+            )
+
+            if redo_shortcut is not None:
+                redo_shortcut.setEnabled(
+                    redo_available
+                )
+
+    def handle_dashboard_history_focus_changed(
+        self,
+        _previous_widget,
+        focused_widget,
+    ):
+        self.update_dashboard_history_shortcut_state(
+            focused_widget
+        )
+
+    def trigger_dashboard_history_shortcut(
+        self,
+        action: str,
+        focused_widget=None,
+    ) -> bool:
+        if self.dashboard_history_focus_blocks_shortcuts(
+            focused_widget
+        ):
+            return False
+
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if (
+            layout is None
+            or layout.locked
+        ):
+            return False
+
+        normalized = str(
+            action
+            or ""
+        ).strip().casefold()
+
+        if normalized == "undo":
+            return bool(
+                self.undo_dashboard_layout()
+            )
+
+        if normalized == "redo":
+            return bool(
+                self.redo_dashboard_layout()
+            )
+
+        return False
+
+    def trigger_dashboard_undo_shortcut(
+        self,
+    ) -> bool:
+        return self.trigger_dashboard_history_shortcut(
+            "undo"
+        )
+
+    def trigger_dashboard_redo_shortcut(
+        self,
+    ) -> bool:
+        return self.trigger_dashboard_history_shortcut(
+            "redo"
+        )
+
     def clear_dashboard_layout_history(
         self,
     ):
@@ -5245,17 +5494,21 @@ class DashboardPage(QWidget):
 
                 undo_button.setToolTip(
                     (
-                        f"Undo {undo_label}"
+                        (
+                            f"Undo {undo_label} "
+                            "(Ctrl+Z)"
+                        )
                         if not locked
                         else (
                             "Edit the layout to "
-                            f"undo {undo_label}"
+                            f"undo {undo_label} "
+                            "(Ctrl+Z)"
                         )
                     )
                 )
             else:
                 undo_button.setToolTip(
-                    "Nothing to undo"
+                    "Nothing to undo (Ctrl+Z)"
                 )
 
         redo_button = getattr(
@@ -5277,18 +5530,35 @@ class DashboardPage(QWidget):
 
                 redo_button.setToolTip(
                     (
-                        f"Redo {redo_label}"
+                        (
+                            f"Redo {redo_label} "
+                            "(Ctrl+Y / Ctrl+Shift+Z)"
+                        )
                         if not locked
                         else (
                             "Edit the layout to "
-                            f"redo {redo_label}"
+                            f"redo {redo_label} "
+                            "(Ctrl+Y / Ctrl+Shift+Z)"
                         )
                     )
                 )
             else:
                 redo_button.setToolTip(
-                    "Nothing to redo"
+                    (
+                        "Nothing to redo "
+                        "(Ctrl+Y / Ctrl+Shift+Z)"
+                    )
                 )
+
+        shortcut_sync = getattr(
+            self,
+            "update_dashboard_history_shortcut_state",
+            None,
+        )
+
+        if callable(shortcut_sync):
+            shortcut_sync()
+
 
     def undo_dashboard_layout(
         self,
