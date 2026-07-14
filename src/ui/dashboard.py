@@ -437,6 +437,9 @@ class DashboardPage(QWidget):
             self.dashboard_layout_store.load()
         )
 
+        self._dashboard_layout_undo_stack = []
+        self._dashboard_layout_redo_stack = []
+
         self.custom_card_store = (
             CustomCardStore()
         )
@@ -2116,6 +2119,8 @@ class DashboardPage(QWidget):
                 updated,
                 persist=True,
                 sync_controls=True,
+                record_history=True,
+                history_label="card move",
             )
 
         except ValueError as error:
@@ -2506,6 +2511,8 @@ class DashboardPage(QWidget):
                 updated,
                 persist=True,
                 sync_controls=True,
+                record_history=True,
+                history_label="card resize",
             )
 
         except ValueError as error:
@@ -3126,6 +3133,46 @@ class DashboardPage(QWidget):
             self.layout_profiles_menu
         )
 
+        self.layout_undo_button = QPushButton(
+            "Undo"
+        )
+        self.layout_undo_button.setObjectName(
+            "layoutControlButton"
+        )
+        self.layout_undo_button.setProperty(
+            "historyRole",
+            "undo",
+        )
+        self.layout_undo_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_undo_button.setToolTip(
+            "Nothing to undo"
+        )
+        self.layout_undo_button.clicked.connect(
+            self.undo_dashboard_layout
+        )
+
+        self.layout_redo_button = QPushButton(
+            "Redo"
+        )
+        self.layout_redo_button.setObjectName(
+            "layoutControlButton"
+        )
+        self.layout_redo_button.setProperty(
+            "historyRole",
+            "redo",
+        )
+        self.layout_redo_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_redo_button.setToolTip(
+            "Nothing to redo"
+        )
+        self.layout_redo_button.clicked.connect(
+            self.redo_dashboard_layout
+        )
+
         self.layout_snap_button = QPushButton(
             "Snap: On"
         )
@@ -3292,6 +3339,12 @@ class DashboardPage(QWidget):
             cards_group_label
         )
         self.layout_secondary_group_layout.addWidget(
+            self.layout_undo_button
+        )
+        self.layout_secondary_group_layout.addWidget(
+            self.layout_redo_button
+        )
+        self.layout_secondary_group_layout.addWidget(
             self.layout_snap_button
         )
         self.layout_secondary_group_layout.addWidget(
@@ -3320,6 +3373,7 @@ class DashboardPage(QWidget):
         )
 
         self.update_dashboard_layout_toolbar_responsive_state()
+        self.update_dashboard_history_controls()
 
 
 
@@ -3872,6 +3926,8 @@ class DashboardPage(QWidget):
         self.apply_dashboard_layout(
             layout,
             persist=True,
+            record_history=True,
+            history_label=f"profile {profile.name}",
         )
 
     def delete_dashboard_profile(
@@ -4956,6 +5012,7 @@ class DashboardPage(QWidget):
             for item in saved_cards
         }
         self.dashboard_layout_state = saved_layout
+        self.clear_dashboard_layout_history()
         self.prune_unused_launcher_card_images()
         self.remove_custom_card_ui(card_id)
         self.sync_dashboard_layout_controls()
@@ -5064,6 +5121,363 @@ class DashboardPage(QWidget):
                 "your default browser.",
             )
 
+    def clear_dashboard_layout_history(
+        self,
+    ):
+        self._dashboard_layout_undo_stack = []
+        self._dashboard_layout_redo_stack = []
+
+        self.update_dashboard_history_controls()
+
+    def record_dashboard_layout_history(
+        self,
+        previous_layout: DashboardLayout,
+        label: str,
+    ):
+        snapshot = validate_layout(
+            previous_layout
+        )
+
+        normalized_label = str(
+            label
+            or "change"
+        ).strip()
+
+        if not normalized_label:
+            normalized_label = "change"
+
+        undo_stack = getattr(
+            self,
+            "_dashboard_layout_undo_stack",
+            None,
+        )
+
+        if not isinstance(
+            undo_stack,
+            list,
+        ):
+            undo_stack = []
+            self._dashboard_layout_undo_stack = (
+                undo_stack
+            )
+
+        undo_stack.append(
+            (
+                normalized_label,
+                snapshot,
+            )
+        )
+
+        if len(undo_stack) > 50:
+            del undo_stack[:-50]
+
+        redo_stack = getattr(
+            self,
+            "_dashboard_layout_redo_stack",
+            None,
+        )
+
+        if not isinstance(
+            redo_stack,
+            list,
+        ):
+            redo_stack = []
+            self._dashboard_layout_redo_stack = (
+                redo_stack
+            )
+
+        redo_stack.clear()
+
+        self.update_dashboard_history_controls()
+
+    def update_dashboard_history_controls(
+        self,
+    ):
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        locked = bool(
+            layout is None
+            or layout.locked
+        )
+
+        undo_stack = getattr(
+            self,
+            "_dashboard_layout_undo_stack",
+            [],
+        )
+
+        redo_stack = getattr(
+            self,
+            "_dashboard_layout_redo_stack",
+            [],
+        )
+
+        undo_available = bool(
+            not locked
+            and undo_stack
+        )
+
+        redo_available = bool(
+            not locked
+            and redo_stack
+        )
+
+        undo_button = getattr(
+            self,
+            "layout_undo_button",
+            None,
+        )
+
+        if undo_button is not None:
+            undo_button.setEnabled(
+                undo_available
+            )
+
+            if undo_stack:
+                undo_label = str(
+                    undo_stack[-1][0]
+                    or "change"
+                )
+
+                undo_button.setToolTip(
+                    (
+                        f"Undo {undo_label}"
+                        if not locked
+                        else (
+                            "Edit the layout to "
+                            f"undo {undo_label}"
+                        )
+                    )
+                )
+            else:
+                undo_button.setToolTip(
+                    "Nothing to undo"
+                )
+
+        redo_button = getattr(
+            self,
+            "layout_redo_button",
+            None,
+        )
+
+        if redo_button is not None:
+            redo_button.setEnabled(
+                redo_available
+            )
+
+            if redo_stack:
+                redo_label = str(
+                    redo_stack[-1][0]
+                    or "change"
+                )
+
+                redo_button.setToolTip(
+                    (
+                        f"Redo {redo_label}"
+                        if not locked
+                        else (
+                            "Edit the layout to "
+                            f"redo {redo_label}"
+                        )
+                    )
+                )
+            else:
+                redo_button.setToolTip(
+                    "Nothing to redo"
+                )
+
+    def undo_dashboard_layout(
+        self,
+    ) -> bool:
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return False
+
+        undo_stack = getattr(
+            self,
+            "_dashboard_layout_undo_stack",
+            [],
+        )
+
+        if not undo_stack:
+            self.update_dashboard_history_controls()
+            return False
+
+        if self._dashboard_drag_active:
+            self.cancel_dashboard_live_drag()
+
+        if self._dashboard_resize_active:
+            self.cancel_dashboard_live_resize()
+
+        entry = undo_stack.pop()
+        label, target_layout = entry
+
+        current_layout = (
+            self.dashboard_layout_state
+        )
+
+        try:
+            restored_layout = replace(
+                validate_layout(
+                    target_layout
+                ),
+                locked=current_layout.locked,
+            )
+
+            self.apply_dashboard_layout(
+                restored_layout,
+                persist=True,
+                sync_controls=False,
+                record_history=False,
+            )
+
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            undo_stack.append(entry)
+
+            print(
+                "Dashboard layout undo rejected: "
+                f"{error}"
+            )
+
+            self.update_dashboard_history_controls()
+            return False
+
+        redo_stack = getattr(
+            self,
+            "_dashboard_layout_redo_stack",
+            None,
+        )
+
+        if not isinstance(
+            redo_stack,
+            list,
+        ):
+            redo_stack = []
+            self._dashboard_layout_redo_stack = (
+                redo_stack
+            )
+
+        redo_stack.append(
+            (
+                label,
+                current_layout,
+            )
+        )
+
+        if len(redo_stack) > 50:
+            del redo_stack[:-50]
+
+        self.sync_dashboard_layout_controls()
+
+        print(
+            "Dashboard layout undone: "
+            f"{label}."
+        )
+
+        return True
+
+    def redo_dashboard_layout(
+        self,
+    ) -> bool:
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return False
+
+        redo_stack = getattr(
+            self,
+            "_dashboard_layout_redo_stack",
+            [],
+        )
+
+        if not redo_stack:
+            self.update_dashboard_history_controls()
+            return False
+
+        if self._dashboard_drag_active:
+            self.cancel_dashboard_live_drag()
+
+        if self._dashboard_resize_active:
+            self.cancel_dashboard_live_resize()
+
+        entry = redo_stack.pop()
+        label, target_layout = entry
+
+        current_layout = (
+            self.dashboard_layout_state
+        )
+
+        try:
+            restored_layout = replace(
+                validate_layout(
+                    target_layout
+                ),
+                locked=current_layout.locked,
+            )
+
+            self.apply_dashboard_layout(
+                restored_layout,
+                persist=True,
+                sync_controls=False,
+                record_history=False,
+            )
+
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            redo_stack.append(entry)
+
+            print(
+                "Dashboard layout redo rejected: "
+                f"{error}"
+            )
+
+            self.update_dashboard_history_controls()
+            return False
+
+        undo_stack = getattr(
+            self,
+            "_dashboard_layout_undo_stack",
+            None,
+        )
+
+        if not isinstance(
+            undo_stack,
+            list,
+        ):
+            undo_stack = []
+            self._dashboard_layout_undo_stack = (
+                undo_stack
+            )
+
+        undo_stack.append(
+            (
+                label,
+                current_layout,
+            )
+        )
+
+        if len(undo_stack) > 50:
+            del undo_stack[:-50]
+
+        self.sync_dashboard_layout_controls()
+
+        print(
+            "Dashboard layout redone: "
+            f"{label}."
+        )
+
+        return True
+
     def apply_dashboard_preset(
         self,
         preset_name: str,
@@ -5102,6 +5516,8 @@ class DashboardPage(QWidget):
         self.apply_dashboard_layout(
             layout,
             persist=True,
+            record_history=True,
+            history_label=f"preset {name}",
         )
 
     def toggle_dashboard_layout_lock(self):
@@ -5144,6 +5560,8 @@ class DashboardPage(QWidget):
         self.apply_dashboard_layout(
             layout,
             persist=True,
+            record_history=True,
+            history_label="layout reset",
         )
 
     def set_dashboard_card_visibility(
@@ -5213,6 +5631,8 @@ class DashboardPage(QWidget):
             self.apply_dashboard_layout(
                 updated,
                 persist=True,
+                record_history=True,
+                history_label="card visibility",
             )
         except ValueError as error:
             print(
@@ -5349,6 +5769,7 @@ class DashboardPage(QWidget):
 
         self.update_dashboard_layout_toolbar_responsive_state()
         self.sync_dashboard_drag_handles()
+        self.update_dashboard_history_controls()
 
 
     def apply_dashboard_layout(
@@ -5356,9 +5777,37 @@ class DashboardPage(QWidget):
         layout: DashboardLayout,
         persist: bool = False,
         sync_controls: bool = True,
+        record_history: bool = False,
+        history_label: str = "change",
     ) -> DashboardLayout:
+        previous_layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
         validated = validate_layout(
             layout
+        )
+
+        previous_card_ids = (
+            frozenset(
+                card.card_id
+                for card in previous_layout.cards
+            )
+            if previous_layout is not None
+            else frozenset()
+        )
+
+        validated_card_ids = frozenset(
+            card.card_id
+            for card in validated.cards
+        )
+
+        structural_change = bool(
+            previous_layout is not None
+            and previous_card_ids
+            != validated_card_ids
         )
 
         if persist:
@@ -5367,6 +5816,19 @@ class DashboardPage(QWidget):
                     validated
                 )
             )
+
+        if (
+            record_history
+            and previous_layout is not None
+            and validated != previous_layout
+        ):
+            self.record_dashboard_layout_history(
+                previous_layout,
+                history_label,
+            )
+
+        elif structural_change:
+            self.clear_dashboard_layout_history()
 
         self.dashboard_layout_state = (
             validated
@@ -5378,6 +5840,7 @@ class DashboardPage(QWidget):
         self.schedule_dashboard_geometry_refresh()
 
         return validated
+
 
     def build_now_playing_card(self):
         self.now_playing_card = QFrame()

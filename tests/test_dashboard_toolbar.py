@@ -38,6 +38,8 @@ class _ToolbarStub(QWidget):
             ),
             locked=True,
         )
+        self._dashboard_layout_undo_stack = []
+        self._dashboard_layout_redo_stack = []
 
     def apply_dashboard_preset(self, *_):
         pass
@@ -73,6 +75,17 @@ class _ToolbarStub(QWidget):
 
     def sync_dashboard_drag_handles(self):
         pass
+
+    def undo_dashboard_layout(self):
+        pass
+
+    def redo_dashboard_layout(self):
+        pass
+
+    def update_dashboard_history_controls(self):
+        DashboardPage.update_dashboard_history_controls(
+            self
+        )
 
     def register_dashboard_visibility_action(
         self,
@@ -174,6 +187,87 @@ class DashboardToolbarTests(unittest.TestCase):
         self.assertEqual(
             widget.layout_toolbar_title.text(),
             "CONTROL ROOM",
+        )
+
+        widget.close()
+
+    def test_toolbar_includes_history_controls(
+        self,
+    ):
+        widget = self.build_toolbar()
+
+        undo_index = (
+            widget.layout_secondary_group_layout.indexOf(
+                widget.layout_undo_button
+            )
+        )
+
+        redo_index = (
+            widget.layout_secondary_group_layout.indexOf(
+                widget.layout_redo_button
+            )
+        )
+
+        snap_index = (
+            widget.layout_secondary_group_layout.indexOf(
+                widget.layout_snap_button
+            )
+        )
+
+        self.assertGreaterEqual(
+            undo_index,
+            0,
+        )
+        self.assertEqual(
+            redo_index,
+            undo_index + 1,
+        )
+        self.assertEqual(
+            snap_index,
+            redo_index + 1,
+        )
+
+        self.assertEqual(
+            widget.layout_undo_button.text(),
+            "Undo",
+        )
+        self.assertEqual(
+            widget.layout_redo_button.text(),
+            "Redo",
+        )
+
+        self.assertFalse(
+            widget.layout_undo_button.isEnabled()
+        )
+        self.assertFalse(
+            widget.layout_redo_button.isEnabled()
+        )
+
+        widget.dashboard_layout_state = replace(
+            widget.dashboard_layout_state,
+            locked=False,
+        )
+
+        widget._dashboard_layout_undo_stack.append(
+            (
+                "card move",
+                widget.dashboard_layout_state,
+            )
+        )
+
+        DashboardPage.update_dashboard_history_controls(
+            widget
+        )
+
+        self.assertTrue(
+            widget.layout_undo_button.isEnabled()
+        )
+        self.assertFalse(
+            widget.layout_redo_button.isEnabled()
+        )
+        self.assertEqual(
+            widget.layout_undo_button.toolTip(),
+            "Undo card move",
         )
 
         widget.close()
