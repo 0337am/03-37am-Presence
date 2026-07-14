@@ -446,6 +446,10 @@ class DashboardPage(QWidget):
         self._dashboard_layout_undo_stack = []
         self._dashboard_layout_redo_stack = []
 
+        self._dashboard_layout_session_baseline = None
+        self._dashboard_layout_session_card_ids = frozenset()
+        self._dashboard_layout_session_valid = False
+
         self.custom_card_store = (
             CustomCardStore()
         )
@@ -3179,6 +3183,34 @@ class DashboardPage(QWidget):
             self.redo_dashboard_layout
         )
 
+        self.layout_revert_session_button = QPushButton(
+            "Revert"
+        )
+        self.layout_revert_session_button.setObjectName(
+            "layoutControlButton"
+        )
+        self.layout_revert_session_button.setProperty(
+            "sessionRole",
+            "revert",
+        )
+        self.layout_revert_session_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_revert_session_button.setToolTip(
+            (
+                "Edit the layout to begin "
+                "a revert session."
+            )
+        )
+        self.layout_revert_session_button.clicked.connect(
+            lambda _checked=False: (
+                DashboardPage
+                .revert_dashboard_layout_session(
+                    self
+                )
+            )
+        )
+
         self.layout_snap_button = QPushButton(
             "Snap: On"
         )
@@ -3349,6 +3381,9 @@ class DashboardPage(QWidget):
         )
         self.layout_secondary_group_layout.addWidget(
             self.layout_redo_button
+        )
+        self.layout_secondary_group_layout.addWidget(
+            self.layout_revert_session_button
         )
         self.layout_secondary_group_layout.addWidget(
             self.layout_snap_button
@@ -5020,6 +5055,7 @@ class DashboardPage(QWidget):
         }
         self.dashboard_layout_state = saved_layout
         self.clear_dashboard_layout_history()
+        self.invalidate_dashboard_layout_session()
         self.prune_unused_launcher_card_images()
         self.remove_custom_card_ui(card_id)
         self.sync_dashboard_layout_controls()
@@ -5127,6 +5163,320 @@ class DashboardPage(QWidget):
                 "Windows could not open this address in "
                 "your default browser.",
             )
+
+    def dashboard_layout_session_card_ids(
+        self,
+        layout=None,
+    ) -> frozenset[str]:
+        if layout is None:
+            layout = getattr(
+                self,
+                "dashboard_layout_state",
+                None,
+            )
+
+        if layout is None:
+            return frozenset()
+
+        return frozenset(
+            card.card_id
+            for card in layout.cards
+        )
+
+    def begin_dashboard_layout_session(
+        self,
+        layout=None,
+    ) -> bool:
+        source_layout = (
+            layout
+            if layout is not None
+            else getattr(
+                self,
+                "dashboard_layout_state",
+                None,
+            )
+        )
+
+        if source_layout is None:
+            self.end_dashboard_layout_session()
+            return False
+
+        snapshot = replace(
+            validate_layout(
+                source_layout
+            ),
+            locked=False,
+        )
+
+        self._dashboard_layout_session_baseline = (
+            snapshot
+        )
+        self._dashboard_layout_session_card_ids = (
+            self.dashboard_layout_session_card_ids(
+                snapshot
+            )
+        )
+        self._dashboard_layout_session_valid = True
+
+        self.update_dashboard_layout_session_controls()
+        return True
+
+    def end_dashboard_layout_session(
+        self,
+    ):
+        self._dashboard_layout_session_baseline = None
+        self._dashboard_layout_session_card_ids = (
+            frozenset()
+        )
+        self._dashboard_layout_session_valid = False
+
+        self.update_dashboard_layout_session_controls()
+
+    def invalidate_dashboard_layout_session(
+        self,
+    ):
+        self._dashboard_layout_session_valid = False
+
+        self.update_dashboard_layout_session_controls()
+
+    def dashboard_layout_session_is_safe(
+        self,
+    ) -> bool:
+        baseline = getattr(
+            self,
+            "_dashboard_layout_session_baseline",
+            None,
+        )
+
+        if (
+            baseline is None
+            or not getattr(
+                self,
+                "_dashboard_layout_session_valid",
+                False,
+            )
+        ):
+            return False
+
+        current_layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if current_layout is None:
+            return False
+
+        recorded_ids = getattr(
+            self,
+            "_dashboard_layout_session_card_ids",
+            frozenset(),
+        )
+
+        return bool(
+            recorded_ids
+            == self.dashboard_layout_session_card_ids(
+                baseline
+            )
+            == self.dashboard_layout_session_card_ids(
+                current_layout
+            )
+        )
+
+    def dashboard_layout_session_has_changes(
+        self,
+    ) -> bool:
+        if not self.dashboard_layout_session_is_safe():
+            return False
+
+        baseline = (
+            self._dashboard_layout_session_baseline
+        )
+
+        current_layout = replace(
+            validate_layout(
+                self.dashboard_layout_state
+            ),
+            locked=False,
+        )
+
+        return current_layout != baseline
+
+    def update_dashboard_layout_session_controls(
+        self,
+    ):
+        button = getattr(
+            self,
+            "layout_revert_session_button",
+            None,
+        )
+
+        if button is None:
+            return
+
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        locked = bool(
+            layout is None
+            or layout.locked
+        )
+
+        baseline = getattr(
+            self,
+            "_dashboard_layout_session_baseline",
+            None,
+        )
+
+        valid = bool(
+            getattr(
+                self,
+                "_dashboard_layout_session_valid",
+                False,
+            )
+        )
+
+        safe = (
+            self.dashboard_layout_session_is_safe()
+        )
+
+        changed = bool(
+            safe
+            and self.dashboard_layout_session_has_changes()
+        )
+
+        button.setEnabled(
+            bool(
+                not locked
+                and changed
+            )
+        )
+
+        if locked:
+            button.setToolTip(
+                (
+                    "Edit the layout to begin "
+                    "a revert session."
+                )
+            )
+
+        elif baseline is None:
+            button.setToolTip(
+                (
+                    "No editing-session snapshot "
+                    "is available."
+                )
+            )
+
+        elif not valid or not safe:
+            button.setToolTip(
+                (
+                    "Revert is unavailable after "
+                    "adding, duplicating, or "
+                    "deleting cards. Finish editing "
+                    "and begin a new session."
+                )
+            )
+
+        elif not changed:
+            button.setToolTip(
+                (
+                    "The layout matches the start "
+                    "of this editing session."
+                )
+            )
+
+        else:
+            button.setToolTip(
+                (
+                    "Restore the layout from when "
+                    "editing began. This action can "
+                    "be undone."
+                )
+            )
+
+    def revert_dashboard_layout_session(
+        self,
+    ) -> bool:
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if (
+            layout is None
+            or layout.locked
+        ):
+            self.update_dashboard_layout_session_controls()
+            return False
+
+        if getattr(
+            self,
+            "_dashboard_drag_active",
+            False,
+        ):
+            self.cancel_dashboard_live_drag()
+
+        if getattr(
+            self,
+            "_dashboard_resize_active",
+            False,
+        ):
+            self.cancel_dashboard_live_resize()
+
+        if (
+            not self.dashboard_layout_session_is_safe()
+            or not self.dashboard_layout_session_has_changes()
+        ):
+            self.update_dashboard_layout_session_controls()
+            return False
+
+        baseline = (
+            self._dashboard_layout_session_baseline
+        )
+
+        target_layout = replace(
+            validate_layout(
+                baseline
+            ),
+            locked=False,
+        )
+
+        try:
+            self.apply_dashboard_layout(
+                target_layout,
+                persist=True,
+                sync_controls=False,
+                record_history=True,
+                history_label="session revert",
+            )
+
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            QMessageBox.warning(
+                self,
+                "Layout not reverted",
+                str(error),
+            )
+
+            self.update_dashboard_layout_session_controls()
+            return False
+
+        self.sync_dashboard_layout_controls()
+
+        print(
+            "Dashboard layout reverted to "
+            "the editing-session start."
+        )
+
+        return True
 
     def setup_dashboard_history_shortcuts(
         self,
@@ -5559,6 +5909,15 @@ class DashboardPage(QWidget):
         if callable(shortcut_sync):
             shortcut_sync()
 
+        session_sync = getattr(
+            self,
+            "update_dashboard_layout_session_controls",
+            None,
+        )
+
+        if callable(session_sync):
+            session_sync()
+
 
     def undo_dashboard_layout(
         self,
@@ -5797,10 +6156,29 @@ class DashboardPage(QWidget):
         if self._dashboard_resize_active:
             self.cancel_dashboard_live_resize()
 
+        current_layout = (
+            self.dashboard_layout_state
+        )
+
+        entering_editing = bool(
+            current_layout.locked
+        )
+
+        session_baseline = (
+            replace(
+                validate_layout(
+                    current_layout
+                ),
+                locked=False,
+            )
+            if entering_editing
+            else None
+        )
+
         updated = replace(
-            self.dashboard_layout_state,
+            current_layout,
             locked=(
-                not self.dashboard_layout_state.locked
+                not current_layout.locked
             ),
         )
 
@@ -5808,6 +6186,14 @@ class DashboardPage(QWidget):
             updated,
             persist=True,
         )
+
+        if entering_editing:
+            self.begin_dashboard_layout_session(
+                session_baseline
+            )
+        else:
+            self.end_dashboard_layout_session()
+
 
     def reset_dashboard_layout(self):
         if self.dashboard_layout_state.locked:
@@ -6097,8 +6483,9 @@ class DashboardPage(QWidget):
                 history_label,
             )
 
-        elif structural_change:
+        if structural_change:
             self.clear_dashboard_layout_history()
+            self.invalidate_dashboard_layout_session()
 
         self.dashboard_layout_state = (
             validated

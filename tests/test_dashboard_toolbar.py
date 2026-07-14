@@ -242,6 +242,12 @@ class DashboardToolbarTests(unittest.TestCase):
             )
         )
 
+        revert_index = (
+            widget.layout_secondary_group_layout.indexOf(
+                widget.layout_revert_session_button
+            )
+        )
+
         snap_index = (
             widget.layout_secondary_group_layout.indexOf(
                 widget.layout_snap_button
@@ -257,8 +263,12 @@ class DashboardToolbarTests(unittest.TestCase):
             undo_index + 1,
         )
         self.assertEqual(
-            snap_index,
+            revert_index,
             redo_index + 1,
+        )
+        self.assertEqual(
+            snap_index,
+            revert_index + 1,
         )
 
         self.assertEqual(
@@ -268,6 +278,10 @@ class DashboardToolbarTests(unittest.TestCase):
         self.assertEqual(
             widget.layout_redo_button.text(),
             "Redo",
+        )
+        self.assertEqual(
+            widget.layout_revert_session_button.text(),
+            "Revert",
         )
 
         self.assertFalse(
