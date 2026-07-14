@@ -170,6 +170,222 @@ class MediaWorker(QThread):
     def stop(self):
         self.requestInterruption()
 
+class DashboardCanvas(QFrame):
+    def __init__(
+        self,
+        parent=None,
+    ):
+        super().__init__(parent)
+
+        self._grid_spacing = 24
+        self._snap_enabled = True
+        self._editor_accent = "#ffffff"
+        self._editor_border = "#808080"
+
+        self.setProperty(
+            "editing",
+            False,
+        )
+        self.setProperty(
+            "snapEnabled",
+            True,
+        )
+        self.setProperty(
+            "gridSpacing",
+            self._grid_spacing,
+        )
+
+    def set_editor_theme(
+        self,
+        accent: str,
+        border: str,
+    ):
+        self._editor_accent = str(
+            accent
+            or "#ffffff"
+        )
+        self._editor_border = str(
+            border
+            or "#808080"
+        )
+
+        self.setProperty(
+            "editorAccent",
+            self._editor_accent,
+        )
+        self.setProperty(
+            "editorBorder",
+            self._editor_border,
+        )
+
+        self.update()
+
+    def set_grid_spacing(
+        self,
+        spacing: int,
+    ):
+        self._grid_spacing = max(
+            8,
+            int(spacing),
+        )
+
+        self.setProperty(
+            "gridSpacing",
+            self._grid_spacing,
+        )
+
+        self.update()
+
+    def set_snap_enabled(
+        self,
+        enabled: bool,
+    ):
+        self._snap_enabled = bool(
+            enabled
+        )
+
+        self.setProperty(
+            "snapEnabled",
+            self._snap_enabled,
+        )
+
+        self.update()
+
+    def paintEvent(
+        self,
+        event,
+    ):
+        super().paintEvent(event)
+
+        if (
+            not bool(
+                self.property(
+                    "editing"
+                )
+            )
+            or not self._snap_enabled
+        ):
+            return
+
+        from PyQt6.QtGui import (
+            QColor,
+            QPainter,
+            QPen,
+        )
+
+        painter = QPainter(self)
+        painter.setRenderHint(
+            QPainter.RenderHint.Antialiasing,
+            False,
+        )
+
+        spacing = max(
+            8,
+            self._grid_spacing,
+        )
+
+        rectangle = self.rect().adjusted(
+            1,
+            1,
+            -1,
+            -1,
+        )
+
+        minor_colour = QColor(
+            self._editor_border
+        )
+
+        if not minor_colour.isValid():
+            minor_colour = QColor(
+                "#808080"
+            )
+
+        minor_colour.setAlpha(28)
+
+        minor_pen = QPen(
+            minor_colour
+        )
+        minor_pen.setWidth(1)
+
+        painter.setPen(
+            minor_pen
+        )
+
+        for x in range(
+            rectangle.left() + spacing,
+            rectangle.right(),
+            spacing,
+        ):
+            painter.drawLine(
+                x,
+                rectangle.top(),
+                x,
+                rectangle.bottom(),
+            )
+
+        for y in range(
+            rectangle.top() + spacing,
+            rectangle.bottom(),
+            spacing,
+        ):
+            painter.drawLine(
+                rectangle.left(),
+                y,
+                rectangle.right(),
+                y,
+            )
+
+        major_spacing = (
+            spacing * 4
+        )
+
+        major_colour = QColor(
+            self._editor_accent
+        )
+
+        if not major_colour.isValid():
+            major_colour = QColor(
+                "#ffffff"
+            )
+
+        major_colour.setAlpha(48)
+
+        major_pen = QPen(
+            major_colour
+        )
+        major_pen.setWidth(1)
+
+        painter.setPen(
+            major_pen
+        )
+
+        for x in range(
+            rectangle.left() + major_spacing,
+            rectangle.right(),
+            major_spacing,
+        ):
+            painter.drawLine(
+                x,
+                rectangle.top(),
+                x,
+                rectangle.bottom(),
+            )
+
+        for y in range(
+            rectangle.top() + major_spacing,
+            rectangle.bottom(),
+            major_spacing,
+        ):
+            painter.drawLine(
+                rectangle.left(),
+                y,
+                rectangle.right(),
+                y,
+            )
+
+        painter.end()
+
+
 class DashboardPage(QWidget):
     # ANIMATED_EQUALIZER
     # FINAL_GUIDE_DETAILS
@@ -488,7 +704,7 @@ class DashboardPage(QWidget):
             self.layout_toolbar
         )
 
-        self.dashboard_canvas = QFrame()
+        self.dashboard_canvas = DashboardCanvas()
         self.dashboard_canvas.setObjectName(
             "dashboardCanvas"
         )
@@ -681,7 +897,7 @@ class DashboardPage(QWidget):
             return
 
         move_handle = QLabel(
-            "MOVE",
+            "DRAG",
             self.dashboard_canvas,
         )
         move_handle.setObjectName(
@@ -702,8 +918,8 @@ class DashboardPage(QWidget):
             Qt.CursorShape.OpenHandCursor
         )
         move_handle.setFixedSize(
-            38,
-            18,
+            44,
+            20,
         )
         move_handle.setToolTip(
             "Drag this card anywhere on the dashboard"
@@ -717,7 +933,7 @@ class DashboardPage(QWidget):
         )
 
         resize_handle = QLabel(
-            "↘",
+            "SIZE",
             self.dashboard_canvas,
         )
         resize_handle.setObjectName(
@@ -738,8 +954,8 @@ class DashboardPage(QWidget):
             Qt.CursorShape.SizeFDiagCursor
         )
         resize_handle.setFixedSize(
-            18,
-            18,
+            34,
+            20,
         )
         resize_handle.setToolTip(
             "Drag to resize this dashboard card"
@@ -757,7 +973,7 @@ class DashboardPage(QWidget):
 
         if is_custom_dashboard_card_id(card_id):
             action_handle = QPushButton(
-                "⋯",
+                "...",
                 self.dashboard_canvas,
             )
             action_handle.setObjectName(
@@ -767,8 +983,8 @@ class DashboardPage(QWidget):
                 Qt.CursorShape.PointingHandCursor
             )
             action_handle.setFixedSize(
-                26,
-                18,
+                30,
+                20,
             )
             action_handle.setToolTip(
                 "Edit or duplicate this custom card"
@@ -820,7 +1036,7 @@ class DashboardPage(QWidget):
             action_handle.setMenu(action_menu)
 
             delete_handle = QPushButton(
-                "×",
+                "X",
                 self.dashboard_canvas,
             )
             delete_handle.setObjectName(
@@ -830,8 +1046,8 @@ class DashboardPage(QWidget):
                 Qt.CursorShape.PointingHandCursor
             )
             delete_handle.setFixedSize(
-                18,
-                18,
+                20,
+                20,
             )
             delete_handle.setToolTip(
                 "Delete this custom card"
@@ -863,6 +1079,65 @@ class DashboardPage(QWidget):
         if card.parentWidget() is not self.dashboard_canvas:
             card.setParent(self.dashboard_canvas)
 
+    def update_dashboard_canvas_editor_state(
+        self,
+    ):
+        canvas = getattr(
+            self,
+            "dashboard_canvas",
+            None,
+        )
+
+        if canvas is None:
+            return
+
+        locked = bool(
+            self.dashboard_layout_state.locked
+        )
+
+        editing = not locked
+
+        canvas.setProperty(
+            "editing",
+            editing,
+        )
+
+        if hasattr(
+            canvas,
+            "set_grid_spacing",
+        ):
+            canvas.set_grid_spacing(
+                self.dashboard_snap_grid_size
+            )
+
+        if hasattr(
+            canvas,
+            "set_snap_enabled",
+        ):
+            canvas.set_snap_enabled(
+                self.dashboard_snap_to_grid
+            )
+
+        self._refresh_dashboard_widget_style(
+            canvas
+        )
+
+        canvas.update()
+
+        for card in getattr(
+            self,
+            "dashboard_cards",
+            {},
+        ).values():
+            card.setProperty(
+                "dashboardEditing",
+                editing,
+            )
+
+            self._refresh_dashboard_widget_style(
+                card
+            )
+
     def sync_dashboard_drag_handles(self):
         move_handles = getattr(
             self,
@@ -888,25 +1163,14 @@ class DashboardPage(QWidget):
             {},
         )
 
+        self.update_dashboard_canvas_editor_state()
+
         if not move_handles:
             return
 
         locked = (
             self.dashboard_layout_state.locked
         )
-
-        if hasattr(
-            self,
-            "dashboard_canvas",
-        ):
-            self.dashboard_canvas.setProperty(
-                "editing",
-                not locked,
-            )
-
-            self._refresh_dashboard_widget_style(
-                self.dashboard_canvas
-            )
 
         for card_id, move_handle in (
             move_handles.items()
@@ -1017,6 +1281,8 @@ class DashboardPage(QWidget):
             self.dashboard_canvas.height(),
         )
 
+        handle_inset = 6
+
         resize_handles = getattr(
             self,
             "dashboard_resize_handles",
@@ -1061,10 +1327,7 @@ class DashboardPage(QWidget):
 
             move_y = (
                 card.y()
-                - (
-                    move_handle.height()
-                    // 2
-                )
+                + handle_inset
             )
 
             move_x = min(
@@ -1109,18 +1372,12 @@ class DashboardPage(QWidget):
             if action_handle is not None:
                 action_x = (
                     card.x()
-                    - (
-                        action_handle.width()
-                        // 2
-                    )
+                    + handle_inset
                 )
 
                 action_y = (
                     card.y()
-                    - (
-                        action_handle.height()
-                        // 2
-                    )
+                    + handle_inset
                 )
 
                 action_x = min(
@@ -1165,18 +1422,13 @@ class DashboardPage(QWidget):
                 delete_x = (
                     card.x()
                     + card.width()
-                    - (
-                        delete_handle.width()
-                        // 2
-                    )
+                    - delete_handle.width()
+                    - handle_inset
                 )
 
                 delete_y = (
                     card.y()
-                    - (
-                        delete_handle.height()
-                        // 2
-                    )
+                    + handle_inset
                 )
 
                 delete_x = min(
@@ -1221,19 +1473,15 @@ class DashboardPage(QWidget):
                 resize_x = (
                     card.x()
                     + card.width()
-                    - (
-                        resize_handle.width()
-                        // 2
-                    )
+                    - resize_handle.width()
+                    - handle_inset
                 )
 
                 resize_y = (
                     card.y()
                     + card.height()
-                    - (
-                        resize_handle.height()
-                        // 2
-                    )
+                    - resize_handle.height()
+                    - handle_inset
                 )
 
                 resize_x = min(
@@ -3115,12 +3363,35 @@ class DashboardPage(QWidget):
         )
 
         button.setToolTip(
-            "Cards snap to a 24px grid while moving or resizing"
+            (
+                "Cards snap to a 24px grid "
+                "while moving or resizing"
+            )
             if self.dashboard_snap_to_grid
-            else "Cards move and resize freely"
+            else (
+                "Cards move and resize freely"
+            )
         )
 
         del blocker
+
+        canvas = getattr(
+            self,
+            "dashboard_canvas",
+            None,
+        )
+
+        if (
+            canvas is not None
+            and hasattr(
+                canvas,
+                "set_snap_enabled",
+            )
+        ):
+            canvas.set_snap_enabled(
+                self.dashboard_snap_to_grid
+            )
+
 
     def snap_dashboard_pixel_value(
         self,
@@ -6520,6 +6791,11 @@ class DashboardPage(QWidget):
         )
         page_background = "transparent"
 
+        self.dashboard_canvas.set_editor_theme(
+            theme["accent"],
+            theme["border"],
+        )
+
         self.setStyleSheet(
             f"""
             QWidget#dashboardRoot {{
@@ -6597,43 +6873,32 @@ class DashboardPage(QWidget):
                 border-color: {theme["accent"]};
             }}
 
-            QLabel#dashboardDragHandle {{
-                color: {theme["text"]};
-                background: {card_alt_glass};
-                border: 1px solid {theme["accent"]};
-                border-radius: 6px;
-                font-size: 6px;
-                font-weight: 750;
-                letter-spacing: 1px;
-            }}
-
-            QLabel#dashboardDragHandle:hover {{
-                color: {theme["background"]};
-                background: {theme["accent"]};
-            }}
-
+            QLabel#dashboardDragHandle,
             QLabel#dashboardResizeHandle {{
-                color: {theme["background"]};
-                background: {theme["accent"]};
-                border: 1px solid {theme["card"]};
-                border-radius: 6px;
-                font-size: 11px;
+                color: {theme["muted"]};
+                background: {colour_with_alpha(theme["background"], 0.82)};
+                border: 1px solid {colour_with_alpha(theme["accent"], 0.56)};
+                border-radius: 7px;
+                font-size: 7px;
                 font-weight: 750;
+                letter-spacing: 0.8px;
             }}
 
+            QLabel#dashboardDragHandle:hover,
             QLabel#dashboardResizeHandle:hover {{
-                color: {theme["text"]};
-                border: 1px solid {theme["text"]};
+                color: {theme["background"]};
+                background: {theme["accent"]};
+                border-color: {theme["accent"]};
             }}
 
             QPushButton#dashboardCustomActionHandle,
             QPushButton#dashboardDeleteHandle {{
-                color: {theme["text"]};
-                background: {card_alt_glass};
-                border: 1px solid {theme["accent"]};
-                border-radius: 6px;
+                color: {theme["muted"]};
+                background: {colour_with_alpha(theme["background"], 0.82)};
+                border: 1px solid {colour_with_alpha(theme["accent"], 0.56)};
+                border-radius: 7px;
                 padding: 0px;
-                font-size: 12px;
+                font-size: 9px;
                 font-weight: 800;
             }}
 
@@ -6641,6 +6906,7 @@ class DashboardPage(QWidget):
             QPushButton#dashboardDeleteHandle:hover {{
                 color: {theme["background"]};
                 background: {theme["accent"]};
+                border-color: {theme["accent"]};
             }}
 
             QPushButton#dashboardCustomActionHandle::menu-indicator {{
@@ -6650,22 +6916,24 @@ class DashboardPage(QWidget):
 
             QFrame#dashboardCanvas {{
                 background: transparent;
-                border: none;
+                border: 1px solid transparent;
+                border-radius: 14px;
             }}
 
             QFrame#dashboardCanvas[editing="true"] {{
-                background: transparent;
-                border: none;
+                background: {colour_with_alpha(theme["card_alt"], 0.18)};
+                border: 1px dashed {colour_with_alpha(theme["accent"], 0.62)};
+                border-radius: 14px;
             }}
 
             QFrame#dashboardEditorOutline {{
                 background: transparent;
-                border: 1px solid {theme["accent"]};
+                border: 2px solid {theme["accent"]};
                 border-radius: 13px;
             }}
 
             QFrame#dashboardEditorOutline[editorMode="resize"] {{
-                border: 1px dashed {theme["accent"]};
+                border: 2px dashed {theme["accent"]};
             }}
 
             QComboBox#layoutPresetCombo,
@@ -7089,6 +7357,19 @@ class DashboardPage(QWidget):
 
             QPushButton#textButton:hover {{
                 color: {theme["text"]};
+            }}
+
+            QFrame#nowPlayingCard[dashboardEditing="true"],
+            QFrame#previewCard[dashboardEditing="true"],
+            QFrame#recentCard[dashboardEditing="true"],
+            QFrame#quickAccessCard[dashboardEditing="true"],
+            QFrame#libraryStatusCard[dashboardEditing="true"],
+            QFrame#statusStripCard[dashboardEditing="true"] {{
+                border: 1px solid {colour_with_alpha(theme["accent"], 0.34)};
+            }}
+
+            QWidget[dashboardEditing="true"] {{
+                border-color: {colour_with_alpha(theme["accent"], 0.34)};
             }}
             """
         )
