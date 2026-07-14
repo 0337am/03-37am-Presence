@@ -55,12 +55,21 @@ class _DashboardFactoryStub:
             _ThemeManagerStub()
         )
         self.opened_urls = []
+        self.opened_launcher_ids = []
 
     def open_link_card_url(
         self,
         url,
     ):
         self.opened_urls.append(url)
+
+    def open_launcher_card_target(
+        self,
+        card_id,
+    ):
+        self.opened_launcher_ids.append(
+            card_id
+        )
 
     def create_link_card_widget(
         self,
@@ -90,7 +99,7 @@ class _DashboardFactoryStub:
 class DashboardLauncherIntegrationTests(
     unittest.TestCase
 ):
-    def test_factory_creates_disabled_launcher(self):
+    def test_factory_creates_enabled_launcher(self):
         with tempfile.TemporaryDirectory() as directory:
             card = create_launcher_card(
                 target=directory,
@@ -114,11 +123,18 @@ class DashboardLauncherIntegrationTests(
                 widget,
                 LauncherCardWidget,
             )
-            self.assertFalse(
+            self.assertTrue(
                 widget.launch_enabled
             )
-            self.assertFalse(
+            self.assertTrue(
                 widget.open_button.isEnabled()
+            )
+
+            widget.open_button.click()
+
+            self.assertEqual(
+                factory.opened_launcher_ids,
+                [card.card_id],
             )
 
             widget.close()
@@ -179,7 +195,9 @@ class DashboardLauncherIntegrationTests(
             "def save_edited_launcher_card",
             "def duplicate_custom_card",
             "def duplicate_custom_launcher_card",
-            "widget.set_launch_enabled(False)",
+            "widget.launch_requested.connect",
+            "widget.set_launch_enabled(True)",
+            "def open_launcher_card_target",
         ]:
             self.assertIn(
                 required_text,
@@ -187,7 +205,7 @@ class DashboardLauncherIntegrationTests(
             )
 
         self.assertNotIn(
-            "def open_launcher_target",
+            "shell=True",
             source,
         )
 

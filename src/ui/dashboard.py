@@ -97,6 +97,10 @@ from src.ui.launcher_cards import (
     LauncherCardDialog,
     LauncherCardWidget,
 )
+from src.system.launcher_open import (
+    open_prepared_launcher_target,
+    prepare_launcher_target,
+)
 from src.ui.theme import ThemeManager
 
 
@@ -2953,14 +2957,20 @@ class DashboardPage(QWidget):
             self.dashboard_canvas,
         )
 
-        # Opening applications, files, and folders
-        # stays disabled until the safety checkpoint.
-        widget.set_launch_enabled(False)
+        widget.launch_requested.connect(
+            lambda _target,
+            current_card_id=card.card_id:
+            self.open_launcher_card_target(
+                current_card_id
+            )
+        )
+        widget.set_launch_enabled(True)
         widget.set_theme(
             self.theme_manager.theme()
         )
 
         return widget
+
 
     def default_custom_card_layout(
         self,
@@ -3860,7 +3870,7 @@ class DashboardPage(QWidget):
                 card.title
             )
 
-        widget.set_launch_enabled(False)
+        widget.set_launch_enabled(True)
         widget.set_theme(
             self.theme_manager.theme()
         )
@@ -4335,6 +4345,85 @@ class DashboardPage(QWidget):
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()
         return True
+
+    def open_launcher_card_target(
+        self,
+        card_id: str,
+    ):
+        card = self.custom_cards.get(
+            card_id
+        )
+
+        if not isinstance(
+            card,
+            LauncherCardData,
+        ):
+            QMessageBox.warning(
+                self,
+                "Launcher target cannot be opened",
+                "The Launcher card could not be found.",
+            )
+            return
+
+        try:
+            prepared = prepare_launcher_target(
+                card
+            )
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            QMessageBox.warning(
+                self,
+                "Launcher target cannot be opened",
+                str(error),
+            )
+            return
+
+        if (
+            prepared
+            .requires_script_confirmation
+        ):
+            answer = QMessageBox.question(
+                self,
+                "Open script target?",
+                (
+                    "This Launcher target is a script "
+                    "file and may run commands using "
+                    "your Windows account permissions."
+                    "\n\n"
+                    f"Target:\n{prepared.path}"
+                    "\n\n"
+                    "Open it?"
+                ),
+                (
+                    QMessageBox.StandardButton.Yes
+                    | QMessageBox.StandardButton.No
+                ),
+                QMessageBox.StandardButton.No,
+            )
+
+            if (
+                answer
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+
+        try:
+            open_prepared_launcher_target(
+                prepared
+            )
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            QMessageBox.warning(
+                self,
+                "Launcher target could not be opened",
+                str(error),
+            )
 
     def open_link_card_url(self, url: str):
         try:
