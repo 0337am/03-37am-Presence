@@ -154,6 +154,29 @@ def normalize_launcher_target(
     if not raw:
         return ""
 
+    # Windows Explorer's "Copy as path" surrounds
+    # the copied path with one pair of double quotes.
+    if (
+        len(raw) >= 2
+        and raw.startswith('"')
+        and raw.endswith('"')
+    ):
+        raw = raw[1:-1].strip()
+
+        if not raw:
+            raise ValueError(
+                "Launcher target cannot be empty."
+            )
+
+    elif (
+        raw.startswith('"')
+        or raw.endswith('"')
+    ):
+        raise ValueError(
+            "Launcher target has unmatched "
+            "quotation marks."
+        )
+
     if any(
         ord(character) < 32
         or ord(character) == 127

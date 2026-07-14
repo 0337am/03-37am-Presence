@@ -85,6 +85,45 @@ class CustomCardModelTests(unittest.TestCase):
                 target_kind=LAUNCHER_TARGET_FILE,
             )
 
+    def test_launcher_card_accepts_windows_copy_as_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = (
+                Path(directory)
+                / "Example.exe"
+            )
+            target.write_bytes(b"example")
+
+            card = create_launcher_card(
+                target=f'"{target}"',
+                target_kind=(
+                    LAUNCHER_TARGET_APPLICATION
+                ),
+            )
+
+            self.assertEqual(
+                card.target,
+                str(target),
+            )
+
+    def test_launcher_card_rejects_unmatched_path_quote(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = (
+                Path(directory)
+                / "Example.exe"
+            )
+            target.write_bytes(b"example")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "unmatched quotation marks",
+            ):
+                create_launcher_card(
+                    target=f'"{target}',
+                    target_kind=(
+                        LAUNCHER_TARGET_APPLICATION
+                    ),
+                )
+
     def test_launcher_card_rejects_network_target(self):
         with self.assertRaises(ValueError):
             create_launcher_card(
