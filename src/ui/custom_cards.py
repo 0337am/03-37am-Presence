@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 LEGACY_SCHEMA_VERSION = 1
 
 LINK_CARD_TYPE = "link"
@@ -21,6 +21,7 @@ MAX_CUSTOM_CARDS = 100
 MAX_TITLE_LENGTH = 80
 MAX_URL_LENGTH = 2048
 MAX_LAUNCHER_TARGET_LENGTH = 4096
+MAX_LAUNCHER_IMAGE_ASSET_LENGTH = 64
 MAX_ICON_LENGTH = 8
 MAX_DESCRIPTION_LENGTH = 300
 MAX_BUTTON_LABEL_LENGTH = 30
@@ -213,6 +214,34 @@ def normalize_launcher_target(
         )
 
     return normalized
+
+
+def normalize_launcher_image_asset(
+    value,
+) -> str:
+    asset = _strict_text(
+        value,
+        "Launcher image asset",
+        MAX_LAUNCHER_IMAGE_ASSET_LENGTH,
+    ).casefold()
+
+    if not asset:
+        return ""
+
+    if (
+        len(asset)
+        != MAX_LAUNCHER_IMAGE_ASSET_LENGTH
+        or any(
+            character
+            not in "0123456789abcdef"
+            for character in asset
+        )
+    ):
+        raise ValueError(
+            "Launcher image asset is invalid."
+        )
+
+    return asset
 
 
 def normalize_launcher_target_kind(
@@ -419,6 +448,7 @@ class LauncherCardData:
     target: str
     target_kind: str
     icon: str = ""
+    image_asset: str = ""
     description: str = ""
     button_label: str = "Open"
     accent: str = ""
@@ -467,6 +497,7 @@ class LauncherCardData:
             "target": self.target,
             "target_kind": self.target_kind,
             "icon": self.icon,
+            "image_asset": self.image_asset,
             "description": self.description,
             "button_label": self.button_label,
             "accent": self.accent,
@@ -555,6 +586,14 @@ class LauncherCardData:
                 "Icon or emoji",
                 MAX_ICON_LENGTH,
             ),
+            image_asset=(
+                normalize_launcher_image_asset(
+                    payload.get(
+                        "image_asset",
+                        "",
+                    )
+                )
+            ),
             description=_strict_text(
                 payload.get("description", ""),
                 "Description",
@@ -620,6 +659,7 @@ def create_launcher_card(
     target_kind: str,
     title: str = "",
     icon: str = "",
+    image_asset: str = "",
     description: str = "",
     button_label: str = "Open",
     accent: str = "",
@@ -638,6 +678,7 @@ def create_launcher_card(
         "target": normalized_target,
         "target_kind": target_kind,
         "icon": icon,
+        "image_asset": image_asset,
         "description": description,
         "button_label": button_label,
         "accent": accent,
@@ -646,6 +687,7 @@ def create_launcher_card(
     return LauncherCardData.from_dict(
         payload
     )
+
 
 
 def duplicate_launcher_card(
@@ -784,7 +826,9 @@ class CustomCardStore:
             / "custom_cards.json"
         )
 
-    def load(self) -> tuple[CustomCardData, ...]:
+    def load(
+        self,
+    ) -> tuple[CustomCardData, ...]:
         if not self.path.exists():
             return ()
 
@@ -795,9 +839,13 @@ class CustomCardStore:
                 )
             )
 
-            if not isinstance(payload, dict):
+            if not isinstance(
+                payload,
+                dict,
+            ):
                 raise ValueError(
-                    "Custom card storage must be an object."
+                    "Custom card storage "
+                    "must be an object."
                 )
 
             schema_version = payload.get(
@@ -805,15 +853,21 @@ class CustomCardStore:
             )
 
             if (
-                isinstance(schema_version, bool)
+                isinstance(
+                    schema_version,
+                    bool,
+                )
+                or not isinstance(
+                    schema_version,
+                    int,
+                )
+                or schema_version < 1
                 or schema_version
-                not in {
-                    LEGACY_SCHEMA_VERSION,
-                    SCHEMA_VERSION,
-                }
+                > SCHEMA_VERSION
             ):
                 raise ValueError(
-                    "Unsupported custom card storage version."
+                    "Unsupported custom card "
+                    "storage version."
                 )
 
             cards_payload = payload.get(
@@ -821,7 +875,10 @@ class CustomCardStore:
                 [],
             )
 
-            if not isinstance(cards_payload, list):
+            if not isinstance(
+                cards_payload,
+                list,
+            ):
                 raise ValueError(
                     "Custom cards must be a list."
                 )
@@ -845,11 +902,12 @@ class CustomCardStore:
             self._quarantine_invalid_file()
 
             print(
-                "Custom card storage was invalid and "
-                f"has been reset: {error}"
+                "Custom card storage was invalid "
+                f"and has been reset: {error}"
             )
 
             return ()
+
 
     def save(
         self,

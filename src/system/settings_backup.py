@@ -224,6 +224,7 @@ class SettingsBackupManager:
                     "listening_history",
                     "artwork_cache",
                     "link_card_icon_cache",
+                    "launcher_card_images",
                     "presence_preset_images",
                     "oauth_tokens",
                     "api_credentials",
@@ -669,6 +670,7 @@ class SettingsBackupManager:
                     "listening_history",
                     "artwork_cache",
                     "link_card_icon_cache",
+                    "launcher_card_images",
                     "presence_preset_images",
                     "oauth_tokens",
                     "api_credentials",
@@ -735,13 +737,16 @@ class SettingsBackupManager:
         for card in cards:
             data = card.to_dict()
 
-            # Launcher targets are device-local and can
-            # contain private file-system information.
+            # Launcher targets and image assets are
+            # device-local. They can contain private
+            # file-system information or reference
+            # files that are not exported.
             if isinstance(
                 card,
                 LauncherCardData,
             ):
                 data["target"] = ""
+                data["image_asset"] = ""
 
             portable_cards.append(data)
 
@@ -751,6 +756,7 @@ class SettingsBackupManager:
             ),
             "cards": portable_cards,
         }
+
 
     def _capture_presence_presets(
         self,
@@ -1458,12 +1464,13 @@ class SettingsBackupManager:
             ),
             "custom_cards.schema_version",
             minimum=1,
-            maximum=CUSTOM_CARD_STORAGE_SCHEMA_VERSION,
+            maximum=(
+                CUSTOM_CARD_STORAGE_SCHEMA_VERSION
+            ),
         )
 
-        # Schema 1 contained Link cards only. It remains
-        # valid and is normalized to the current version.
-
+        # Earlier schemas remain valid and are
+        # normalised to the current version.
         cards_payload = payload.get(
             "cards",
             [],
@@ -1497,17 +1504,26 @@ class SettingsBackupManager:
             ) from error
 
         for card in cards:
-            if (
-                isinstance(
-                    card,
-                    LauncherCardData,
-                )
-                and card.target
+            if not isinstance(
+                card,
+                LauncherCardData,
             ):
+                continue
+
+            if card.target:
                 raise SettingsBackupValidationError(
-                    "Launcher card target paths are "
-                    "local-only and cannot be restored "
-                    "from a settings backup."
+                    "Launcher card target paths "
+                    "are local-only and cannot "
+                    "be restored from a settings "
+                    "backup."
+                )
+
+            if card.image_asset:
+                raise SettingsBackupValidationError(
+                    "Launcher card images are "
+                    "local-only and cannot be "
+                    "restored from a settings "
+                    "backup."
                 )
 
         return {
@@ -1519,6 +1535,7 @@ class SettingsBackupManager:
                 for card in cards
             ],
         }
+
 
     @classmethod
     def _validate_presence_presets(
