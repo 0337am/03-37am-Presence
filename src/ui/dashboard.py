@@ -63,7 +63,9 @@ from src.system.idle_monitor import (
 )
 from src.ui.custom_cards import (
     CustomCardStore,
+    LauncherCardData,
     LinkCardData,
+    duplicate_launcher_card as duplicate_launcher_card_data,
     duplicate_link_card as duplicate_link_card_data,
     normalize_web_url,
 )
@@ -90,6 +92,10 @@ from src.ui.dashboard_profiles import (
 from src.ui.link_cards import (
     LinkCardDialog,
     LinkCardWidget,
+)
+from src.ui.launcher_cards import (
+    LauncherCardDialog,
+    LauncherCardWidget,
 )
 from src.ui.theme import ThemeManager
 
@@ -763,25 +769,42 @@ class DashboardPage(QWidget):
 
             action_menu = QMenu(action_handle)
 
+            card_data = self.custom_cards.get(
+                card_id
+            )
+
+            if isinstance(
+                card_data,
+                LauncherCardData,
+            ):
+                card_kind = "Launcher"
+            elif isinstance(
+                card_data,
+                LinkCardData,
+            ):
+                card_kind = "Link"
+            else:
+                card_kind = "Custom"
+
             edit_action = QAction(
-                "✎  Edit Link card",
+                f"Edit {card_kind} card",
                 action_menu,
             )
             edit_action.triggered.connect(
                 lambda checked=False, current_card_id=card_id:
-                self.edit_custom_link_card(
+                self.edit_custom_card(
                     current_card_id
                 )
             )
             action_menu.addAction(edit_action)
 
             duplicate_action = QAction(
-                "⧉  Duplicate Link card",
+                f"Duplicate {card_kind} card",
                 action_menu,
             )
             duplicate_action.triggered.connect(
                 lambda checked=False, current_card_id=card_id:
-                self.duplicate_custom_link_card(
+                self.duplicate_custom_card(
                     current_card_id
                 )
             )
@@ -1883,9 +1906,17 @@ class DashboardPage(QWidget):
             ),
         }
 
+        custom_card_widgets = (
+            LinkCardWidget,
+            LauncherCardWidget,
+        )
+
         if (
             card in responsive_cards
-            or isinstance(card, LinkCardWidget)
+            or isinstance(
+                card,
+                custom_card_widgets,
+            )
         ):
             hint_width = 0
             hint_height = 0
@@ -1894,7 +1925,10 @@ class DashboardPage(QWidget):
             hint_width = hint.width()
             hint_height = hint.height()
 
-        if isinstance(card, LinkCardWidget):
+        if isinstance(
+            card,
+            custom_card_widgets,
+        ):
             return (80, 70)
 
         minimum_width = max(
@@ -1913,6 +1947,7 @@ class DashboardPage(QWidget):
             minimum_width,
             minimum_height,
         )
+
 
     def begin_dashboard_live_resize(
         self,
@@ -2633,6 +2668,20 @@ class DashboardPage(QWidget):
         self.layout_add_card_menu.addAction(
             self.layout_add_link_action
         )
+
+        self.layout_add_launcher_action = QAction(
+            ">  Launcher card",
+            self.layout_add_card_menu,
+        )
+        self.layout_add_launcher_action.setToolTip(
+            "Add a local application, file, or folder shortcut"
+        )
+        self.layout_add_launcher_action.triggered.connect(
+            self.add_launcher_card
+        )
+        self.layout_add_card_menu.addAction(
+            self.layout_add_launcher_action
+        )
         self.layout_add_card_button.setMenu(
             self.layout_add_card_menu
         )
@@ -2849,8 +2898,35 @@ class DashboardPage(QWidget):
     def build_saved_custom_cards(self):
         for card in self.custom_cards.values():
             self.dashboard_cards[card.card_id] = (
-                self.create_link_card_widget(card)
+                self.create_custom_card_widget(
+                    card
+                )
             )
+
+
+    def create_custom_card_widget(
+        self,
+        card,
+    ):
+        if isinstance(
+            card,
+            LinkCardData,
+        ):
+            return self.create_link_card_widget(
+                card
+            )
+
+        if isinstance(
+            card,
+            LauncherCardData,
+        ):
+            return self.create_launcher_card_widget(
+                card
+            )
+
+        raise TypeError(
+            "Unsupported custom card object."
+        )
 
     def create_link_card_widget(
         self,
@@ -2866,6 +2942,24 @@ class DashboardPage(QWidget):
         widget.set_theme(
             self.theme_manager.theme()
         )
+        return widget
+
+    def create_launcher_card_widget(
+        self,
+        card: LauncherCardData,
+    ) -> LauncherCardWidget:
+        widget = LauncherCardWidget(
+            card,
+            self.dashboard_canvas,
+        )
+
+        # Opening applications, files, and folders
+        # stays disabled until the safety checkpoint.
+        widget.set_launch_enabled(False)
+        widget.set_theme(
+            self.theme_manager.theme()
+        )
+
         return widget
 
     def default_custom_card_layout(
@@ -3342,6 +3436,117 @@ class DashboardPage(QWidget):
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()
 
+    def add_launcher_card(self):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        dialog = LauncherCardDialog(self)
+
+        if not dialog.exec():
+            return
+
+        card = dialog.card_data()
+
+        if card is None:
+            return
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+
+        try:
+            saved_cards = (
+                self.custom_card_store.upsert(
+                    card
+                )
+            )
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            QMessageBox.warning(
+                self,
+                "Launcher card not saved",
+                str(error),
+            )
+            return
+
+        self.custom_cards = {
+            item.card_id: item
+            for item in saved_cards
+        }
+
+        widget = (
+            self.create_launcher_card_widget(
+                card
+            )
+        )
+
+        self.dashboard_cards[
+            card.card_id
+        ] = widget
+
+        self.create_dashboard_card_handles(
+            card.card_id,
+            widget,
+        )
+
+        self.register_dashboard_visibility_action(
+            card.card_id,
+            card.title,
+        )
+
+        new_layout = replace(
+            self.dashboard_layout_state,
+            cards=(
+                self.dashboard_layout_state.cards
+                + (
+                    self.default_custom_card_layout(
+                        card.card_id
+                    ),
+                )
+            ),
+            preset="Custom",
+        )
+
+        try:
+            self.apply_dashboard_layout(
+                new_layout,
+                persist=True,
+            )
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            try:
+                self.custom_card_store.save(
+                    previous_cards
+                )
+            except OSError:
+                pass
+
+            self.custom_cards = {
+                item.card_id: item
+                for item in previous_cards
+            }
+
+            self.remove_custom_card_ui(
+                card.card_id
+            )
+
+            QMessageBox.warning(
+                self,
+                "Launcher card not added",
+                str(error),
+            )
+            return
+
+        self.sync_dashboard_layout_controls()
+        self.schedule_dashboard_geometry_refresh()
+
     def remove_custom_card_ui(self, card_id: str):
         widget = self.dashboard_cards.pop(
             card_id,
@@ -3392,6 +3597,32 @@ class DashboardPage(QWidget):
             action.deleteLater()
 
 
+    def edit_custom_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        card = self.custom_cards.get(
+            card_id
+        )
+
+        if isinstance(
+            card,
+            LauncherCardData,
+        ):
+            return self.edit_custom_launcher_card(
+                card_id
+            )
+
+        if isinstance(
+            card,
+            LinkCardData,
+        ):
+            return self.edit_custom_link_card(
+                card_id
+            )
+
+        return False
+
     def edit_custom_link_card(
         self,
         card_id: str,
@@ -3419,6 +3650,41 @@ class DashboardPage(QWidget):
             return False
 
         return self.save_edited_link_card(
+            updated_card
+        )
+
+    def edit_custom_launcher_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return False
+
+        card = self.custom_cards.get(
+            card_id
+        )
+
+        if not isinstance(
+            card,
+            LauncherCardData,
+        ):
+            return False
+
+        dialog = LauncherCardDialog(
+            self,
+            card=card,
+        )
+
+        if not dialog.exec():
+            return False
+
+        updated_card = dialog.card_data()
+
+        if updated_card is None:
+            return False
+
+        return self.save_edited_launcher_card(
             updated_card
         )
 
@@ -3499,6 +3765,109 @@ class DashboardPage(QWidget):
         self.schedule_dashboard_geometry_refresh()
         return True
 
+    def save_edited_launcher_card(
+        self,
+        card: LauncherCardData,
+    ) -> bool:
+        previous_card = self.custom_cards.get(
+            card.card_id
+        )
+
+        if not isinstance(
+            previous_card,
+            LauncherCardData,
+        ):
+            return False
+
+        widget = self.dashboard_cards.get(
+            card.card_id
+        )
+
+        if not isinstance(
+            widget,
+            LauncherCardWidget,
+        ):
+            return False
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+
+        try:
+            saved_cards = (
+                self.custom_card_store.upsert(
+                    card
+                )
+            )
+            widget.update_card(card)
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            rollback_error = None
+
+            try:
+                self.custom_card_store.save(
+                    previous_cards
+                )
+            except (
+                OSError,
+                TypeError,
+                ValueError,
+            ) as restore_error:
+                rollback_error = restore_error
+
+            try:
+                widget.update_card(
+                    previous_card
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                pass
+
+            message = str(error)
+
+            if rollback_error is not None:
+                message += (
+                    "\n\nThe custom-card rollback "
+                    "also failed: "
+                    f"{rollback_error}"
+                )
+
+            QMessageBox.warning(
+                self,
+                "Launcher card not updated",
+                message,
+            )
+            return False
+
+        self.custom_cards = {
+            item.card_id: item
+            for item in saved_cards
+        }
+
+        visibility_action = (
+            self.layout_visibility_actions.get(
+                card.card_id
+            )
+        )
+
+        if visibility_action is not None:
+            visibility_action.setText(
+                card.title
+            )
+
+        widget.set_launch_enabled(False)
+        widget.set_theme(
+            self.theme_manager.theme()
+        )
+
+        self.schedule_dashboard_geometry_refresh()
+        return True
+
     def duplicate_custom_card_layout(
         self,
         source_layout: DashboardCardLayout,
@@ -3551,6 +3920,36 @@ class DashboardPage(QWidget):
             z_index=highest_layer + 1,
             visible=True,
         )
+
+    def duplicate_custom_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        card = self.custom_cards.get(
+            card_id
+        )
+
+        if isinstance(
+            card,
+            LauncherCardData,
+        ):
+            return (
+                self.duplicate_custom_launcher_card(
+                    card_id
+                )
+            )
+
+        if isinstance(
+            card,
+            LinkCardData,
+        ):
+            return (
+                self.duplicate_custom_link_card(
+                    card_id
+                )
+            )
+
+        return False
 
     def duplicate_custom_link_card(
         self,
@@ -3672,20 +4071,182 @@ class DashboardPage(QWidget):
         self.schedule_dashboard_geometry_refresh()
         return True
 
+    def duplicate_custom_launcher_card(
+        self,
+        card_id: str,
+    ) -> bool:
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return False
+
+        source_card = self.custom_cards.get(
+            card_id
+        )
+
+        if not isinstance(
+            source_card,
+            LauncherCardData,
+        ):
+            return False
+
+        try:
+            source_layout = (
+                self.dashboard_layout_state.card(
+                    card_id
+                )
+            )
+            duplicated_card = (
+                duplicate_launcher_card_data(
+                    source_card
+                )
+            )
+            duplicated_layout = (
+                self.duplicate_custom_card_layout(
+                    source_layout,
+                    duplicated_card.card_id,
+                )
+            )
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as error:
+            QMessageBox.warning(
+                self,
+                "Launcher card not duplicated",
+                str(error),
+            )
+            return False
+
+        previous_cards = tuple(
+            self.custom_cards.values()
+        )
+        widget = None
+
+        try:
+            saved_cards = (
+                self.custom_card_store.upsert(
+                    duplicated_card
+                )
+            )
+
+            self.custom_cards = {
+                item.card_id: item
+                for item in saved_cards
+            }
+
+            widget = (
+                self.create_launcher_card_widget(
+                    duplicated_card
+                )
+            )
+
+            self.dashboard_cards[
+                duplicated_card.card_id
+            ] = widget
+
+            self.create_dashboard_card_handles(
+                duplicated_card.card_id,
+                widget,
+            )
+
+            self.register_dashboard_visibility_action(
+                duplicated_card.card_id,
+                duplicated_card.title,
+            )
+
+            new_layout = replace(
+                self.dashboard_layout_state,
+                cards=(
+                    self.dashboard_layout_state.cards
+                    + (duplicated_layout,)
+                ),
+                preset="Custom",
+            )
+
+            self.apply_dashboard_layout(
+                new_layout,
+                persist=True,
+            )
+
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            rollback_error = None
+
+            try:
+                self.custom_card_store.save(
+                    previous_cards
+                )
+            except (
+                OSError,
+                TypeError,
+                ValueError,
+            ) as restore_error:
+                rollback_error = restore_error
+
+            self.custom_cards = {
+                item.card_id: item
+                for item in previous_cards
+            }
+
+            if widget is not None:
+                self.remove_custom_card_ui(
+                    duplicated_card.card_id
+                )
+
+            message = str(error)
+
+            if rollback_error is not None:
+                message += (
+                    "\n\nThe custom-card rollback "
+                    "also failed: "
+                    f"{rollback_error}"
+                )
+
+            QMessageBox.warning(
+                self,
+                "Launcher card not duplicated",
+                message,
+            )
+            return False
+
+        self.sync_dashboard_layout_controls()
+        self.schedule_dashboard_geometry_refresh()
+        return True
+
     def confirm_delete_custom_card(
         self,
         card_id: str,
     ):
-        card = self.custom_cards.get(card_id)
+        card = self.custom_cards.get(
+            card_id
+        )
 
         if card is None:
             return
 
+        if isinstance(
+            card,
+            LauncherCardData,
+        ):
+            card_kind = "Launcher"
+        elif isinstance(
+            card,
+            LinkCardData,
+        ):
+            card_kind = "Link"
+        else:
+            card_kind = "Custom"
+
         answer = QMessageBox.question(
             self,
-            "Delete Link card",
+            f"Delete {card_kind} card",
             (
-                f'Delete "{card.title}" from the dashboard?\n\n'
+                f'Delete "{card.title}" '
+                "from the dashboard?\n\n"
                 "This cannot be undone."
             ),
             (
@@ -3695,10 +4256,16 @@ class DashboardPage(QWidget):
             QMessageBox.StandardButton.No,
         )
 
-        if answer != QMessageBox.StandardButton.Yes:
+        if (
+            answer
+            != QMessageBox.StandardButton.Yes
+        ):
             return
 
-        self.delete_custom_card(card_id)
+        self.delete_custom_card(
+            card_id
+        )
+
 
     def delete_custom_card(
         self,
@@ -3754,7 +4321,7 @@ class DashboardPage(QWidget):
 
             QMessageBox.warning(
                 self,
-                "Link card not deleted",
+                "Custom card not deleted",
                 message,
             )
             return False
@@ -6016,7 +6583,13 @@ class DashboardPage(QWidget):
         )
 
         for card in self.dashboard_cards.values():
-            if isinstance(card, LinkCardWidget):
+            if isinstance(
+                card,
+                (
+                    LinkCardWidget,
+                    LauncherCardWidget,
+                ),
+            ):
                 card.set_theme(theme)
 
         self.schedule_dashboard_geometry_refresh()
