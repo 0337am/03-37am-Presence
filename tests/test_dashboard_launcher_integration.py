@@ -186,7 +186,7 @@ class DashboardLauncherIntegrationTests(
         )
 
         for required_text in [
-            '">  Launcher card"',
+            '"Launcher card"',
             'f"Edit {card_kind} card"',
             'f"Duplicate {card_kind} card"',
             "def add_launcher_card",

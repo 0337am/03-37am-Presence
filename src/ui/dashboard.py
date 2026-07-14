@@ -2553,37 +2553,285 @@ class DashboardPage(QWidget):
             event
         )
 
+        self.update_dashboard_layout_toolbar_responsive_state()
         self.schedule_dashboard_geometry_refresh()
+
+
+    def update_dashboard_layout_toolbar_responsive_state(
+        self,
+    ):
+        if not hasattr(
+            self,
+            "layout_toolbar",
+        ):
+            return
+
+        compact = self.width() < 930
+
+        density = (
+            "compact"
+            if compact
+            else "standard"
+        )
+
+        self.layout_toolbar.setProperty(
+            "density",
+            density,
+        )
+
+        self.layout_toolbar_title.setText(
+            "LAYOUT"
+            if compact
+            else "CONTROL ROOM"
+        )
+
+        self.layout_toolbar_hint.setVisible(
+            not compact
+        )
+
+        self.layout_preset_combo.setMinimumWidth(
+            118
+            if compact
+            else 150
+        )
+
+        self.layout_profiles_button.setText(
+            "Profiles"
+        )
+
+        self.layout_add_card_button.setText(
+            "Add"
+            if compact
+            else "Add card"
+        )
+
+        self.layout_visibility_button.setText(
+            "Cards"
+        )
+
+        locked = True
+
+        if hasattr(
+            self,
+            "dashboard_layout_state",
+        ):
+            locked = bool(
+                self.dashboard_layout_state.locked
+            )
+
+        if compact:
+            lock_text = (
+                "Edit"
+                if locked
+                else "Done"
+            )
+        else:
+            lock_text = (
+                "Edit layout"
+                if locked
+                else "Finish editing"
+            )
+
+        self.layout_lock_button.setText(
+            lock_text
+        )
+
+        margin = (
+            8
+            if compact
+            else 11
+        )
+
+        spacing = (
+            6
+            if compact
+            else 8
+        )
+
+        self.layout_toolbar_layout.setContentsMargins(
+            margin,
+            7,
+            margin,
+            7,
+        )
+
+        self.layout_toolbar_layout.setSpacing(
+            spacing
+        )
+
+        self.layout_toolbar_header_layout.setSpacing(
+            spacing
+        )
+
+        self.layout_toolbar_controls_layout.setSpacing(
+            spacing
+        )
+
+        self.layout_primary_group_layout.setSpacing(
+            5
+            if compact
+            else 7
+        )
+
+        self.layout_secondary_group_layout.setSpacing(
+            5
+            if compact
+            else 7
+        )
 
     def build_dashboard_layout_toolbar(self):
         self.layout_toolbar = QFrame()
         self.layout_toolbar.setObjectName(
             "dashboardLayoutToolbar"
         )
+        self.layout_toolbar.setProperty(
+            "layoutState",
+            "locked",
+        )
+        self.layout_toolbar.setProperty(
+            "density",
+            "standard",
+        )
 
-        toolbar_layout = QHBoxLayout(
+        self.layout_toolbar_layout = QVBoxLayout(
             self.layout_toolbar
         )
-        toolbar_layout.setContentsMargins(
-            10,
-            6,
-            10,
-            6,
+        self.layout_toolbar_layout.setContentsMargins(
+            11,
+            7,
+            11,
+            7,
         )
-        toolbar_layout.setSpacing(8)
+        self.layout_toolbar_layout.setSpacing(8)
 
-        toolbar_title = QLabel(
-            "DASHBOARD LAYOUT"
+        self.layout_toolbar_header_layout = (
+            QHBoxLayout()
         )
-        toolbar_title.setObjectName(
+        self.layout_toolbar_header_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        self.layout_toolbar_header_layout.setSpacing(
+            8
+        )
+
+        title_stack = QVBoxLayout()
+        title_stack.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        title_stack.setSpacing(1)
+
+        self.layout_toolbar_title = QLabel(
+            "CONTROL ROOM"
+        )
+        self.layout_toolbar_title.setObjectName(
             "layoutToolbarTitle"
         )
 
+        self.layout_toolbar_hint = QLabel(
+            "Your dashboard is protected "
+            "from accidental changes."
+        )
+        self.layout_toolbar_hint.setObjectName(
+            "layoutToolbarHint"
+        )
+
+        title_stack.addWidget(
+            self.layout_toolbar_title
+        )
+        title_stack.addWidget(
+            self.layout_toolbar_hint
+        )
+
         self.layout_status_label = QLabel(
-            "Locked"
+            "LOCKED"
         )
         self.layout_status_label.setObjectName(
             "layoutToolbarStatus"
+        )
+        self.layout_status_label.setProperty(
+            "layoutState",
+            "locked",
+        )
+        self.layout_status_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        self.layout_lock_button = QPushButton(
+            "Edit layout"
+        )
+        self.layout_lock_button.setObjectName(
+            "layoutLockButton"
+        )
+        self.layout_lock_button.setProperty(
+            "layoutState",
+            "locked",
+        )
+        self.layout_lock_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_lock_button.clicked.connect(
+            self.toggle_dashboard_layout_lock
+        )
+
+        self.layout_toolbar_header_layout.addLayout(
+            title_stack
+        )
+        self.layout_toolbar_header_layout.addStretch()
+        self.layout_toolbar_header_layout.addWidget(
+            self.layout_status_label
+        )
+        self.layout_toolbar_header_layout.addWidget(
+            self.layout_lock_button
+        )
+
+        self.layout_toolbar_controls_layout = (
+            QHBoxLayout()
+        )
+        self.layout_toolbar_controls_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        self.layout_toolbar_controls_layout.setSpacing(
+            8
+        )
+
+        self.layout_primary_group = QFrame()
+        self.layout_primary_group.setObjectName(
+            "layoutToolbarGroup"
+        )
+        self.layout_primary_group.setProperty(
+            "groupRole",
+            "layout",
+        )
+
+        self.layout_primary_group_layout = (
+            QHBoxLayout(
+                self.layout_primary_group
+            )
+        )
+        self.layout_primary_group_layout.setContentsMargins(
+            8,
+            4,
+            8,
+            4,
+        )
+        self.layout_primary_group_layout.setSpacing(
+            7
+        )
+
+        layout_group_label = QLabel(
+            "LAYOUT"
+        )
+        layout_group_label.setObjectName(
+            "layoutToolbarGroupLabel"
         )
 
         self.layout_preset_combo = QComboBox()
@@ -2591,7 +2839,7 @@ class DashboardPage(QWidget):
             "layoutPresetCombo"
         )
         self.layout_preset_combo.setMinimumWidth(
-            145
+            150
         )
         self.layout_preset_combo.setPlaceholderText(
             "Custom"
@@ -2607,7 +2855,7 @@ class DashboardPage(QWidget):
         )
 
         self.layout_profiles_button = QPushButton(
-            "Profiles  ▾"
+            "Profiles"
         )
         self.layout_profiles_button.setObjectName(
             "layoutMenuButton"
@@ -2616,8 +2864,10 @@ class DashboardPage(QWidget):
             Qt.CursorShape.PointingHandCursor
         )
         self.layout_profiles_button.setToolTip(
-            "Save, apply, or delete dashboard layout profiles"
+            "Save, apply, or delete dashboard "
+            "layout profiles"
         )
+
         self.layout_profiles_menu = QMenu(
             self.layout_profiles_button
         )
@@ -2639,15 +2889,57 @@ class DashboardPage(QWidget):
         )
         self.layout_snap_button.setCheckable(True)
         self.layout_snap_button.setToolTip(
-            "Snap cards to a tidy grid while moving or resizing"
+            "Snap cards to a tidy grid while "
+            "moving or resizing"
         )
         self.layout_snap_button.toggled.connect(
             self.set_dashboard_snap_enabled
         )
         self.update_dashboard_snap_button()
 
+        self.layout_primary_group_layout.addWidget(
+            layout_group_label
+        )
+        self.layout_primary_group_layout.addWidget(
+            self.layout_preset_combo
+        )
+        self.layout_primary_group_layout.addWidget(
+            self.layout_profiles_button
+        )
+
+        self.layout_secondary_group = QFrame()
+        self.layout_secondary_group.setObjectName(
+            "layoutToolbarGroup"
+        )
+        self.layout_secondary_group.setProperty(
+            "groupRole",
+            "editing",
+        )
+
+        self.layout_secondary_group_layout = (
+            QHBoxLayout(
+                self.layout_secondary_group
+            )
+        )
+        self.layout_secondary_group_layout.setContentsMargins(
+            8,
+            4,
+            8,
+            4,
+        )
+        self.layout_secondary_group_layout.setSpacing(
+            7
+        )
+
+        cards_group_label = QLabel(
+            "EDITING"
+        )
+        cards_group_label.setObjectName(
+            "layoutToolbarGroupLabel"
+        )
+
         self.layout_add_card_button = QPushButton(
-            "Add card  ▾"
+            "Add card"
         )
         self.layout_add_card_button.setObjectName(
             "layoutMenuButton"
@@ -2662,8 +2954,9 @@ class DashboardPage(QWidget):
         self.layout_add_card_menu = QMenu(
             self.layout_add_card_button
         )
+
         self.layout_add_link_action = QAction(
-            "🔗  Link card",
+            "Link card",
             self.layout_add_card_menu,
         )
         self.layout_add_link_action.setToolTip(
@@ -2677,11 +2970,12 @@ class DashboardPage(QWidget):
         )
 
         self.layout_add_launcher_action = QAction(
-            ">  Launcher card",
+            "Launcher card",
             self.layout_add_card_menu,
         )
         self.layout_add_launcher_action.setToolTip(
-            "Add a local application, file, or folder shortcut"
+            "Add a local application, file, "
+            "or folder shortcut"
         )
         self.layout_add_launcher_action.triggered.connect(
             self.add_launcher_card
@@ -2689,12 +2983,13 @@ class DashboardPage(QWidget):
         self.layout_add_card_menu.addAction(
             self.layout_add_launcher_action
         )
+
         self.layout_add_card_button.setMenu(
             self.layout_add_card_menu
         )
 
         self.layout_visibility_button = QPushButton(
-            "Cards  \u25be"
+            "Cards"
         )
         self.layout_visibility_button.setObjectName(
             "layoutMenuButton"
@@ -2703,7 +2998,8 @@ class DashboardPage(QWidget):
             Qt.CursorShape.PointingHandCursor
         )
         self.layout_visibility_button.setToolTip(
-            "Choose which dashboard cards are visible"
+            "Choose which dashboard cards "
+            "are visible"
         )
 
         self.layout_visibility_menu = QMenu(
@@ -2711,7 +3007,6 @@ class DashboardPage(QWidget):
         )
 
         self.layout_visibility_actions = {}
-
 
         for card_id in CARD_ORDER:
             self.register_dashboard_visibility_action(
@@ -2745,47 +3040,39 @@ class DashboardPage(QWidget):
             self.reset_dashboard_layout
         )
 
-        self.layout_lock_button = QPushButton(
-            "Unlock layout"
+        self.layout_secondary_group_layout.addWidget(
+            cards_group_label
         )
-        self.layout_lock_button.setObjectName(
-            "layoutLockButton"
-        )
-        self.layout_lock_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
-        self.layout_lock_button.clicked.connect(
-            self.toggle_dashboard_layout_lock
-        )
-
-        toolbar_layout.addWidget(
-            toolbar_title
-        )
-        toolbar_layout.addWidget(
-            self.layout_status_label
-        )
-        toolbar_layout.addStretch()
-        toolbar_layout.addWidget(
-            self.layout_preset_combo
-        )
-        toolbar_layout.addWidget(
-            self.layout_profiles_button
-        )
-        toolbar_layout.addWidget(
+        self.layout_secondary_group_layout.addWidget(
             self.layout_snap_button
         )
-        toolbar_layout.addWidget(
+        self.layout_secondary_group_layout.addWidget(
             self.layout_add_card_button
         )
-        toolbar_layout.addWidget(
+        self.layout_secondary_group_layout.addWidget(
             self.layout_visibility_button
         )
-        toolbar_layout.addWidget(
+        self.layout_secondary_group_layout.addWidget(
             self.layout_reset_button
         )
-        toolbar_layout.addWidget(
-            self.layout_lock_button
+
+        self.layout_toolbar_controls_layout.addWidget(
+            self.layout_primary_group
         )
+        self.layout_toolbar_controls_layout.addStretch()
+        self.layout_toolbar_controls_layout.addWidget(
+            self.layout_secondary_group
+        )
+
+        self.layout_toolbar_layout.addLayout(
+            self.layout_toolbar_header_layout
+        )
+        self.layout_toolbar_layout.addLayout(
+            self.layout_toolbar_controls_layout
+        )
+
+        self.update_dashboard_layout_toolbar_responsive_state()
+
 
 
     def set_dashboard_snap_enabled(
@@ -4706,14 +4993,45 @@ class DashboardPage(QWidget):
 
             del action_blocker
 
-        locked = (
+        locked = bool(
             self.dashboard_layout_state.locked
         )
 
-        self.layout_status_label.setText(
-            "Locked"
+        layout_state = (
+            "locked"
             if locked
-            else "Editing"
+            else "editing"
+        )
+
+        self.layout_status_label.setText(
+            "LOCKED"
+            if locked
+            else "EDITING"
+        )
+
+        self.layout_toolbar_hint.setText(
+            (
+                "Your dashboard is protected "
+                "from accidental changes."
+            )
+            if locked
+            else (
+                "Drag, resize, add, or hide cards. "
+                "Finish editing when it feels right."
+            )
+        )
+
+        self.layout_toolbar.setProperty(
+            "layoutState",
+            layout_state,
+        )
+        self.layout_status_label.setProperty(
+            "layoutState",
+            layout_state,
+        )
+        self.layout_lock_button.setProperty(
+            "layoutState",
+            layout_state,
         )
 
         self.layout_preset_combo.setEnabled(
@@ -4737,21 +5055,30 @@ class DashboardPage(QWidget):
             not locked
         )
 
-        self.layout_lock_button.setText(
-            "Unlock layout"
-            if locked
-            else "Lock layout"
-        )
-
         self.layout_lock_button.setToolTip(
             (
-                "Enable dashboard layout editing"
+                "Enter dashboard layout editing"
                 if locked
-                else "Prevent accidental layout changes"
+                else (
+                    "Finish editing and protect "
+                    "the dashboard layout"
+                )
             )
         )
 
+        for widget in (
+            self.layout_toolbar,
+            self.layout_status_label,
+            self.layout_lock_button,
+        ):
+            style = widget.style()
+            style.unpolish(widget)
+            style.polish(widget)
+            widget.update()
+
+        self.update_dashboard_layout_toolbar_responsive_state()
         self.sync_dashboard_drag_handles()
+
 
     def apply_dashboard_layout(
         self,
@@ -6213,24 +6540,61 @@ class DashboardPage(QWidget):
             QFrame#dashboardLayoutToolbar {{
                 background: {card_glass};
                 border: 1px solid {theme["border"]};
-                border-radius: 10px;
+                border-radius: 12px;
+            }}
+
+            QFrame#dashboardLayoutToolbar[layoutState="editing"] {{
+                background: {colour_with_alpha(theme["card"], 0.78)};
+                border: 1px solid {theme["accent"]};
             }}
 
             QLabel#layoutToolbarTitle {{
                 color: {theme["accent"]};
-                font-size: 8px;
+                font-size: 9px;
+                font-weight: 750;
+                letter-spacing: 1.2px;
+            }}
+
+            QLabel#layoutToolbarHint {{
+                color: {theme["muted"]};
+                font-size: 9px;
+            }}
+
+            QFrame#layoutToolbarGroup {{
+                background: {card_alt_glass};
+                border: 1px solid {theme["border"]};
+                border-radius: 8px;
+            }}
+
+            QLabel#layoutToolbarGroupLabel {{
+                color: {theme["muted"]};
+                font-size: 7px;
                 font-weight: 750;
                 letter-spacing: 1px;
+                padding-right: 2px;
             }}
 
             QLabel#layoutToolbarStatus {{
                 color: {theme["muted"]};
                 background: {card_alt_glass};
                 border: 1px solid {theme["border"]};
-                border-radius: 6px;
-                padding: 3px 7px;
+                border-radius: 7px;
+                padding: 4px 9px;
                 font-size: 8px;
-                font-weight: 700;
+                font-weight: 750;
+                letter-spacing: 0.6px;
+            }}
+
+            QLabel#layoutToolbarStatus[layoutState="editing"] {{
+                color: {theme["background"]};
+                background: {theme["accent"]};
+                border-color: {theme["accent"]};
+            }}
+
+            QPushButton#layoutLockButton[layoutState="editing"] {{
+                color: {theme["background"]};
+                background: {theme["accent"]};
+                border-color: {theme["accent"]};
             }}
 
             QLabel#dashboardDragHandle {{
