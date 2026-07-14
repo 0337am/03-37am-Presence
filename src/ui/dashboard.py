@@ -2822,6 +2822,354 @@ class DashboardPage(QWidget):
         self.schedule_dashboard_geometry_refresh()
 
 
+    def configure_dashboard_layout_toolbar_accessibility(
+        self,
+    ):
+        self.layout_toolbar.setAccessibleName(
+            "Dashboard layout controls"
+        )
+        self.layout_toolbar.setAccessibleDescription(
+            (
+                "Controls for choosing, editing, "
+                "and protecting the dashboard layout."
+            )
+        )
+
+        self.layout_toolbar_title.setAccessibleName(
+            "Dashboard control room"
+        )
+        self.layout_toolbar_hint.setAccessibleName(
+            "Dashboard editing guidance"
+        )
+        self.layout_status_label.setAccessibleName(
+            "Dashboard layout status"
+        )
+
+        self.layout_primary_group.setAccessibleName(
+            "Dashboard layouts"
+        )
+        self.layout_primary_group.setAccessibleDescription(
+            (
+                "Choose a preset or manage saved "
+                "dashboard layout profiles."
+            )
+        )
+
+        self.layout_secondary_group.setAccessibleName(
+            "Dashboard editing actions"
+        )
+        self.layout_secondary_group.setAccessibleDescription(
+            (
+                "Undo, redo, revert, arrange, add, "
+                "show, hide, or reset dashboard cards."
+            )
+        )
+
+        controls = (
+            (
+                self.layout_lock_button,
+                "Dashboard layout editing",
+                (
+                    "Enter or finish dashboard "
+                    "layout editing."
+                ),
+            ),
+            (
+                self.layout_preset_combo,
+                "Dashboard layout preset",
+                (
+                    "Choose a dashboard layout "
+                    "preset."
+                ),
+            ),
+            (
+                self.layout_profiles_button,
+                "Dashboard layout profiles",
+                (
+                    "Save, apply, or delete "
+                    "dashboard layout profiles."
+                ),
+            ),
+            (
+                self.layout_undo_button,
+                "Undo dashboard layout change",
+                (
+                    "Undo the most recent dashboard "
+                    "layout change."
+                ),
+            ),
+            (
+                self.layout_redo_button,
+                "Redo dashboard layout change",
+                (
+                    "Redo the most recently undone "
+                    "dashboard layout change."
+                ),
+            ),
+            (
+                self.layout_revert_session_button,
+                "Revert dashboard editing session",
+                (
+                    "Restore the dashboard layout "
+                    "from when editing began."
+                ),
+            ),
+            (
+                self.layout_snap_button,
+                "Dashboard grid snapping",
+                (
+                    "Turn dashboard card grid "
+                    "snapping on or off."
+                ),
+            ),
+            (
+                self.layout_add_card_button,
+                "Add dashboard card",
+                (
+                    "Add a custom link or launcher "
+                    "card to the dashboard."
+                ),
+            ),
+            (
+                self.layout_visibility_button,
+                "Dashboard card visibility",
+                (
+                    "Choose which dashboard cards "
+                    "are visible."
+                ),
+            ),
+            (
+                self.layout_reset_button,
+                "Reset dashboard layout",
+                (
+                    "Restore the default dashboard "
+                    "layout."
+                ),
+            ),
+        )
+
+        for (
+            control,
+            accessible_name,
+            description,
+        ) in controls:
+            control.setFocusPolicy(
+                Qt.FocusPolicy.StrongFocus
+            )
+            control.setAccessibleName(
+                accessible_name
+            )
+            control.setAccessibleDescription(
+                description
+            )
+            control.setStatusTip(
+                description
+            )
+
+        for decorative_widget in (
+            self.layout_toolbar,
+            self.layout_toolbar_title,
+            self.layout_toolbar_hint,
+            self.layout_status_label,
+            self.layout_primary_group,
+            self.layout_secondary_group,
+        ):
+            decorative_widget.setFocusPolicy(
+                Qt.FocusPolicy.NoFocus
+            )
+
+        self.layout_profiles_menu.setAccessibleName(
+            "Dashboard layout profiles menu"
+        )
+        self.layout_add_card_menu.setAccessibleName(
+            "Add dashboard card menu"
+        )
+        self.layout_visibility_menu.setAccessibleName(
+            "Dashboard card visibility menu"
+        )
+
+        tab_sequence = (
+            self.layout_lock_button,
+            self.layout_preset_combo,
+            self.layout_profiles_button,
+            self.layout_undo_button,
+            self.layout_redo_button,
+            self.layout_revert_session_button,
+            self.layout_snap_button,
+            self.layout_add_card_button,
+            self.layout_visibility_button,
+            self.layout_reset_button,
+        )
+
+        for (
+            first_control,
+            second_control,
+        ) in zip(
+            tab_sequence,
+            tab_sequence[1:],
+        ):
+            QWidget.setTabOrder(
+                first_control,
+                second_control,
+            )
+
+        self.sync_dashboard_layout_accessibility()
+
+    def sync_dashboard_layout_accessibility(
+        self,
+    ):
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        locked = bool(
+            layout is None
+            or layout.locked
+        )
+
+        toolbar = getattr(
+            self,
+            "layout_toolbar",
+            None,
+        )
+
+        if toolbar is None:
+            return
+
+        toolbar.setAccessibleDescription(
+            (
+                "The dashboard layout is locked. "
+                "Activate Edit layout to make changes."
+            )
+            if locked
+            else (
+                "The dashboard layout is being edited. "
+                "Use the controls to arrange cards, "
+                "then activate Finish editing."
+            )
+        )
+
+        status_label = getattr(
+            self,
+            "layout_status_label",
+            None,
+        )
+
+        if status_label is not None:
+            status_label.setAccessibleDescription(
+                (
+                    "Dashboard layout is locked."
+                    if locked
+                    else (
+                        "Dashboard layout editing "
+                        "is active."
+                    )
+                )
+            )
+
+        lock_button = getattr(
+            self,
+            "layout_lock_button",
+            None,
+        )
+
+        if lock_button is not None:
+            lock_button.setAccessibleName(
+                (
+                    "Edit dashboard layout"
+                    if locked
+                    else (
+                        "Finish dashboard layout "
+                        "editing"
+                    )
+                )
+            )
+
+        dynamic_controls = (
+            getattr(
+                self,
+                "layout_lock_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_preset_combo",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_profiles_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_undo_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_redo_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_revert_session_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_snap_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_add_card_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_visibility_button",
+                None,
+            ),
+            getattr(
+                self,
+                "layout_reset_button",
+                None,
+            ),
+        )
+
+        for control in dynamic_controls:
+            if control is None:
+                continue
+
+            description = str(
+                control.toolTip()
+                or control.accessibleDescription()
+                or ""
+            ).strip()
+
+            if description:
+                control.setAccessibleDescription(
+                    description
+                )
+                control.setStatusTip(
+                    description
+                )
+
+            if isinstance(
+                control,
+                QPushButton,
+            ):
+                control.setCursor(
+                    (
+                        Qt.CursorShape.PointingHandCursor
+                        if control.isEnabled()
+                        else Qt.CursorShape.ArrowCursor
+                    )
+                )
+
     def update_dashboard_layout_toolbar_responsive_state(
         self,
     ):
@@ -3039,6 +3387,9 @@ class DashboardPage(QWidget):
         )
         self.layout_lock_button.setCursor(
             Qt.CursorShape.PointingHandCursor
+        )
+        self.layout_lock_button.setToolTip(
+            "Enter dashboard layout editing"
         )
         self.layout_lock_button.clicked.connect(
             self.toggle_dashboard_layout_lock
@@ -3413,6 +3764,7 @@ class DashboardPage(QWidget):
             self.layout_toolbar_controls_layout
         )
 
+        self.configure_dashboard_layout_toolbar_accessibility()
         self.setup_dashboard_history_shortcuts()
         self.update_dashboard_layout_toolbar_responsive_state()
         self.update_dashboard_history_controls()
@@ -3487,6 +3839,15 @@ class DashboardPage(QWidget):
             canvas.set_snap_enabled(
                 self.dashboard_snap_to_grid
             )
+
+        accessibility_sync = getattr(
+            self,
+            "sync_dashboard_layout_accessibility",
+            None,
+        )
+
+        if callable(accessibility_sync):
+            accessibility_sync()
 
 
     def snap_dashboard_pixel_value(
@@ -5398,6 +5759,15 @@ class DashboardPage(QWidget):
                 )
             )
 
+        accessibility_sync = getattr(
+            self,
+            "sync_dashboard_layout_accessibility",
+            None,
+        )
+
+        if callable(accessibility_sync):
+            accessibility_sync()
+
     def revert_dashboard_layout_session(
         self,
     ) -> bool:
@@ -5918,6 +6288,15 @@ class DashboardPage(QWidget):
         if callable(session_sync):
             session_sync()
 
+        accessibility_sync = getattr(
+            self,
+            "sync_dashboard_layout_accessibility",
+            None,
+        )
+
+        if callable(accessibility_sync):
+            accessibility_sync()
+
 
     def undo_dashboard_layout(
         self,
@@ -6426,6 +6805,15 @@ class DashboardPage(QWidget):
         self.update_dashboard_layout_toolbar_responsive_state()
         self.sync_dashboard_drag_handles()
         self.update_dashboard_history_controls()
+
+        accessibility_sync = getattr(
+            self,
+            "sync_dashboard_layout_accessibility",
+            None,
+        )
+
+        if callable(accessibility_sync):
+            accessibility_sync()
 
 
     def apply_dashboard_layout(
@@ -8074,6 +8462,13 @@ class DashboardPage(QWidget):
             QPushButton#layoutMenuButton:hover,
             QPushButton#layoutLockButton:hover {{
                 border: 1px solid {theme["accent"]};
+            }}
+
+            QComboBox#layoutPresetCombo:focus,
+            QPushButton#layoutControlButton:focus,
+            QPushButton#layoutMenuButton:focus,
+            QPushButton#layoutLockButton:focus {{
+                border: 2px solid {theme["accent"]};
             }}
 
             QComboBox#layoutPresetCombo:disabled,

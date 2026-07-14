@@ -23,6 +23,36 @@ from src.ui.dashboard_layout import (
 
 
 class _ToolbarStub(QWidget):
+    configure_dashboard_layout_toolbar_accessibility = (
+        DashboardPage
+        .configure_dashboard_layout_toolbar_accessibility
+    )
+
+    sync_dashboard_layout_accessibility = (
+        DashboardPage
+        .sync_dashboard_layout_accessibility
+    )
+
+    dashboard_layout_session_card_ids = (
+        DashboardPage
+        .dashboard_layout_session_card_ids
+    )
+
+    dashboard_layout_session_is_safe = (
+        DashboardPage
+        .dashboard_layout_session_is_safe
+    )
+
+    dashboard_layout_session_has_changes = (
+        DashboardPage
+        .dashboard_layout_session_has_changes
+    )
+
+    update_dashboard_layout_session_controls = (
+        DashboardPage
+        .update_dashboard_layout_session_controls
+    )
+
     setup_dashboard_history_shortcuts = (
         DashboardPage
         .setup_dashboard_history_shortcuts
