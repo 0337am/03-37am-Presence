@@ -31,6 +31,7 @@ from src.system.startup import StartupManager
 from src.ui.custom_cards import (
     SCHEMA_VERSION as CUSTOM_CARD_STORAGE_SCHEMA_VERSION,
     CustomCardStore,
+    LauncherCardData,
     custom_card_from_dict,
     validate_custom_cards,
 )
@@ -729,15 +730,26 @@ class SettingsBackupManager:
         self,
     ) -> dict:
         cards = self.custom_card_store.load()
+        portable_cards = []
+
+        for card in cards:
+            data = card.to_dict()
+
+            # Launcher targets are device-local and can
+            # contain private file-system information.
+            if isinstance(
+                card,
+                LauncherCardData,
+            ):
+                data["target"] = ""
+
+            portable_cards.append(data)
 
         return {
             "schema_version": (
                 CUSTOM_CARD_STORAGE_SCHEMA_VERSION
             ),
-            "cards": [
-                card.to_dict()
-                for card in cards
-            ],
+            "cards": portable_cards,
         }
 
     def _capture_presence_presets(
@@ -1449,14 +1461,8 @@ class SettingsBackupManager:
             maximum=CUSTOM_CARD_STORAGE_SCHEMA_VERSION,
         )
 
-        if (
-            schema_version
-            != CUSTOM_CARD_STORAGE_SCHEMA_VERSION
-        ):
-            raise SettingsBackupValidationError(
-                "The custom Link card backup "
-                "version is not supported."
-            )
+        # Schema 1 contained Link cards only. It remains
+        # valid and is normalized to the current version.
 
         cards_payload = payload.get(
             "cards",
@@ -1468,7 +1474,7 @@ class SettingsBackupManager:
             list,
         ):
             raise SettingsBackupValidationError(
-                "Custom Link cards must be a list."
+                "Custom cards must be a list."
             )
 
         try:
@@ -1486,9 +1492,23 @@ class SettingsBackupManager:
             ValueError,
         ) as error:
             raise SettingsBackupValidationError(
-                "The custom Link cards in the "
+                "The custom cards in the "
                 "backup are invalid."
             ) from error
+
+        for card in cards:
+            if (
+                isinstance(
+                    card,
+                    LauncherCardData,
+                )
+                and card.target
+            ):
+                raise SettingsBackupValidationError(
+                    "Launcher card target paths are "
+                    "local-only and cannot be restored "
+                    "from a settings backup."
+                )
 
         return {
             "schema_version": (

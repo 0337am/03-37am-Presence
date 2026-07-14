@@ -11,14 +11,31 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+LEGACY_SCHEMA_VERSION = 1
+
 LINK_CARD_TYPE = "link"
+LAUNCHER_CARD_TYPE = "launcher"
+
 MAX_CUSTOM_CARDS = 100
 MAX_TITLE_LENGTH = 80
 MAX_URL_LENGTH = 2048
+MAX_LAUNCHER_TARGET_LENGTH = 4096
 MAX_ICON_LENGTH = 8
 MAX_DESCRIPTION_LENGTH = 300
 MAX_BUTTON_LABEL_LENGTH = 30
+
+LAUNCHER_TARGET_APPLICATION = "application"
+LAUNCHER_TARGET_FILE = "file"
+LAUNCHER_TARGET_FOLDER = "folder"
+
+ALLOWED_LAUNCHER_TARGET_KINDS = frozenset(
+    {
+        LAUNCHER_TARGET_APPLICATION,
+        LAUNCHER_TARGET_FILE,
+        LAUNCHER_TARGET_FOLDER,
+    }
+)
 
 _CARD_ID_PATTERN = re.compile(
     r"^custom_[a-z][a-z0-9_]{0,31}_[0-9a-f]{32}$"
@@ -120,6 +137,81 @@ def normalize_web_url(value: str) -> str:
         )
 
     return normalized
+
+
+def normalize_launcher_target(
+    value: str,
+    *,
+    allow_empty: bool = False,
+) -> str:
+    raw = _strict_text(
+        value,
+        "Launcher target",
+        MAX_LAUNCHER_TARGET_LENGTH,
+        allow_empty=allow_empty,
+    )
+
+    if not raw:
+        return ""
+
+    if any(
+        ord(character) < 32
+        or ord(character) == 127
+        for character in raw
+    ):
+        raise ValueError(
+            "Launcher target cannot contain control characters."
+        )
+
+    if raw.startswith(
+        (
+            "\\\\",
+            "//",
+        )
+    ):
+        raise ValueError(
+            "Network launcher targets are not supported."
+        )
+
+    target = Path(raw).expanduser()
+
+    if not target.is_absolute():
+        raise ValueError(
+            "Launcher target must be an absolute local path."
+        )
+
+    normalized = os.path.normpath(
+        str(target)
+    )
+
+    if len(normalized) > MAX_LAUNCHER_TARGET_LENGTH:
+        raise ValueError(
+            "Launcher target is too long."
+        )
+
+    return normalized
+
+
+def normalize_launcher_target_kind(
+    value: str,
+) -> str:
+    target_kind = _strict_text(
+        value,
+        "Launcher target type",
+        32,
+        allow_empty=False,
+    ).casefold()
+
+    if (
+        target_kind
+        not in ALLOWED_LAUNCHER_TARGET_KINDS
+    ):
+        raise ValueError(
+            "Launcher target type must be "
+            "application, file, or folder."
+        )
+
+    return target_kind
 
 
 def display_domain(url: str) -> str:
@@ -297,6 +389,164 @@ class LinkCardData:
         )
 
 
+@dataclass(frozen=True)
+class LauncherCardData:
+    card_id: str
+    title: str
+    target: str
+    target_kind: str
+    icon: str = ""
+    description: str = ""
+    button_label: str = "Open"
+    accent: str = ""
+
+    @property
+    def card_type(self) -> str:
+        return LAUNCHER_CARD_TYPE
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.target)
+
+    @property
+    def target_path(self) -> Path | None:
+        if not self.target:
+            return None
+
+        return Path(self.target)
+
+    @property
+    def target_exists(self) -> bool:
+        target_path = self.target_path
+
+        return (
+            target_path is not None
+            and target_path.exists()
+        )
+
+    @property
+    def display_target(self) -> str:
+        target_path = self.target_path
+
+        if target_path is None:
+            return "Target not selected"
+
+        return (
+            target_path.name
+            or str(target_path)
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.card_id,
+            "type": self.card_type,
+            "title": self.title,
+            "target": self.target,
+            "target_kind": self.target_kind,
+            "icon": self.icon,
+            "description": self.description,
+            "button_label": self.button_label,
+            "accent": self.accent,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload,
+    ) -> "LauncherCardData":
+        if not isinstance(payload, dict):
+            raise ValueError(
+                "Custom card data must be an object."
+            )
+
+        card_type = _strict_text(
+            payload.get("type", ""),
+            "Custom card type",
+            32,
+            allow_empty=False,
+        ).casefold()
+
+        if card_type != LAUNCHER_CARD_TYPE:
+            raise ValueError(
+                "Unsupported custom card type."
+            )
+
+        target_kind = normalize_launcher_target_kind(
+            payload.get(
+                "target_kind",
+                LAUNCHER_TARGET_FILE,
+            )
+        )
+
+        target = normalize_launcher_target(
+            payload.get("target", ""),
+            allow_empty=True,
+        )
+
+        title = _strict_text(
+            payload.get("title", ""),
+            "Title",
+            MAX_TITLE_LENGTH,
+        )
+
+        if not title:
+            if target:
+                target_path = Path(target)
+
+                if (
+                    target_kind
+                    == LAUNCHER_TARGET_APPLICATION
+                ):
+                    title = (
+                        target_path.stem
+                        or target_path.name
+                    )
+                else:
+                    title = target_path.name
+
+            if not title:
+                title = "Launcher"
+
+        button_label = _strict_text(
+            payload.get(
+                "button_label",
+                "Open",
+            ),
+            "Button label",
+            MAX_BUTTON_LABEL_LENGTH,
+        )
+
+        if not button_label:
+            button_label = "Open"
+
+        return cls(
+            card_id=validate_card_id(
+                payload.get("id", ""),
+                LAUNCHER_CARD_TYPE,
+            ),
+            title=title,
+            target=target,
+            target_kind=target_kind,
+            icon=_strict_text(
+                payload.get("icon", ""),
+                "Icon or emoji",
+                MAX_ICON_LENGTH,
+            ),
+            description=_strict_text(
+                payload.get("description", ""),
+                "Description",
+                MAX_DESCRIPTION_LENGTH,
+            ),
+            button_label=button_label,
+            accent=normalize_accent(
+                payload.get("accent", "")
+            ),
+        )
+
+
+CustomCardData = LinkCardData | LauncherCardData
+
+
 def create_link_card(
     *,
     url: str,
@@ -341,8 +591,64 @@ def duplicate_link_card(
     )
 
 
+def create_launcher_card(
+    *,
+    target: str,
+    target_kind: str,
+    title: str = "",
+    icon: str = "",
+    description: str = "",
+    button_label: str = "Open",
+    accent: str = "",
+    card_id: str | None = None,
+) -> LauncherCardData:
+    normalized_target = normalize_launcher_target(
+        target
+    )
+
+    payload = {
+        "id": card_id or new_card_id(
+            LAUNCHER_CARD_TYPE
+        ),
+        "type": LAUNCHER_CARD_TYPE,
+        "title": title,
+        "target": normalized_target,
+        "target_kind": target_kind,
+        "icon": icon,
+        "description": description,
+        "button_label": button_label,
+        "accent": accent,
+    }
+
+    return LauncherCardData.from_dict(
+        payload
+    )
+
+
+def duplicate_launcher_card(
+    card: LauncherCardData,
+) -> LauncherCardData:
+    if not isinstance(
+        card,
+        LauncherCardData,
+    ):
+        raise TypeError(
+            "Expected LauncherCardData."
+        )
+
+    return replace(
+        card,
+        card_id=new_card_id(
+            LAUNCHER_CARD_TYPE
+        ),
+    )
+
+
 _CARD_LOADERS = {
     LINK_CARD_TYPE: LinkCardData.from_dict,
+    LAUNCHER_CARD_TYPE: (
+        LauncherCardData.from_dict
+    ),
 }
 
 
@@ -371,7 +677,9 @@ def custom_card_from_dict(payload):
     return loader(payload)
 
 
-def validate_custom_cards(cards) -> tuple[LinkCardData, ...]:
+def validate_custom_cards(
+    cards,
+) -> tuple[CustomCardData, ...]:
     try:
         normalized = tuple(cards)
     except TypeError as error:
@@ -384,16 +692,27 @@ def validate_custom_cards(cards) -> tuple[LinkCardData, ...]:
             "Too many custom cards are saved."
         )
 
+    validated_cards = []
     card_ids = []
 
     for card in normalized:
-        if not isinstance(card, LinkCardData):
+        if not isinstance(
+            card,
+            (
+                LinkCardData,
+                LauncherCardData,
+            ),
+        ):
             raise TypeError(
                 "Unsupported custom card object."
             )
 
-        validated = LinkCardData.from_dict(
+        validated = custom_card_from_dict(
             card.to_dict()
+        )
+
+        validated_cards.append(
+            validated
         )
         card_ids.append(
             validated.card_id
@@ -404,7 +723,7 @@ def validate_custom_cards(cards) -> tuple[LinkCardData, ...]:
             "Custom cards contain duplicate IDs."
         )
 
-    return normalized
+    return tuple(validated_cards)
 
 
 class CustomCardStore:
@@ -442,7 +761,7 @@ class CustomCardStore:
             / "custom_cards.json"
         )
 
-    def load(self) -> tuple[LinkCardData, ...]:
+    def load(self) -> tuple[CustomCardData, ...]:
         if not self.path.exists():
             return ()
 
@@ -464,7 +783,11 @@ class CustomCardStore:
 
             if (
                 isinstance(schema_version, bool)
-                or schema_version != SCHEMA_VERSION
+                or schema_version
+                not in {
+                    LEGACY_SCHEMA_VERSION,
+                    SCHEMA_VERSION,
+                }
             ):
                 raise ValueError(
                     "Unsupported custom card storage version."
@@ -508,7 +831,7 @@ class CustomCardStore:
     def save(
         self,
         cards,
-    ) -> tuple[LinkCardData, ...]:
+    ) -> tuple[CustomCardData, ...]:
         validated = validate_custom_cards(
             cards
         )
@@ -560,9 +883,20 @@ class CustomCardStore:
 
     def upsert(
         self,
-        card: LinkCardData,
-    ) -> tuple[LinkCardData, ...]:
-        validated_card = LinkCardData.from_dict(
+        card: CustomCardData,
+    ) -> tuple[CustomCardData, ...]:
+        if not isinstance(
+            card,
+            (
+                LinkCardData,
+                LauncherCardData,
+            ),
+        ):
+            raise TypeError(
+                "Unsupported custom card object."
+            )
+
+        validated_card = custom_card_from_dict(
             card.to_dict()
         )
         cards = list(self.load())
@@ -579,7 +913,7 @@ class CustomCardStore:
     def delete(
         self,
         card_id: str,
-    ) -> tuple[LinkCardData, ...]:
+    ) -> tuple[CustomCardData, ...]:
         validated_id = validate_card_id(
             card_id
         )
