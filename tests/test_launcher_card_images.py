@@ -380,6 +380,38 @@ class LauncherCardImageTests(
                         value
                     )
 
+    def test_dashboard_wires_image_cleanup(self):
+        dashboard_path = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "ui"
+            / "dashboard.py"
+        )
+
+        source = dashboard_path.read_text(
+            encoding="utf-8",
+        )
+
+        self.assertIn(
+            "def prune_unused_launcher_card_images",
+            source,
+        )
+        self.assertIn(
+            "prune_launcher_card_images(",
+            source,
+        )
+        self.assertGreaterEqual(
+            source.count(
+                "self.prune_unused_launcher_card_images("
+            ),
+            8,
+        )
+        self.assertIn(
+            "previous_cards",
+            source,
+        )
+
+
 
 if __name__ == "__main__":
     unittest.main()

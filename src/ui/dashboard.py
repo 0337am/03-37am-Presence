@@ -97,6 +97,9 @@ from src.ui.launcher_cards import (
     LauncherCardDialog,
     LauncherCardWidget,
 )
+from src.ui.launcher_card_images import (
+    prune_launcher_card_images,
+)
 from src.system.launcher_open import (
     open_prepared_launcher_target,
     prepare_launcher_target,
@@ -3446,6 +3449,42 @@ class DashboardPage(QWidget):
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()
 
+    def prune_unused_launcher_card_images(
+        self,
+        cards=None,
+    ):
+        card_values = tuple(
+            self.custom_cards.values()
+            if cards is None
+            else cards
+        )
+
+        referenced_assets = {
+            card.image_asset
+            for card in card_values
+            if (
+                isinstance(
+                    card,
+                    LauncherCardData,
+                )
+                and card.image_asset
+            )
+        }
+
+        try:
+            prune_launcher_card_images(
+                referenced_assets
+            )
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            print(
+                "Launcher card image cleanup "
+                f"could not finish: {error}"
+            )
+
     def add_launcher_card(self):
         if self.dashboard_layout_state.locked:
             self.sync_dashboard_layout_controls()
@@ -3476,6 +3515,10 @@ class DashboardPage(QWidget):
             TypeError,
             ValueError,
         ) as error:
+            self.prune_unused_launcher_card_images(
+                previous_cards
+            )
+
             QMessageBox.warning(
                 self,
                 "Launcher card not saved",
@@ -3546,6 +3589,9 @@ class DashboardPage(QWidget):
             self.remove_custom_card_ui(
                 card.card_id
             )
+            self.prune_unused_launcher_card_images(
+                previous_cards
+            )
 
             QMessageBox.warning(
                 self,
@@ -3554,6 +3600,7 @@ class DashboardPage(QWidget):
             )
             return
 
+        self.prune_unused_launcher_card_images()
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()
 
@@ -3847,6 +3894,10 @@ class DashboardPage(QWidget):
                     f"{rollback_error}"
                 )
 
+            self.prune_unused_launcher_card_images(
+                previous_cards
+            )
+
             QMessageBox.warning(
                 self,
                 "Launcher card not updated",
@@ -3870,6 +3921,7 @@ class DashboardPage(QWidget):
                 card.title
             )
 
+        self.prune_unused_launcher_card_images()
         widget.set_launch_enabled(True)
         widget.set_theme(
             self.theme_manager.theme()
@@ -4216,6 +4268,10 @@ class DashboardPage(QWidget):
                     f"{rollback_error}"
                 )
 
+            self.prune_unused_launcher_card_images(
+                previous_cards
+            )
+
             QMessageBox.warning(
                 self,
                 "Launcher card not duplicated",
@@ -4223,6 +4279,7 @@ class DashboardPage(QWidget):
             )
             return False
 
+        self.prune_unused_launcher_card_images()
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()
         return True
@@ -4341,6 +4398,7 @@ class DashboardPage(QWidget):
             for item in saved_cards
         }
         self.dashboard_layout_state = saved_layout
+        self.prune_unused_launcher_card_images()
         self.remove_custom_card_ui(card_id)
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()

@@ -34,6 +34,10 @@ from src.ui.custom_cards import (
     create_launcher_card,
     normalize_launcher_target,
 )
+from src.ui.launcher_card_images import (
+    cached_launcher_card_image_path,
+    import_launcher_card_image,
+)
 
 
 _SCRIPT_SUFFIXES = frozenset(
@@ -68,11 +72,20 @@ class LauncherCardDialog(QDialog):
         self,
         parent=None,
         card: LauncherCardData | None = None,
+        *,
+        image_root: Path | str | None = None,
     ):
         super().__init__(parent)
 
         self._editing_card = card
         self._result_card = None
+        self._image_root = image_root
+        self._image_asset = (
+            card.image_asset
+            if card is not None
+            else ""
+        )
+        self._pending_image_path = ""
 
         self.setWindowTitle(
             "Edit Launcher card"
@@ -203,6 +216,97 @@ class LauncherCardDialog(QDialog):
             True
         )
 
+        self.image_preview = QLabel("")
+        self.image_preview.setObjectName(
+            "launcherCardImagePreview"
+        )
+        self.image_preview.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.image_preview.setFixedSize(
+            54,
+            54,
+        )
+        self.image_preview.setFrameShape(
+            QFrame.Shape.StyledPanel
+        )
+
+        self.choose_image_button = QPushButton(
+            "Choose image..."
+        )
+        self.choose_image_button.setObjectName(
+            "launcherCardChooseImageButton"
+        )
+        self.choose_image_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.remove_image_button = QPushButton(
+            "Remove"
+        )
+        self.remove_image_button.setObjectName(
+            "launcherCardRemoveImageButton"
+        )
+        self.remove_image_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        image_buttons = QHBoxLayout()
+        image_buttons.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        image_buttons.setSpacing(7)
+        image_buttons.addWidget(
+            self.choose_image_button
+        )
+        image_buttons.addWidget(
+            self.remove_image_button
+        )
+        image_buttons.addStretch()
+
+        self.image_status = QLabel("")
+        self.image_status.setObjectName(
+            "launcherCardImageStatus"
+        )
+        self.image_status.setWordWrap(True)
+
+        image_details = QVBoxLayout()
+        image_details.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        image_details.setSpacing(5)
+        image_details.addLayout(
+            image_buttons
+        )
+        image_details.addWidget(
+            self.image_status
+        )
+
+        self.image_controls = QWidget()
+        image_layout = QHBoxLayout(
+            self.image_controls
+        )
+        image_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        image_layout.setSpacing(9)
+        image_layout.addWidget(
+            self.image_preview
+        )
+        image_layout.addLayout(
+            image_details,
+            stretch=1,
+        )
+
         self.description_edit = QPlainTextEdit()
         self.description_edit.setPlaceholderText(
             "Optional description shown on larger cards"
@@ -246,6 +350,10 @@ class LauncherCardDialog(QDialog):
         form.addRow(
             "Icon or emoji",
             self.icon_edit,
+        )
+        form.addRow(
+            "Card image",
+            self.image_controls,
         )
         form.addRow(
             "Description",
@@ -337,9 +445,141 @@ class LauncherCardDialog(QDialog):
         self.browse_button.clicked.connect(
             self._browse_target
         )
+        self.choose_image_button.clicked.connect(
+            self._choose_card_image
+        )
+        self.remove_image_button.clicked.connect(
+            self._remove_card_image
+        )
 
+        self._refresh_image_preview()
         self._target_kind_changed()
         self.target_edit.setFocus()
+
+    def _image_preview_path(
+        self,
+    ) -> Path | None:
+        if self._pending_image_path:
+            return Path(
+                self._pending_image_path
+            )
+
+        return cached_launcher_card_image_path(
+            self._image_asset,
+            self._image_root,
+        )
+
+    def _refresh_image_preview(self):
+        path = self._image_preview_path()
+        pixmap = (
+            QPixmap(str(path))
+            if path is not None
+            else QPixmap()
+        )
+
+        if not pixmap.isNull():
+            self.image_preview.setText("")
+            self.image_preview.setPixmap(
+                pixmap.scaled(
+                    44,
+                    44,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+
+        else:
+            self.image_preview.setPixmap(
+                QPixmap()
+            )
+            self.image_preview.setText(
+                self.icon_edit.text().strip()
+                or "IMG"
+            )
+
+        has_selection = bool(
+            self._pending_image_path
+            or self._image_asset
+        )
+
+        self.remove_image_button.setEnabled(
+            has_selection
+        )
+
+        if self._pending_image_path:
+            if pixmap.isNull():
+                message = (
+                    "The selected file cannot be "
+                    "previewed. It will be fully "
+                    "validated when saved."
+                )
+            else:
+                message = (
+                    "Selected image. It will be copied "
+                    "into local app storage when the "
+                    "card is saved."
+                )
+
+        elif self._image_asset:
+            if path is None or pixmap.isNull():
+                message = (
+                    "The saved image is missing. "
+                    "Choose a replacement or remove it. "
+                    "The emoji or default icon will be "
+                    "used meanwhile."
+                )
+            else:
+                message = (
+                    "Local card image. The emoji or "
+                    "default icon remains its fallback."
+                )
+
+        else:
+            message = (
+                "Optional. A card image is used before "
+                "the emoji or default icon."
+            )
+
+        self.image_status.setText(
+            message
+        )
+
+    def _choose_card_image(self):
+        if self._pending_image_path:
+            initial_directory = str(
+                Path(
+                    self._pending_image_path
+                ).parent
+            )
+        else:
+            initial_directory = str(
+                Path.home()
+            )
+
+        selected_path, _ = (
+            QFileDialog.getOpenFileName(
+                self,
+                "Choose Launcher card image",
+                initial_directory,
+                (
+                    "Images "
+                    "(*.png *.jpg *.jpeg *.webp)"
+                ),
+            )
+        )
+
+        if not selected_path:
+            return
+
+        self._pending_image_path = (
+            selected_path
+        )
+        self._refresh_image_preview()
+
+    def _remove_card_image(self):
+        self._pending_image_path = ""
+        self._image_asset = ""
+        self._refresh_image_preview()
 
     def target_kind(self) -> str:
         value = (
@@ -580,7 +820,7 @@ class LauncherCardDialog(QDialog):
         if target_error is not None:
             raise ValueError(target_error)
 
-        return create_launcher_card(
+        card = create_launcher_card(
             card_id=(
                 self._editing_card.card_id
                 if self._editing_card
@@ -591,12 +831,36 @@ class LauncherCardDialog(QDialog):
             target_kind=self.target_kind(),
             title=self.title_edit.text(),
             icon=self.icon_edit.text(),
+            image_asset=self._image_asset,
             description=description,
             button_label=(
                 self.button_label_edit.text()
             ),
             accent=self.accent_edit.text(),
         )
+
+        if not self._pending_image_path:
+            return card
+
+        image_asset = (
+            import_launcher_card_image(
+                self._pending_image_path,
+                self._image_root,
+            )
+        )
+
+        return create_launcher_card(
+            card_id=card.card_id,
+            target=card.target,
+            target_kind=card.target_kind,
+            title=card.title,
+            icon=card.icon,
+            image_asset=image_asset,
+            description=card.description,
+            button_label=card.button_label,
+            accent=card.accent,
+        )
+
 
     def card_data(
         self,
@@ -608,7 +872,11 @@ class LauncherCardDialog(QDialog):
             self._result_card = (
                 self.validated_card()
             )
-        except (TypeError, ValueError) as error:
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
             self.error_label.setText(
                 str(error)
             )
@@ -626,6 +894,8 @@ class LauncherCardWidget(QFrame):
         self,
         card: LauncherCardData,
         parent=None,
+        *,
+        image_root: Path | str | None = None,
     ):
         super().__init__(parent)
 
@@ -633,6 +903,7 @@ class LauncherCardWidget(QFrame):
         self._responsive_state = "large"
         self._theme = {}
         self._launch_enabled = False
+        self._image_root = image_root
 
         self.setObjectName(
             "launcherCard"
@@ -806,6 +1077,70 @@ class LauncherCardWidget(QFrame):
                 self._card.target
             )
 
+    def _fallback_icon_text(self) -> str:
+        return (
+            self._card.icon
+            or _KIND_ICONS.get(
+                self._card.target_kind,
+                "??",
+            )
+        )
+
+    def _refresh_header_icon(self):
+        path = (
+            cached_launcher_card_image_path(
+                self._card.image_asset,
+                self._image_root,
+            )
+        )
+
+        pixmap = (
+            QPixmap(str(path))
+            if path is not None
+            else QPixmap()
+        )
+
+        if not pixmap.isNull():
+            available_size = max(
+                14,
+                min(
+                    self.icon_label.width(),
+                    self.icon_label.height(),
+                )
+                - 8,
+            )
+
+            self.icon_label.setText("")
+            self.icon_label.setPixmap(
+                pixmap.scaled(
+                    available_size,
+                    available_size,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+            self.icon_label.setToolTip(
+                "Custom Launcher card image"
+            )
+            return
+
+        self.icon_label.setPixmap(
+            QPixmap()
+        )
+        self.icon_label.setText(
+            self._fallback_icon_text()
+        )
+
+        if self._card.image_asset:
+            self.icon_label.setToolTip(
+                "Custom image missing. "
+                "Using the fallback icon."
+            )
+        else:
+            self.icon_label.setToolTip(
+                self._fallback_icon_text()
+            )
+
     def update_card(
         self,
         card: LauncherCardData,
@@ -820,16 +1155,7 @@ class LauncherCardWidget(QFrame):
 
         self._card = card
 
-        self.icon_label.setPixmap(
-            QPixmap()
-        )
-        self.icon_label.setText(
-            card.icon
-            or _KIND_ICONS.get(
-                card.target_kind,
-                "??",
-            )
-        )
+        self._refresh_header_icon()
 
         self.title_label.setText(
             card.title
@@ -1093,3 +1419,5 @@ class LauncherCardWidget(QFrame):
                     self._card.description
                 )
             )
+
+        self._refresh_header_icon()
