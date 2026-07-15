@@ -2,19 +2,20 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link cards, listening history, automatic AFK handling, custom themes, custom blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.4.0 highlights
+## v2.5.0 highlights
 
-- Atmosphere backgrounds let you choose a local image, blur it, dim it, and tune its visibility behind the app.
-- Dashboard, Presence, and Settings cards now use a softer glass look so custom backgrounds can show through while text stays readable.
-- Atmosphere sliders support live preview with cached rendering for smoother adjustment.
-- Background images stay local to the device and are never included in settings backups.
-- Settings backups now include Atmosphere blur, opacity, and dim values while excluding the custom background image and local file path.
+- Launcher Cards let you add local applications and folders to the Dashboard with guarded target validation, optional custom images, editing, duplication, hiding, and deletion.
+- Dashboard editing now includes Undo and Redo, keyboard movement and resizing, editing-session Revert, and clearer accessible names, descriptions, focus order, and focus styling.
+- Magnetic alignment snaps cards to nearby edges, card centres, canvas edges, and the canvas centre, with temporary guide lines and the existing 24 px grid as a fallback.
+- The Control Room toolbar and editing canvas now have clearer locked and editing states, compact behaviour, polished handles, and improved responsive controls.
+- Launcher Card images are imported locally, scaled, deduplicated, and excluded from portable settings backups.
+- Existing Dashboard layouts, Layout Profiles, Link Cards, Presence Presets, Atmosphere settings, and older settings backups remain compatible.
 
 ## Core features
 
 - Discord Rich Presence for Spotify and supported browser media.
-- Custom Dashboard Link cards with optional website icons.
-- Dashboard layout profiles and snap-to-grid editing.
+- Custom Dashboard Link Cards and Launcher Cards with optional website icons or local card images.
+- Dashboard Layout Profiles with Undo, Redo, keyboard editing, grid snapping, magnetic alignment, and visual guides.
 - Custom presence modes and presets.
 - Persistent listening history backed by SQLite.
 - Recently Played artwork caching.

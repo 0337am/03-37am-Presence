@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.5.0 - Control Room Update
+
+Released 15 July 2026.
+
+### Added
+
+- Added Launcher Cards for opening validated local applications and folders directly from the Dashboard.
+- Added Launcher Card editing, duplication, deletion, hiding, restoring, responsive sizing, and optional custom card images.
+- Added local Launcher Card image import with validation, scaling, deduplication, fallback artwork, and unused-image cleanup.
+- Added Dashboard layout Undo and Redo with toolbar controls and `Ctrl+Z`, `Ctrl+Y`, and `Ctrl+Shift+Z` shortcuts.
+- Added editing-session Revert so all layout changes made since entering edit mode can be restored together.
+- Added keyboard card movement and resizing with one-pixel steps, Shift grid steps, Enter to save, Escape to cancel, and automatic save on focus change.
+- Added magnetic alignment to nearby card edges, card centres, canvas edges, and the canvas centre.
+- Added temporary visual alignment guides while moving and resizing cards.
+
+### Improved
+
+- Redesigned and polished the Dashboard Control Room toolbar, editing canvas, editor handles, compact layout, and locked or editing states.
+- Improved Dashboard accessibility with explicit tab order, accessible names and descriptions, dynamic state information, focus styling, and keyboard-operable card handles.
+- Expanded the Snap control so magnetic alignment takes priority and the existing 24 px grid remains available as a fallback.
+- Improved Launcher Card opening with target revalidation immediately before launch and clear feedback for missing or changed targets.
+- Improved Launcher Card layouts across tiny, compact, standard, and wide card sizes.
+- Preserved each mouse drag, mouse resize, keyboard adjustment, preset change, and session revert as a single Undo or Redo history action.
+
+### Privacy and security
+
+- Launcher Card target paths and custom image paths stay local to the device and are excluded from portable settings backups.
+- Launcher Cards reject relative paths, network targets, unsupported target types, malformed quoted paths, and mismatched application or folder targets.
+- Script-like targets require explicit confirmation before opening, and every target is checked again immediately before launch.
+- Launcher Card image imports accept only supported local image files and never upload images automatically.
+- Settings backup validation rejects exported local Launcher Card targets and local Launcher Card image identifiers.
+
+### Upgrade notes
+
+- Existing v2.4 settings, Dashboard layouts, Layout Profiles, Link Cards, Presence Presets, Atmosphere settings, and listening history continue to load normally.
+- Existing v2.4 and earlier settings backups remain restorable.
+- Launcher Card target paths and custom images are intentionally excluded from portable backups. Restored Launcher Cards may require the local target or image to be selected again.
+- A restart is recommended after restoring settings so every service and Dashboard component reloads the restored values.
+
 ## v2.4.0 - Atmosphere Update
 
 Released 13 July 2026.
