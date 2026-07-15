@@ -488,6 +488,12 @@ class DashboardPage(QWidget):
         self._dashboard_resize_original_layout = None
         self._dashboard_resize_original_geometry = None
 
+        self._dashboard_keyboard_card_id = None
+        self._dashboard_keyboard_mode = None
+        self._dashboard_keyboard_active = False
+        self._dashboard_keyboard_original_layout = None
+        self._dashboard_keyboard_original_geometry = None
+
         self._dashboard_editor_outline = None
 
         self.dashboard_snap_settings = QSettings()
@@ -909,6 +915,10 @@ class DashboardPage(QWidget):
         if card_id in self.dashboard_drag_handles:
             return
 
+        card_title = dashboard_card_spec(
+            card_id
+        ).title
+
         move_handle = QLabel(
             "DRAG",
             self.dashboard_canvas,
@@ -934,8 +944,21 @@ class DashboardPage(QWidget):
             44,
             20,
         )
+        move_handle.setFocusPolicy(
+            Qt.FocusPolicy.StrongFocus
+        )
+        move_handle.setAccessibleName(
+            f"Move {card_title}"
+        )
         move_handle.setToolTip(
-            "Drag this card anywhere on the dashboard"
+            (
+                "Drag to move. Keyboard: Arrow keys "
+                "move 1px, Shift plus Arrow moves "
+                "24px, Enter saves, Escape cancels."
+            )
+        )
+        move_handle.setStatusTip(
+            move_handle.toolTip()
         )
         move_handle.setAttribute(
             Qt.WidgetAttribute.WA_Hover,
@@ -970,8 +993,22 @@ class DashboardPage(QWidget):
             34,
             20,
         )
+        resize_handle.setFocusPolicy(
+            Qt.FocusPolicy.StrongFocus
+        )
+        resize_handle.setAccessibleName(
+            f"Resize {card_title}"
+        )
         resize_handle.setToolTip(
-            "Drag to resize this dashboard card"
+            (
+                "Drag to resize. Keyboard: Arrow "
+                "keys resize 1px, Shift plus Arrow "
+                "resizes 24px, Enter saves, "
+                "Escape cancels."
+            )
+        )
+        resize_handle.setStatusTip(
+            resize_handle.toolTip()
         )
         resize_handle.setAttribute(
             Qt.WidgetAttribute.WA_Hover,
@@ -1091,6 +1128,10 @@ class DashboardPage(QWidget):
 
         if card.parentWidget() is not self.dashboard_canvas:
             card.setParent(self.dashboard_canvas)
+
+        self.sync_dashboard_card_handle_accessibility(
+            card_id
+        )
 
     def update_dashboard_canvas_editor_state(
         self,
@@ -1228,6 +1269,9 @@ class DashboardPage(QWidget):
             move_handle.setVisible(
                 editable
             )
+            move_handle.setEnabled(
+                editable
+            )
 
             move_handle.setCursor(
                 (
@@ -1238,11 +1282,18 @@ class DashboardPage(QWidget):
             )
 
             if resize_handle is not None:
-                resize_handle.setVisible(
+                resize_editable = (
                     editable
                     and dashboard_card_spec(
                         card_id
                     ).resizable
+                )
+
+                resize_handle.setVisible(
+                    resize_editable
+                )
+                resize_handle.setEnabled(
+                    resize_editable
                 )
 
                 resize_handle.setCursor(
@@ -1252,6 +1303,10 @@ class DashboardPage(QWidget):
                         else Qt.CursorShape.ArrowCursor
                     )
                 )
+
+            self.sync_dashboard_card_handle_accessibility(
+                card_id
+            )
 
             if action_handle is not None:
                 action_handle.setVisible(
@@ -2551,6 +2606,742 @@ class DashboardPage(QWidget):
             commit=False
         )
 
+
+    def sync_dashboard_card_handle_accessibility(
+        self,
+        card_id: str,
+    ):
+        card = getattr(
+            self,
+            "dashboard_cards",
+            {},
+        ).get(
+            card_id
+        )
+
+        move_handle = getattr(
+            self,
+            "dashboard_drag_handles",
+            {},
+        ).get(
+            card_id
+        )
+
+        resize_handle = getattr(
+            self,
+            "dashboard_resize_handles",
+            {},
+        ).get(
+            card_id
+        )
+
+        if card is None:
+            return
+
+        title = dashboard_card_spec(
+            card_id
+        ).title
+
+        geometry = card.geometry()
+
+        summary = (
+            f"Position {geometry.x()}, "
+            f"{geometry.y()} pixels. "
+            f"Size {geometry.width()} by "
+            f"{geometry.height()} pixels."
+        )
+
+        step = max(
+            1,
+            int(
+                getattr(
+                    self,
+                    "dashboard_snap_grid_size",
+                    24,
+                )
+            ),
+        )
+
+        if move_handle is not None:
+            move_handle.setAccessibleName(
+                f"Move {title}"
+            )
+            move_handle.setAccessibleDescription(
+                (
+                    f"{summary} Use Arrow keys to "
+                    "move by 1 pixel. Hold Shift to "
+                    f"move by {step} pixels. "
+                    "Hold Control to resize instead. "
+                    "Press Enter to save or Escape "
+                    "to cancel."
+                )
+            )
+            move_handle.setStatusTip(
+                move_handle.toolTip()
+            )
+
+        if resize_handle is not None:
+            resize_handle.setAccessibleName(
+                f"Resize {title}"
+            )
+            resize_handle.setAccessibleDescription(
+                (
+                    f"{summary} Use Arrow keys to "
+                    "resize by 1 pixel. Hold Shift "
+                    f"to resize by {step} pixels. "
+                    "Press Enter to save or Escape "
+                    "to cancel."
+                )
+            )
+            resize_handle.setStatusTip(
+                resize_handle.toolTip()
+            )
+
+    def reset_dashboard_keyboard_adjustment_state(
+        self,
+    ):
+        self._dashboard_keyboard_card_id = None
+        self._dashboard_keyboard_mode = None
+        self._dashboard_keyboard_active = False
+        self._dashboard_keyboard_original_layout = None
+        self._dashboard_keyboard_original_geometry = None
+
+    def begin_dashboard_keyboard_adjustment(
+        self,
+        card_id: str,
+        mode: str,
+    ) -> bool:
+        if mode not in {
+            "move",
+            "resize",
+        }:
+            return False
+
+        if (
+            self.dashboard_layout_state.locked
+            or getattr(
+                self,
+                "_dashboard_drag_active",
+                False,
+            )
+            or getattr(
+                self,
+                "_dashboard_resize_active",
+                False,
+            )
+        ):
+            return False
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if card is None:
+            return False
+
+        try:
+            card_layout = (
+                self.dashboard_layout_state.card(
+                    card_id
+                )
+            )
+        except KeyError:
+            return False
+
+        if not card_layout.visible:
+            return False
+
+        if (
+            mode == "resize"
+            and not dashboard_card_spec(
+                card_id
+            ).resizable
+        ):
+            return False
+
+        if getattr(
+            self,
+            "_dashboard_keyboard_active",
+            False,
+        ):
+            if (
+                self._dashboard_keyboard_card_id
+                == card_id
+                and self._dashboard_keyboard_mode
+                == mode
+            ):
+                return True
+
+            self.finish_dashboard_keyboard_adjustment(
+                commit=True
+            )
+
+        self._dashboard_keyboard_card_id = (
+            card_id
+        )
+        self._dashboard_keyboard_mode = mode
+        self._dashboard_keyboard_active = True
+        self._dashboard_keyboard_original_layout = (
+            self.dashboard_layout_state
+        )
+        self._dashboard_keyboard_original_geometry = (
+            card.geometry()
+        )
+
+        card.raise_()
+
+        self.show_dashboard_editor_outline(
+            card_id,
+            mode,
+        )
+
+        return True
+
+    def update_dashboard_keyboard_adjustment(
+        self,
+        card_id: str,
+        mode: str,
+        delta_x: int,
+        delta_y: int,
+    ) -> bool:
+        if not self.begin_dashboard_keyboard_adjustment(
+            card_id,
+            mode,
+        ):
+            return False
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if card is None:
+            return False
+
+        geometry = card.geometry()
+
+        canvas_width = max(
+            1,
+            self.dashboard_canvas.width(),
+        )
+        canvas_height = max(
+            1,
+            self.dashboard_canvas.height(),
+        )
+
+        if mode == "move":
+            x = min(
+                max(
+                    0,
+                    canvas_width
+                    - geometry.width(),
+                ),
+                max(
+                    0,
+                    geometry.x()
+                    + int(delta_x),
+                ),
+            )
+
+            y = min(
+                max(
+                    0,
+                    canvas_height
+                    - geometry.height(),
+                ),
+                max(
+                    0,
+                    geometry.y()
+                    + int(delta_y),
+                ),
+            )
+
+            card.move(
+                x,
+                y,
+            )
+
+            status = (
+                f"Moving "
+                f"{dashboard_card_spec(card_id).title}: "
+                f"{x}, {y} pixels. "
+                "Enter saves; Escape cancels."
+            )
+        else:
+            (
+                requested_width,
+                requested_height,
+            ) = self.dashboard_minimum_card_size(
+                card
+            )
+
+            maximum_width = max(
+                1,
+                canvas_width - geometry.x(),
+            )
+            maximum_height = max(
+                1,
+                canvas_height - geometry.y(),
+            )
+
+            minimum_width = min(
+                maximum_width,
+                max(
+                    1,
+                    requested_width,
+                ),
+            )
+
+            minimum_height = min(
+                maximum_height,
+                max(
+                    1,
+                    requested_height,
+                ),
+            )
+
+            width = min(
+                maximum_width,
+                max(
+                    minimum_width,
+                    geometry.width()
+                    + int(delta_x),
+                ),
+            )
+
+            height = min(
+                maximum_height,
+                max(
+                    minimum_height,
+                    geometry.height()
+                    + int(delta_y),
+                ),
+            )
+
+            card.resize(
+                width,
+                height,
+            )
+
+            status = (
+                f"Resizing "
+                f"{dashboard_card_spec(card_id).title}: "
+                f"{width} by {height} pixels. "
+                "Enter saves; Escape cancels."
+            )
+
+        card.raise_()
+
+        self.position_dashboard_drag_handles()
+
+        self.show_dashboard_editor_outline(
+            card_id,
+            mode,
+        )
+
+        self.sync_dashboard_card_handle_accessibility(
+            card_id
+        )
+
+        self.layout_status_label.setText(
+            status
+        )
+
+        return True
+
+    def finish_dashboard_keyboard_adjustment(
+        self,
+        commit: bool = True,
+    ) -> bool:
+        if not getattr(
+            self,
+            "_dashboard_keyboard_active",
+            False,
+        ):
+            return False
+
+        card_id = (
+            self._dashboard_keyboard_card_id
+        )
+        mode = (
+            self._dashboard_keyboard_mode
+        )
+        original_layout = (
+            self._dashboard_keyboard_original_layout
+        )
+        original_geometry = (
+            self._dashboard_keyboard_original_geometry
+        )
+
+        card = self.dashboard_cards.get(
+            card_id
+        )
+
+        if (
+            card is None
+            or original_layout is None
+            or original_geometry is None
+        ):
+            self.reset_dashboard_keyboard_adjustment_state()
+            self.hide_dashboard_editor_outline()
+            return False
+
+        final_geometry = card.geometry()
+
+        changed = (
+            final_geometry != original_geometry
+        )
+
+        self.reset_dashboard_keyboard_adjustment_state()
+        self.hide_dashboard_editor_outline()
+
+        if (
+            not commit
+            or not changed
+        ):
+            card.setGeometry(
+                original_geometry
+            )
+
+            self.apply_dashboard_layout(
+                original_layout,
+                persist=False,
+                sync_controls=True,
+            )
+
+            if not commit:
+                self.layout_status_label.setText(
+                    "Keyboard card adjustment cancelled."
+                )
+
+            self.sync_dashboard_card_handle_accessibility(
+                card_id
+            )
+
+            return False
+
+        canvas_width = max(
+            1,
+            self.dashboard_canvas.width(),
+        )
+        canvas_height = max(
+            1,
+            self.dashboard_canvas.height(),
+        )
+
+        original_card = original_layout.card(
+            card_id
+        )
+
+        highest_layer = max(
+            item.z_index
+            for item in original_layout.cards
+        )
+
+        next_layer = min(
+            1000000,
+            highest_layer + 1,
+        )
+
+        try:
+            if mode == "move":
+                x = round(
+                    (
+                        final_geometry.x()
+                        / canvas_width
+                    )
+                    * CANVAS_UNITS
+                )
+                y = round(
+                    (
+                        final_geometry.y()
+                        / canvas_height
+                    )
+                    * CANVAS_UNITS
+                )
+
+                x = min(
+                    CANVAS_UNITS
+                    - original_card.width,
+                    max(
+                        0,
+                        x,
+                    ),
+                )
+                y = min(
+                    CANVAS_UNITS
+                    - original_card.height,
+                    max(
+                        0,
+                        y,
+                    ),
+                )
+
+                updated = move_card_freeform(
+                    original_layout,
+                    card_id,
+                    x,
+                    y,
+                    z_index=next_layer,
+                )
+
+                history_label = "card move"
+            else:
+                width = round(
+                    (
+                        final_geometry.width()
+                        / canvas_width
+                    )
+                    * CANVAS_UNITS
+                )
+                height = round(
+                    (
+                        final_geometry.height()
+                        / canvas_height
+                    )
+                    * CANVAS_UNITS
+                )
+
+                width = min(
+                    CANVAS_UNITS
+                    - original_card.x,
+                    max(
+                        1,
+                        width,
+                    ),
+                )
+                height = min(
+                    CANVAS_UNITS
+                    - original_card.y,
+                    max(
+                        1,
+                        height,
+                    ),
+                )
+
+                updated = resize_card_freeform(
+                    original_layout,
+                    card_id,
+                    width,
+                    height,
+                    z_index=next_layer,
+                )
+
+                history_label = "card resize"
+
+            self.apply_dashboard_layout(
+                updated,
+                persist=True,
+                sync_controls=True,
+                record_history=True,
+                history_label=history_label,
+            )
+        except (KeyError, ValueError) as error:
+            print(
+                "Dashboard keyboard adjustment "
+                f"rejected: {error}"
+            )
+
+            card.setGeometry(
+                original_geometry
+            )
+
+            self.apply_dashboard_layout(
+                original_layout,
+                persist=False,
+                sync_controls=True,
+            )
+
+            return False
+
+        print(
+            "Dashboard card adjusted with "
+            f"keyboard: "
+            f"{dashboard_card_spec(card_id).title}."
+        )
+
+        return True
+
+    def cancel_dashboard_keyboard_adjustment(
+        self,
+    ) -> bool:
+        was_active = bool(
+            getattr(
+                self,
+                "_dashboard_keyboard_active",
+                False,
+            )
+        )
+
+        self.finish_dashboard_keyboard_adjustment(
+            commit=False
+        )
+
+        return was_active
+
+    def handle_dashboard_keyboard_edit_event(
+        self,
+        watched,
+        event,
+        is_move_handle: bool,
+        is_resize_handle: bool,
+        card_id: str,
+    ) -> bool:
+        event_type = event.type()
+
+        if event_type == QEvent.Type.FocusIn:
+            if (
+                getattr(
+                    self,
+                    "_dashboard_keyboard_active",
+                    False,
+                )
+                and self._dashboard_keyboard_card_id
+                != card_id
+            ):
+                self.finish_dashboard_keyboard_adjustment(
+                    commit=True
+                )
+
+            mode = (
+                "resize"
+                if is_resize_handle
+                else "move"
+            )
+
+            self.show_dashboard_editor_outline(
+                card_id,
+                mode,
+            )
+
+            self.sync_dashboard_card_handle_accessibility(
+                card_id
+            )
+
+            self.layout_status_label.setText(
+                (
+                    f"Keyboard {mode} ready for "
+                    f"{dashboard_card_spec(card_id).title}. "
+                    "Arrow keys adjust, Shift uses "
+                    "the grid step, Enter saves, "
+                    "and Escape cancels."
+                )
+            )
+
+            return False
+
+        if event_type == QEvent.Type.FocusOut:
+            if (
+                getattr(
+                    self,
+                    "_dashboard_keyboard_active",
+                    False,
+                )
+                and self._dashboard_keyboard_card_id
+                == card_id
+            ):
+                self.finish_dashboard_keyboard_adjustment(
+                    commit=True
+                )
+            else:
+                self.hide_dashboard_editor_outline()
+
+            return False
+
+        handled_keys = {
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+            Qt.Key.Key_Escape,
+        }
+
+        if (
+            event_type
+            == QEvent.Type.ShortcutOverride
+            and event.key() in handled_keys
+        ):
+            event.accept()
+            return True
+
+        if event_type != QEvent.Type.KeyPress:
+            return False
+
+        key = event.key()
+
+        if key in {
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+        }:
+            self.finish_dashboard_keyboard_adjustment(
+                commit=True
+            )
+            return True
+
+        if key == Qt.Key.Key_Escape:
+            if not self.cancel_dashboard_keyboard_adjustment():
+                self.hide_dashboard_editor_outline()
+
+            return True
+
+        if key not in {
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+        }:
+            return False
+
+        modifiers = event.modifiers()
+
+        if modifiers & (
+            Qt.KeyboardModifier.AltModifier
+            | Qt.KeyboardModifier.MetaModifier
+        ):
+            return False
+
+        step = (
+            max(
+                1,
+                int(
+                    self.dashboard_snap_grid_size
+                ),
+            )
+            if modifiers
+            & Qt.KeyboardModifier.ShiftModifier
+            else 1
+        )
+
+        delta_x = 0
+        delta_y = 0
+
+        if key == Qt.Key.Key_Left:
+            delta_x = -step
+        elif key == Qt.Key.Key_Right:
+            delta_x = step
+        elif key == Qt.Key.Key_Up:
+            delta_y = -step
+        elif key == Qt.Key.Key_Down:
+            delta_y = step
+
+        mode = (
+            "resize"
+            if is_resize_handle
+            or (
+                modifiers
+                & Qt.KeyboardModifier.ControlModifier
+            )
+            else "move"
+        )
+
+        return self.update_dashboard_keyboard_adjustment(
+            card_id,
+            mode,
+            delta_x,
+            delta_y,
+        )
+
     def eventFilter(
         self,
         watched,
@@ -2601,6 +3392,15 @@ class DashboardPage(QWidget):
                 event,
             )
 
+        if self.handle_dashboard_keyboard_edit_event(
+            watched,
+            event,
+            is_move_handle,
+            is_resize_handle,
+            card_id,
+        ):
+            return True
+
         event_type = event.type()
 
         if (
@@ -2609,6 +3409,15 @@ class DashboardPage(QWidget):
             and event.button()
             == Qt.MouseButton.LeftButton
         ):
+            if getattr(
+                self,
+                "_dashboard_keyboard_active",
+                False,
+            ):
+                self.finish_dashboard_keyboard_adjustment(
+                    commit=True
+                )
+
             card = self.dashboard_cards.get(
                 card_id
             )
@@ -5798,6 +6607,13 @@ class DashboardPage(QWidget):
         ):
             self.cancel_dashboard_live_resize()
 
+        if getattr(
+            self,
+            "_dashboard_keyboard_active",
+            False,
+        ):
+            self.cancel_dashboard_keyboard_adjustment()
+
         if (
             not self.dashboard_layout_session_is_safe()
             or not self.dashboard_layout_session_has_changes()
@@ -6321,6 +7137,13 @@ class DashboardPage(QWidget):
         if self._dashboard_resize_active:
             self.cancel_dashboard_live_resize()
 
+        if getattr(
+            self,
+            "_dashboard_keyboard_active",
+            False,
+        ):
+            self.cancel_dashboard_keyboard_adjustment()
+
         entry = undo_stack.pop()
         label, target_layout = entry
 
@@ -6414,6 +7237,13 @@ class DashboardPage(QWidget):
 
         if self._dashboard_resize_active:
             self.cancel_dashboard_live_resize()
+
+        if getattr(
+            self,
+            "_dashboard_keyboard_active",
+            False,
+        ):
+            self.cancel_dashboard_keyboard_adjustment()
 
         entry = redo_stack.pop()
         label, target_layout = entry
@@ -6534,6 +7364,13 @@ class DashboardPage(QWidget):
 
         if self._dashboard_resize_active:
             self.cancel_dashboard_live_resize()
+
+        if getattr(
+            self,
+            "_dashboard_keyboard_active",
+            False,
+        ):
+            self.cancel_dashboard_keyboard_adjustment()
 
         current_layout = (
             self.dashboard_layout_state
@@ -8397,6 +9234,13 @@ class DashboardPage(QWidget):
                 color: {theme["background"]};
                 background: {theme["accent"]};
                 border-color: {theme["accent"]};
+            }}
+
+            QLabel#dashboardDragHandle:focus,
+            QLabel#dashboardResizeHandle:focus {{
+                color: {theme["background"]};
+                background: {theme["accent"]};
+                border: 2px solid {theme["accent"]};
             }}
 
             QPushButton#dashboardCustomActionHandle,
