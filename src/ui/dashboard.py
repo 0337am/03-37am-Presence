@@ -90,6 +90,11 @@ from src.ui.dashboard_layout import (
     resize_card_freeform,
     validate_layout,
 )
+from src.ui.dashboard_alignment import (
+    AlignmentRect,
+    snap_moving_rect,
+    snap_resizing_rect,
+)
 from src.ui.dashboard_profiles import (
     DashboardLayoutProfile,
     DashboardLayoutProfileStore,
@@ -255,6 +260,49 @@ class DashboardCanvas(QFrame):
             self._snap_enabled,
         )
 
+        if not self._snap_enabled:
+            self.clear_alignment_guides()
+
+        self.update()
+
+    def set_alignment_guides(
+        self,
+        guides,
+    ):
+        self._alignment_guides = tuple(
+            guides
+            or ()
+        )
+
+        self.setProperty(
+            "alignmentGuideCount",
+            len(
+                self._alignment_guides
+            ),
+        )
+
+        self.setProperty(
+            "hasAlignmentGuides",
+            bool(
+                self._alignment_guides
+            ),
+        )
+
+        self.update()
+
+    def clear_alignment_guides(self):
+        self._alignment_guides = ()
+
+        self.setProperty(
+            "alignmentGuideCount",
+            0,
+        )
+
+        self.setProperty(
+            "hasAlignmentGuides",
+            False,
+        )
+
         self.update()
 
     def paintEvent(
@@ -388,6 +436,87 @@ class DashboardCanvas(QFrame):
                 rectangle.right(),
                 y,
             )
+
+        guides = tuple(
+            getattr(
+                self,
+                "_alignment_guides",
+                (),
+            )
+        )
+
+        if guides:
+            guide_colour = QColor(
+                self._editor_accent
+            )
+
+            if not guide_colour.isValid():
+                guide_colour = QColor(
+                    "#ffffff"
+                )
+
+            guide_colour.setAlpha(220)
+
+            guide_pen = QPen(
+                guide_colour
+            )
+            guide_pen.setWidth(2)
+            guide_pen.setStyle(
+                Qt.PenStyle.DashLine
+            )
+
+            painter.setPen(
+                guide_pen
+            )
+
+            for guide in guides:
+                orientation = str(
+                    getattr(
+                        guide,
+                        "orientation",
+                        "",
+                    )
+                )
+
+                position = int(
+                    getattr(
+                        guide,
+                        "position",
+                        0,
+                    )
+                )
+
+                if orientation == "vertical":
+                    position = min(
+                        rectangle.right(),
+                        max(
+                            rectangle.left(),
+                            position,
+                        ),
+                    )
+
+                    painter.drawLine(
+                        position,
+                        rectangle.top(),
+                        position,
+                        rectangle.bottom(),
+                    )
+
+                elif orientation == "horizontal":
+                    position = min(
+                        rectangle.bottom(),
+                        max(
+                            rectangle.top(),
+                            position,
+                        ),
+                    )
+
+                    painter.drawLine(
+                        rectangle.left(),
+                        position,
+                        rectangle.right(),
+                        position,
+                    )
 
         painter.end()
 
@@ -1325,6 +1454,7 @@ class DashboardPage(QWidget):
                 )
 
         if locked:
+            self.clear_dashboard_alignment_guides()
             self.hide_dashboard_editor_outline()
 
         QTimer.singleShot(
@@ -1921,6 +2051,86 @@ class DashboardPage(QWidget):
         self.update_responsive_dashboard_cards()
         self.position_dashboard_drag_handles()
 
+
+    def dashboard_alignment_rectangles(
+        self,
+        exclude_card_id: str,
+    ) -> tuple[
+        AlignmentRect,
+        ...,
+    ]:
+        rectangles = []
+
+        for card_id, card in getattr(
+            self,
+            "dashboard_cards",
+            {},
+        ).items():
+            if (
+                card_id == exclude_card_id
+                or card is None
+                or card.isHidden()
+            ):
+                continue
+
+            geometry = card.geometry()
+
+            if (
+                geometry.width() <= 0
+                or geometry.height() <= 0
+            ):
+                continue
+
+            rectangles.append(
+                AlignmentRect(
+                    x=geometry.x(),
+                    y=geometry.y(),
+                    width=geometry.width(),
+                    height=geometry.height(),
+                )
+            )
+
+        return tuple(rectangles)
+
+    def set_dashboard_alignment_guides(
+        self,
+        guides,
+    ):
+        canvas = getattr(
+            self,
+            "dashboard_canvas",
+            None,
+        )
+
+        if (
+            canvas is not None
+            and hasattr(
+                canvas,
+                "set_alignment_guides",
+            )
+        ):
+            canvas.set_alignment_guides(
+                guides
+            )
+
+    def clear_dashboard_alignment_guides(
+        self,
+    ):
+        canvas = getattr(
+            self,
+            "dashboard_canvas",
+            None,
+        )
+
+        if (
+            canvas is not None
+            and hasattr(
+                canvas,
+                "clear_alignment_guides",
+            )
+        ):
+            canvas.clear_alignment_guides()
+
     def begin_dashboard_live_drag(
         self,
         card_id: str,
@@ -2038,17 +2248,50 @@ class DashboardPage(QWidget):
             ),
         )
 
-        clamped_x = self.snap_dashboard_pixel_value(
-            clamped_x,
-            0,
-            maximum_x,
-        )
+        if self.dashboard_snap_to_grid:
+            alignment = snap_moving_rect(
+                requested_x=clamped_x,
+                requested_y=clamped_y,
+                width=card.width(),
+                height=card.height(),
+                canvas_width=(
+                    self.dashboard_canvas.width()
+                ),
+                canvas_height=(
+                    self.dashboard_canvas.height()
+                ),
+                other_rectangles=(
+                    self.dashboard_alignment_rectangles(
+                        self._dashboard_drag_card_id
+                    )
+                ),
+            )
 
-        clamped_y = self.snap_dashboard_pixel_value(
-            clamped_y,
-            0,
-            maximum_y,
-        )
+            clamped_x = (
+                alignment.rect.x
+                if alignment.snapped_x
+                else self.snap_dashboard_pixel_value(
+                    clamped_x,
+                    0,
+                    maximum_x,
+                )
+            )
+
+            clamped_y = (
+                alignment.rect.y
+                if alignment.snapped_y
+                else self.snap_dashboard_pixel_value(
+                    clamped_y,
+                    0,
+                    maximum_y,
+                )
+            )
+
+            self.set_dashboard_alignment_guides(
+                alignment.guides
+            )
+        else:
+            self.clear_dashboard_alignment_guides()
 
         card.move(
             clamped_x,
@@ -2066,6 +2309,8 @@ class DashboardPage(QWidget):
     ) -> bool:
         if not self._dashboard_drag_active:
             return False
+
+        self.clear_dashboard_alignment_guides()
 
         card_id = (
             self._dashboard_drag_card_id
@@ -2427,17 +2672,52 @@ class DashboardPage(QWidget):
             ),
         )
 
-        width = self.snap_dashboard_pixel_value(
-            width,
-            minimum_width,
-            maximum_width,
-        )
+        if self.dashboard_snap_to_grid:
+            alignment = snap_resizing_rect(
+                x=card.x(),
+                y=card.y(),
+                requested_width=width,
+                requested_height=height,
+                minimum_width=minimum_width,
+                minimum_height=minimum_height,
+                canvas_width=(
+                    self.dashboard_canvas.width()
+                ),
+                canvas_height=(
+                    self.dashboard_canvas.height()
+                ),
+                other_rectangles=(
+                    self.dashboard_alignment_rectangles(
+                        self._dashboard_resize_card_id
+                    )
+                ),
+            )
 
-        height = self.snap_dashboard_pixel_value(
-            height,
-            minimum_height,
-            maximum_height,
-        )
+            width = (
+                alignment.rect.width
+                if alignment.snapped_x
+                else self.snap_dashboard_pixel_value(
+                    width,
+                    minimum_width,
+                    maximum_width,
+                )
+            )
+
+            height = (
+                alignment.rect.height
+                if alignment.snapped_y
+                else self.snap_dashboard_pixel_value(
+                    height,
+                    minimum_height,
+                    maximum_height,
+                )
+            )
+
+            self.set_dashboard_alignment_guides(
+                alignment.guides
+            )
+        else:
+            self.clear_dashboard_alignment_guides()
 
         card.resize(
             width,
@@ -2459,6 +2739,8 @@ class DashboardPage(QWidget):
     ) -> bool:
         if not self._dashboard_resize_active:
             return False
+
+        self.clear_dashboard_alignment_guides()
 
         card_id = (
             self._dashboard_resize_card_id
@@ -4588,6 +4870,9 @@ class DashboardPage(QWidget):
             enabled
         )
 
+        if not self.dashboard_snap_to_grid:
+            self.clear_dashboard_alignment_guides()
+
         self.dashboard_snap_settings.setValue(
             "dashboard/snap_to_grid",
             self.dashboard_snap_to_grid,
@@ -4621,7 +4906,8 @@ class DashboardPage(QWidget):
 
         button.setToolTip(
             (
-                "Cards snap to a 24px grid "
+                "Cards snap to a 24px grid, "
+                "nearby card edges, and centres "
                 "while moving or resizing"
             )
             if self.dashboard_snap_to_grid
