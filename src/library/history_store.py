@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from src.music.song import Song
@@ -38,6 +38,23 @@ class ListeningEvent:
     status: str
 
 
+@dataclass(frozen=True)
+class TrackQueryResult:
+    tracks: tuple[HistoryTrack, ...]
+    total_tracks: int
+    total_plays: int
+    limit: int
+    offset: int
+
+    @property
+    def has_more(self) -> bool:
+        return (
+            self.offset
+            + len(self.tracks)
+            < self.total_tracks
+        )
+
+
 class HistoryStore:
     """
     Persistent listening history backed by SQLite.
@@ -48,6 +65,46 @@ class HistoryStore:
     """
 
     SCHEMA_VERSION = 2
+
+    SOURCE_FILTERS = {
+        "spotify": ("spotify",),
+        "soundcloud": ("soundcloud",),
+        "chrome": ("chrome",),
+        "edge": ("edge",),
+        "firefox": ("firefox",),
+        "brave": ("brave",),
+        "opera": ("opera",),
+        "vivaldi": ("vivaldi",),
+    }
+
+    TRACK_SORTS = {
+        "newest": (
+            "last_played DESC, "
+            "id DESC"
+        ),
+        "oldest": (
+            "last_played ASC, "
+            "id ASC"
+        ),
+        "most_played": (
+            "play_count DESC, "
+            "title COLLATE NOCASE ASC, "
+            "artist COLLATE NOCASE ASC, "
+            "id DESC"
+        ),
+        "title": (
+            "title COLLATE NOCASE ASC, "
+            "artist COLLATE NOCASE ASC, "
+            "last_played DESC, "
+            "id DESC"
+        ),
+        "artist": (
+            "artist COLLATE NOCASE ASC, "
+            "title COLLATE NOCASE ASC, "
+            "last_played DESC, "
+            "id DESC"
+        ),
+    }
 
     def __init__(
         self,
@@ -322,21 +379,45 @@ class HistoryStore:
         if not track_exists:
             self.record_play(song)
 
-    def list_tracks(
+    def query_tracks(
         self,
+        *,
         search_text: str = "",
-        limit: int = 1000,
-    ) -> list[HistoryTrack]:
-        search_text = (
-            search_text.strip()
-        )
-
+        source_filter: str = "all",
+        sort_mode: str = "newest",
+        date_from: str = "",
+        date_to: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> TrackQueryResult:
         safe_limit = max(
             1,
             min(int(limit), 5000),
         )
 
-        query = """
+        safe_offset = max(
+            0,
+            int(offset),
+        )
+
+        where_sql, parameters = (
+            self._track_query_where(
+                search_text=search_text,
+                source_filter=source_filter,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        )
+
+        order_sql = self.TRACK_SORTS.get(
+            str(
+                sort_mode
+                or "newest"
+            ).strip().lower(),
+            self.TRACK_SORTS["newest"],
+        )
+
+        track_query = f"""
             SELECT
                 id,
                 title,
@@ -348,22 +429,118 @@ class HistoryStore:
                 play_count,
                 last_status
             FROM tracks
+            {where_sql}
+            ORDER BY {order_sql}
+            LIMIT ?
+            OFFSET ?
         """
 
+        summary_query = f"""
+            SELECT
+                COUNT(*) AS total_tracks,
+                COALESCE(
+                    SUM(play_count),
+                    0
+                ) AS total_plays
+            FROM tracks
+            {where_sql}
+        """
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                track_query,
+                [
+                    *parameters,
+                    safe_limit,
+                    safe_offset,
+                ],
+            ).fetchall()
+
+            summary = connection.execute(
+                summary_query,
+                parameters,
+            ).fetchone()
+
+        tracks = tuple(
+            self._row_to_track(row)
+            for row in rows
+        )
+
+        total_tracks = (
+            int(
+                summary["total_tracks"]
+                or 0
+            )
+            if summary is not None
+            else 0
+        )
+
+        total_plays = (
+            int(
+                summary["total_plays"]
+                or 0
+            )
+            if summary is not None
+            else 0
+        )
+
+        return TrackQueryResult(
+            tracks=tracks,
+            total_tracks=total_tracks,
+            total_plays=total_plays,
+            limit=safe_limit,
+            offset=safe_offset,
+        )
+
+    def list_tracks(
+        self,
+        search_text: str = "",
+        limit: int = 1000,
+    ) -> list[HistoryTrack]:
+        result = self.query_tracks(
+            search_text=search_text,
+            limit=limit,
+        )
+
+        return list(
+            result.tracks
+        )
+
+    def _track_query_where(
+        self,
+        *,
+        search_text: str,
+        source_filter: str,
+        date_from: str,
+        date_to: str,
+    ) -> tuple[str, list[object]]:
+        clauses: list[str] = []
         parameters: list[object] = []
 
-        if search_text:
+        cleaned_search = str(
+            search_text
+            or ""
+        ).strip()
+
+        if cleaned_search:
             search_pattern = (
-                f"%{search_text}%"
+                "%"
+                + self._escape_like(
+                    cleaned_search
+                )
+                + "%"
             )
 
-            query += """
-                WHERE
-                    title LIKE ?
-                    OR artist LIKE ?
-                    OR album LIKE ?
-                    OR source_app LIKE ?
-            """
+            clauses.append(
+                """
+                (
+                    title LIKE ? ESCAPE '\\'
+                    OR artist LIKE ? ESCAPE '\\'
+                    OR album LIKE ? ESCAPE '\\'
+                    OR source_app LIKE ? ESCAPE '\\'
+                )
+                """
+            )
 
             parameters.extend(
                 [
@@ -374,27 +551,113 @@ class HistoryStore:
                 ]
             )
 
-        query += """
-            ORDER BY
-                last_played DESC,
-                id DESC
-            LIMIT ?
-        """
+        selected_source = str(
+            source_filter
+            or "all"
+        ).strip().lower()
 
-        parameters.append(
-            safe_limit
+        if selected_source in self.SOURCE_FILTERS:
+            source_terms = (
+                self.SOURCE_FILTERS[
+                    selected_source
+                ]
+            )
+
+            source_clauses = []
+
+            for term in source_terms:
+                source_clauses.append(
+                    """
+                    LOWER(source_app)
+                    LIKE ? ESCAPE '\\'
+                    """
+                )
+
+                parameters.append(
+                    "%"
+                    + self._escape_like(
+                        term.lower()
+                    )
+                    + "%"
+                )
+
+            clauses.append(
+                "("
+                + " OR ".join(
+                    source_clauses
+                )
+                + ")"
+            )
+
+        elif selected_source == "other":
+            known_terms = sorted({
+                term
+                for terms in (
+                    self.SOURCE_FILTERS.values()
+                )
+                for term in terms
+            })
+
+            for term in known_terms:
+                clauses.append(
+                    """
+                    LOWER(source_app)
+                    NOT LIKE ? ESCAPE '\\'
+                    """
+                )
+
+                parameters.append(
+                    "%"
+                    + self._escape_like(
+                        term.lower()
+                    )
+                    + "%"
+                )
+
+        start_boundary = (
+            self._date_boundary(
+                date_from,
+                field_name="date_from",
+                exclusive_end=False,
+            )
         )
 
-        with self._connect() as connection:
-            rows = connection.execute(
-                query,
-                parameters,
-            ).fetchall()
+        end_boundary = (
+            self._date_boundary(
+                date_to,
+                field_name="date_to",
+                exclusive_end=True,
+            )
+        )
 
-        return [
-            self._row_to_track(row)
-            for row in rows
-        ]
+        if start_boundary:
+            clauses.append(
+                "last_played >= ?"
+            )
+
+            parameters.append(
+                start_boundary
+            )
+
+        if end_boundary:
+            clauses.append(
+                "last_played < ?"
+            )
+
+            parameters.append(
+                end_boundary
+            )
+
+        if not clauses:
+            return "", parameters
+
+        return (
+            "WHERE "
+            + " AND ".join(
+                clauses
+            ),
+            parameters,
+        )
 
     def list_events(
         self,
@@ -579,6 +842,53 @@ class HistoryStore:
             "source_app": source_app,
             "status": status,
         }
+
+    @staticmethod
+    def _escape_like(
+        value: str,
+    ) -> str:
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+
+    @staticmethod
+    def _date_boundary(
+        value: str,
+        *,
+        field_name: str,
+        exclusive_end: bool,
+    ) -> str:
+        cleaned = str(
+            value
+            or ""
+        ).strip()
+
+        if not cleaned:
+            return ""
+
+        try:
+            parsed = datetime.strptime(
+                cleaned,
+                "%Y-%m-%d",
+            )
+
+        except ValueError as error:
+            raise ValueError(
+                f"{field_name} must use "
+                "YYYY-MM-DD format."
+            ) from error
+
+        if exclusive_end:
+            parsed += timedelta(
+                days=1
+            )
+
+        return parsed.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
     @staticmethod
     def _row_to_track(
