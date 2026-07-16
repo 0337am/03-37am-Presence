@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +25,19 @@ class HistoryTrack:
     last_status: str
 
 
+@dataclass(frozen=True)
+class ListeningEvent:
+    event_id: int
+    track_id: int
+    track_key: str
+    title: str
+    artist: str
+    album: str
+    source_app: str
+    played_at: str
+    status: str
+
+
 class HistoryStore:
     """
     Persistent listening history backed by SQLite.
@@ -32,9 +47,16 @@ class HistoryStore:
     and application restarts.
     """
 
-    def __init__(self):
+    SCHEMA_VERSION = 2
+
+    def __init__(
+        self,
+        database_path: str | Path | None = None,
+    ):
         self.database_path = (
-            self._get_database_path()
+            Path(database_path)
+            if database_path is not None
+            else self._get_database_path()
         )
 
         self.database_path.parent.mkdir(
@@ -66,25 +88,37 @@ class HistoryStore:
             / "library.db"
         )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(
+        self,
+    ) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(
             self.database_path,
             timeout=10,
         )
 
-        connection.row_factory = (
-            sqlite3.Row
-        )
+        try:
+            connection.row_factory = (
+                sqlite3.Row
+            )
 
-        connection.execute(
-            "PRAGMA journal_mode = WAL"
-        )
+            connection.execute(
+                "PRAGMA journal_mode = WAL"
+            )
 
-        connection.execute(
-            "PRAGMA foreign_keys = ON"
-        )
+            connection.execute(
+                "PRAGMA foreign_keys = ON"
+            )
 
-        return connection
+            yield connection
+            connection.commit()
+
+        except Exception:
+            connection.rollback()
+            raise
+
+        finally:
+            connection.close()
 
     def _create_schema(self):
         with self._connect() as connection:
@@ -111,6 +145,49 @@ class HistoryStore:
                 index_tracks_last_played
                 ON tracks(last_played DESC)
                 """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS play_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    track_id INTEGER NOT NULL,
+                    track_key TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    artist TEXT NOT NULL,
+                    album TEXT NOT NULL,
+                    source_app TEXT NOT NULL,
+                    played_at TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'Playing',
+                    FOREIGN KEY(track_id)
+                        REFERENCES tracks(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                index_play_events_played_at
+                ON play_events(
+                    played_at DESC,
+                    id DESC
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                index_play_events_track
+                ON play_events(track_id)
+                """
+            )
+
+            connection.execute(
+                f"PRAGMA user_version = "
+                f"{self.SCHEMA_VERSION}"
             )
 
     def record_play(
@@ -156,6 +233,48 @@ class HistoryStore:
                     values["album"],
                     values["source_app"],
                     now,
+                    now,
+                    values["status"],
+                ),
+            )
+
+            track_row = connection.execute(
+                """
+                SELECT id
+                FROM tracks
+                WHERE track_key = ?
+                """,
+                (
+                    values["track_key"],
+                ),
+            ).fetchone()
+
+            if track_row is None:
+                raise RuntimeError(
+                    "Recorded track could not be found."
+                )
+
+            connection.execute(
+                """
+                INSERT INTO play_events (
+                    track_id,
+                    track_key,
+                    title,
+                    artist,
+                    album,
+                    source_app,
+                    played_at,
+                    status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(track_row["id"]),
+                    values["track_key"],
+                    values["title"],
+                    values["artist"],
+                    values["album"],
+                    values["source_app"],
                     now,
                     values["status"],
                 ),
@@ -214,7 +333,7 @@ class HistoryStore:
 
         safe_limit = max(
             1,
-            min(limit, 5000),
+            min(int(limit), 5000),
         )
 
         query = """
@@ -277,6 +396,75 @@ class HistoryStore:
             for row in rows
         ]
 
+    def list_events(
+        self,
+        limit: int = 5000,
+    ) -> list[ListeningEvent]:
+        safe_limit = max(
+            1,
+            min(int(limit), 50000),
+        )
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    track_id,
+                    track_key,
+                    title,
+                    artist,
+                    album,
+                    source_app,
+                    played_at,
+                    status
+                FROM play_events
+                ORDER BY
+                    played_at DESC,
+                    id DESC
+                LIMIT ?
+                """,
+                (
+                    safe_limit,
+                ),
+            ).fetchall()
+
+        return [
+            self._row_to_event(row)
+            for row in rows
+        ]
+
+    def count_events(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM play_events
+                """
+            ).fetchone()
+
+        if row is None:
+            return 0
+
+        return int(
+            row["total"]
+            or 0
+        )
+
+    def schema_version(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "PRAGMA user_version"
+            ).fetchone()
+
+        if row is None:
+            return 0
+
+        return int(
+            row[0]
+            or 0
+        )
+
     def count_tracks(self) -> int:
         with self._connect() as connection:
             row = connection.execute(
@@ -332,6 +520,10 @@ class HistoryStore:
 
     def clear_history(self):
         with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM play_events"
+            )
+
             connection.execute(
                 "DELETE FROM tracks"
             )
@@ -412,6 +604,26 @@ class HistoryStore:
             last_status=str(
                 row["last_status"]
             ),
+        )
+
+    @staticmethod
+    def _row_to_event(
+        row: sqlite3.Row,
+    ) -> ListeningEvent:
+        return ListeningEvent(
+            event_id=int(row["id"]),
+            track_id=int(row["track_id"]),
+            track_key=str(row["track_key"]),
+            title=str(row["title"]),
+            artist=str(row["artist"]),
+            album=str(row["album"]),
+            source_app=str(
+                row["source_app"]
+            ),
+            played_at=str(
+                row["played_at"]
+            ),
+            status=str(row["status"]),
         )
 
     @staticmethod
