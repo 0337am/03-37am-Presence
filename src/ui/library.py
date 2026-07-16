@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PyQt6.QtCore import (
     Qt,
@@ -48,6 +48,11 @@ class LibraryPage(QWidget):
         )
 
         self._last_track_key = None
+        self._last_status = None
+
+        self._page_size = 50
+        self._page_offset = 0
+        self._query_total_tracks = 0
 
         self.build_ui()
         self.connect_signals()
@@ -277,6 +282,31 @@ class LibraryPage(QWidget):
                 value,
             )
 
+        self.date_range_box = QComboBox()
+        self.date_range_box.setObjectName(
+            "libraryFilter"
+        )
+        self.date_range_box.setMinimumWidth(
+            126
+        )
+        self.date_range_box.setAccessibleName(
+            "Library date range"
+        )
+
+        date_range_options = (
+            ("All time", "all"),
+            ("Today", "today"),
+            ("Last 7 days", "last_7"),
+            ("Last 30 days", "last_30"),
+            ("This year", "this_year"),
+        )
+
+        for label, value in date_range_options:
+            self.date_range_box.addItem(
+                label,
+                value,
+            )
+
         controls_layout.addWidget(
             self.search_input,
             stretch=1,
@@ -286,6 +316,9 @@ class LibraryPage(QWidget):
         )
         controls_layout.addWidget(
             self.sort_box
+        )
+        controls_layout.addWidget(
+            self.date_range_box
         )
         controls_layout.addWidget(
             self.refresh_button
@@ -415,6 +448,57 @@ class LibraryPage(QWidget):
             stretch=1,
         )
 
+        pagination_layout = QHBoxLayout()
+        pagination_layout.setSpacing(8)
+
+        self.result_summary = QLabel(
+            "0 results"
+        )
+        self.result_summary.setObjectName(
+            "resultSummary"
+        )
+
+        self.previous_button = QPushButton(
+            "Previous"
+        )
+        self.previous_button.setObjectName(
+            "secondaryButton"
+        )
+        self.previous_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.previous_button.setAccessibleName(
+            "Previous Library page"
+        )
+
+        self.next_button = QPushButton(
+            "Next"
+        )
+        self.next_button.setObjectName(
+            "secondaryButton"
+        )
+        self.next_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.next_button.setAccessibleName(
+            "Next Library page"
+        )
+
+        pagination_layout.addWidget(
+            self.result_summary
+        )
+        pagination_layout.addStretch()
+        pagination_layout.addWidget(
+            self.previous_button
+        )
+        pagination_layout.addWidget(
+            self.next_button
+        )
+
+        card_layout.addLayout(
+            pagination_layout
+        )
+
         self.root_layout.addWidget(
             self.library_card,
             stretch=1,
@@ -422,7 +506,7 @@ class LibraryPage(QWidget):
 
     def connect_signals(self):
         self.search_input.textChanged.connect(
-            self.load_history
+            self.reset_pagination_and_load
         )
 
         self.refresh_button.clicked.connect(
@@ -430,11 +514,23 @@ class LibraryPage(QWidget):
         )
 
         self.source_filter.currentIndexChanged.connect(
-            self.load_history
+            self.reset_pagination_and_load
         )
 
         self.sort_box.currentIndexChanged.connect(
-            self.load_history
+            self.reset_pagination_and_load
+        )
+
+        self.date_range_box.currentIndexChanged.connect(
+            self.reset_pagination_and_load
+        )
+
+        self.previous_button.clicked.connect(
+            self.previous_page
+        )
+
+        self.next_button.clicked.connect(
+            self.next_page
         )
 
         self.clear_button.clicked.connect(
@@ -539,7 +635,8 @@ class LibraryPage(QWidget):
                 background: {theme["background"]};
             }}
 
-            QPushButton#clearButton:disabled {{
+            QPushButton#clearButton:disabled,
+            QPushButton#secondaryButton:disabled {{
                 color: {theme["muted"]};
                 background: {theme["background"]};
                 border-color: {theme["border"]};
@@ -597,6 +694,12 @@ class LibraryPage(QWidget):
                 selection-color: {theme["text"]};
                 selection-background-color: {theme["accent"]};
                 outline: none;
+            }}
+
+            QLabel#resultSummary {{
+                color: {theme["muted"]};
+                font-size: 10px;
+                font-weight: 600;
             }}
 
             QFrame#libraryCard {{
@@ -704,11 +807,6 @@ class LibraryPage(QWidget):
             self.search_input.text().strip()
         )
 
-        tracks = self.history_store.list_tracks(
-            search_text=search_text,
-            limit=1000,
-        )
-
         source_filter = str(
             self.source_filter.currentData()
             or "all"
@@ -719,35 +817,63 @@ class LibraryPage(QWidget):
             or "newest"
         )
 
-        tracks = [
-            track
-            for track in tracks
-            if self._matches_source_filter(
-                track,
-                source_filter,
-            )
-        ]
+        date_range = str(
+            self.date_range_box.currentData()
+            or "all"
+        )
 
-        tracks = self._sort_tracks(
-            tracks,
-            sort_mode,
+        date_from, date_to = (
+            self._date_range_bounds(
+                date_range
+            )
+        )
+
+        result = self.history_store.query_tracks(
+            search_text=search_text,
+            source_filter=source_filter,
+            sort_mode=sort_mode,
+            date_from=date_from,
+            date_to=date_to,
+            limit=self._page_size,
+            offset=self._page_offset,
+        )
+
+        corrected_offset = (
+            self._normalise_page_offset(
+                total_tracks=result.total_tracks,
+                page_size=self._page_size,
+                offset=self._page_offset,
+            )
+        )
+
+        if corrected_offset != self._page_offset:
+            self._page_offset = corrected_offset
+
+            result = self.history_store.query_tracks(
+                search_text=search_text,
+                source_filter=source_filter,
+                sort_mode=sort_mode,
+                date_from=date_from,
+                date_to=date_to,
+                limit=self._page_size,
+                offset=self._page_offset,
+            )
+
+        tracks = list(
+            result.tracks
+        )
+
+        self._query_total_tracks = (
+            result.total_tracks
         )
 
         self.populate_table(
             tracks
         )
 
-        total_tracks = (
-            self.history_store.count_tracks()
-        )
-
-        total_plays = (
-            self.history_store.total_plays()
-        )
-
         self.track_badge.setText(
             self._format_count(
-                total_tracks,
+                result.total_tracks,
                 "TRACK",
                 "TRACKS",
             )
@@ -755,10 +881,14 @@ class LibraryPage(QWidget):
 
         self.play_badge.setText(
             self._format_count(
-                total_plays,
+                result.total_plays,
                 "PLAY",
                 "PLAYS",
             )
+        )
+
+        total_library_tracks = (
+            self.history_store.count_tracks()
         )
 
         has_results = bool(tracks)
@@ -772,13 +902,30 @@ class LibraryPage(QWidget):
         )
 
         self.clear_button.setEnabled(
-            total_tracks > 0
+            total_library_tracks > 0
+        )
+
+        self.previous_button.setEnabled(
+            self._page_offset > 0
+        )
+
+        self.next_button.setEnabled(
+            result.has_more
+        )
+
+        self.result_summary.setText(
+            self._page_summary(
+                total_tracks=result.total_tracks,
+                offset=self._page_offset,
+                row_count=len(tracks),
+            )
         )
 
         if not has_results:
             filters_active = (
                 bool(search_text)
                 or source_filter != "all"
+                or date_range != "all"
             )
 
             if filters_active:
@@ -809,6 +956,177 @@ class LibraryPage(QWidget):
             self.latest_status.setText(
                 "Waiting for media"
             )
+
+    def reset_pagination_and_load(
+        self,
+        *_,
+    ):
+        self._page_offset = 0
+        self.load_history()
+
+    def previous_page(
+        self,
+        *_,
+    ):
+        self._page_offset = max(
+            0,
+            self._page_offset
+            - self._page_size,
+        )
+
+        self.load_history()
+
+    def next_page(
+        self,
+        *_,
+    ):
+        next_offset = (
+            self._page_offset
+            + self._page_size
+        )
+
+        if next_offset >= self._query_total_tracks:
+            return
+
+        self._page_offset = next_offset
+        self.load_history()
+
+    @staticmethod
+    def _date_range_bounds(
+        selected_range: str,
+        today=None,
+    ) -> tuple[str, str]:
+        selected = str(
+            selected_range
+            or "all"
+        ).strip().lower()
+
+        reference = (
+            today
+            if today is not None
+            else datetime.now()
+        )
+
+        current_date = (
+            reference.date()
+            if isinstance(
+                reference,
+                datetime,
+            )
+            else reference
+        )
+
+        if selected == "today":
+            start_date = current_date
+
+        elif selected == "last_7":
+            start_date = (
+                current_date
+                - timedelta(days=6)
+            )
+
+        elif selected == "last_30":
+            start_date = (
+                current_date
+                - timedelta(days=29)
+            )
+
+        elif selected == "this_year":
+            start_date = current_date.replace(
+                month=1,
+                day=1,
+            )
+
+        else:
+            return "", ""
+
+        return (
+            start_date.strftime(
+                "%Y-%m-%d"
+            ),
+            current_date.strftime(
+                "%Y-%m-%d"
+            ),
+        )
+
+    @staticmethod
+    def _normalise_page_offset(
+        *,
+        total_tracks: int,
+        page_size: int,
+        offset: int,
+    ) -> int:
+        safe_total = max(
+            0,
+            int(total_tracks),
+        )
+
+        safe_page_size = max(
+            1,
+            int(page_size),
+        )
+
+        safe_offset = max(
+            0,
+            int(offset),
+        )
+
+        if safe_total == 0:
+            return 0
+
+        maximum_offset = (
+            (safe_total - 1)
+            // safe_page_size
+            * safe_page_size
+        )
+
+        aligned_offset = (
+            safe_offset
+            // safe_page_size
+            * safe_page_size
+        )
+
+        return min(
+            aligned_offset,
+            maximum_offset,
+        )
+
+    @staticmethod
+    def _page_summary(
+        *,
+        total_tracks: int,
+        offset: int,
+        row_count: int,
+    ) -> str:
+        safe_total = max(
+            0,
+            int(total_tracks),
+        )
+
+        safe_offset = max(
+            0,
+            int(offset),
+        )
+
+        safe_rows = max(
+            0,
+            int(row_count),
+        )
+
+        if safe_total == 0 or safe_rows == 0:
+            return "0 results"
+
+        first_result = safe_offset + 1
+
+        last_result = min(
+            safe_total,
+            safe_offset + safe_rows,
+        )
+
+        return (
+            f"Showing {first_result}-"
+            f"{last_result} of {safe_total}"
+        )
 
     def _matches_source_filter(
         self,
@@ -1113,6 +1431,7 @@ class LibraryPage(QWidget):
 
         self._last_track_key = None
         self._last_status = None
+        self._page_offset = 0
 
         self.load_history()
 
