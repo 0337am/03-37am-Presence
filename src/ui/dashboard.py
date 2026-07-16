@@ -10093,6 +10093,10 @@ class DashboardPage(QWidget):
 
         self._last_worker_error = ""
 
+        self.restore_cached_song_artwork(
+            song
+        )
+
         self.song = song
         self.cache_song_artwork(song)
 
@@ -10370,6 +10374,63 @@ class DashboardPage(QWidget):
         return hashlib.sha256(
             identity.encode("utf-8")
         ).hexdigest()
+
+    def restore_cached_song_artwork(
+        self,
+        song,
+    ) -> bool:
+        """
+        Restore the current track's artwork from the
+        persistent Dashboard cache when Windows media
+        temporarily supplies no thumbnail.
+
+        The cache key contains the complete track
+        identity, preventing another song's artwork
+        from being applied.
+        """
+        if (
+            song is None
+            or not getattr(
+                song,
+                "title",
+                "",
+            )
+            or getattr(
+                song,
+                "artwork_bytes",
+                None,
+            )
+        ):
+            return False
+
+        cache_key = self._artwork_identity(
+            getattr(song, "title", ""),
+            getattr(song, "artist", ""),
+            getattr(song, "album", ""),
+            getattr(song, "source_app", ""),
+        )
+
+        cache_path = (
+            self._artwork_cache_directory()
+            / f"{cache_key}.img"
+        )
+
+        try:
+            artwork_bytes = cache_path.read_bytes()
+
+        except OSError:
+            return False
+
+        if not artwork_bytes:
+            return False
+
+        song.artwork_bytes = bytes(
+            artwork_bytes
+        )
+
+        self._last_artwork_signature = None
+
+        return True
 
     def cache_song_artwork(
         self,

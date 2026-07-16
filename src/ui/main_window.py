@@ -1751,6 +1751,10 @@ class MainWindow(QMainWindow):
         self,
         song,
     ):
+        self.dashboard_page.restore_cached_song_artwork(
+            song
+        )
+
         self.presence_controller.handle_song(
             song
         )
