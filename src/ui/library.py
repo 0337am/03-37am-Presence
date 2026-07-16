@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -208,6 +209,202 @@ class LibraryPage(QWidget):
 
         self.root_layout.addWidget(
             self.status_card
+        )
+
+        self.insights_card = QFrame()
+        self.insights_card.setObjectName(
+            "statusCard"
+        )
+        self.insights_card.setAccessibleName(
+            "Library insights"
+        )
+
+        insights_layout = QVBoxLayout(
+            self.insights_card
+        )
+        insights_layout.setContentsMargins(
+            14,
+            12,
+            14,
+            12,
+        )
+        insights_layout.setSpacing(10)
+
+        insights_header = QHBoxLayout()
+        insights_header.setSpacing(8)
+
+        self.insights_title = QLabel(
+            "Insights"
+        )
+        self.insights_title.setObjectName(
+            "statusTitle"
+        )
+
+        self.insights_caption = QLabel(
+            "All-time rankings | confirmed activity "
+            "since timeline tracking began"
+        )
+        self.insights_caption.setObjectName(
+            "latestStatus"
+        )
+        self.insights_caption.setWordWrap(
+            True
+        )
+
+        insights_header.addWidget(
+            self.insights_title
+        )
+        insights_header.addStretch()
+        insights_header.addWidget(
+            self.insights_caption
+        )
+
+        insights_layout.addLayout(
+            insights_header
+        )
+
+        metrics_layout = QGridLayout()
+        metrics_layout.setHorizontalSpacing(
+            8
+        )
+        metrics_layout.setVerticalSpacing(
+            8
+        )
+
+        self.artist_insight = QLabel(
+            "0 ARTISTS"
+        )
+        self.artist_insight.setObjectName(
+            "trackBadge"
+        )
+        self.artist_insight.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.artist_insight.setAccessibleName(
+            "Unique artists"
+        )
+
+        self.album_insight = QLabel(
+            "0 ALBUMS"
+        )
+        self.album_insight.setObjectName(
+            "playBadge"
+        )
+        self.album_insight.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.album_insight.setAccessibleName(
+            "Unique albums"
+        )
+
+        self.confirmed_play_insight = QLabel(
+            "0 CONFIRMED PLAYS"
+        )
+        self.confirmed_play_insight.setObjectName(
+            "trackBadge"
+        )
+        self.confirmed_play_insight.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.confirmed_play_insight.setAccessibleName(
+            "Confirmed detailed plays"
+        )
+
+        self.listening_day_insight = QLabel(
+            "0 LISTENING DAYS"
+        )
+        self.listening_day_insight.setObjectName(
+            "playBadge"
+        )
+        self.listening_day_insight.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.listening_day_insight.setAccessibleName(
+            "Detailed listening days"
+        )
+
+        self.current_streak_insight = QLabel(
+            "CURRENT 0 DAYS"
+        )
+        self.current_streak_insight.setObjectName(
+            "trackBadge"
+        )
+        self.current_streak_insight.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.current_streak_insight.setAccessibleName(
+            "Current listening streak"
+        )
+
+        self.longest_streak_insight = QLabel(
+            "LONGEST 0 DAYS"
+        )
+        self.longest_streak_insight.setObjectName(
+            "playBadge"
+        )
+        self.longest_streak_insight.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.longest_streak_insight.setAccessibleName(
+            "Longest listening streak"
+        )
+
+        metric_widgets = (
+            self.artist_insight,
+            self.album_insight,
+            self.confirmed_play_insight,
+            self.listening_day_insight,
+            self.current_streak_insight,
+            self.longest_streak_insight,
+        )
+
+        for index, widget in enumerate(
+            metric_widgets
+        ):
+            row = index // 3
+            column = index % 3
+
+            metrics_layout.addWidget(
+                widget,
+                row,
+                column,
+            )
+
+        for column in range(3):
+            metrics_layout.setColumnStretch(
+                column,
+                1,
+            )
+
+        insights_layout.addLayout(
+            metrics_layout
+        )
+
+        self.insights_summary = QLabel(
+            "Top track: No listening history yet\n"
+            "Top artist: No listening history yet\n"
+            "Top album: No listening history yet\n"
+            "Latest confirmed play: None yet"
+        )
+        self.insights_summary.setObjectName(
+            "latestStatus"
+        )
+        self.insights_summary.setWordWrap(
+            True
+        )
+        self.insights_summary.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.insights_summary.setAccessibleName(
+            "Library rankings and recent activity"
+        )
+
+        insights_layout.addWidget(
+            self.insights_summary
+        )
+
+        self.root_layout.addWidget(
+            self.insights_card
         )
 
         controls_layout = QHBoxLayout()
@@ -804,6 +1001,8 @@ class LibraryPage(QWidget):
         self,
         *_,
     ):
+        self.load_insights()
+
         search_text = (
             self.search_input.text().strip()
         )
@@ -957,6 +1156,189 @@ class LibraryPage(QWidget):
             self.latest_status.setText(
                 "Waiting for media"
             )
+
+    def load_insights(
+        self,
+    ):
+        insights = (
+            self.history_store.get_insights(
+                top_limit=1,
+                recent_limit=1,
+            )
+        )
+
+        self.artist_insight.setText(
+            self._format_count(
+                insights.unique_artist_count,
+                "ARTIST",
+                "ARTISTS",
+            )
+        )
+
+        self.album_insight.setText(
+            self._format_count(
+                insights.unique_album_count,
+                "ALBUM",
+                "ALBUMS",
+            )
+        )
+
+        self.confirmed_play_insight.setText(
+            self._format_count(
+                insights.detailed_play_count,
+                "CONFIRMED PLAY",
+                "CONFIRMED PLAYS",
+            )
+        )
+
+        self.listening_day_insight.setText(
+            self._format_count(
+                insights.listening_day_count,
+                "LISTENING DAY",
+                "LISTENING DAYS",
+            )
+        )
+
+        current_streak = self._format_count(
+            insights.current_streak_days,
+            "DAY",
+            "DAYS",
+        )
+
+        longest_streak = self._format_count(
+            insights.longest_streak_days,
+            "DAY",
+            "DAYS",
+        )
+
+        self.current_streak_insight.setText(
+            f"CURRENT {current_streak}"
+        )
+
+        self.longest_streak_insight.setText(
+            f"LONGEST {longest_streak}"
+        )
+
+        top_track = self._format_ranked_insight(
+            insights.top_tracks,
+            "No listening history yet",
+        )
+
+        top_artist = self._format_ranked_insight(
+            insights.top_artists,
+            "No listening history yet",
+        )
+
+        top_album = self._format_ranked_insight(
+            insights.top_albums,
+            "No listening history yet",
+        )
+
+        latest_event = self._format_recent_event(
+            insights.recent_events
+        )
+
+        self.insights_summary.setText(
+            f"Top track: {top_track}\n"
+            f"Top artist: {top_artist}\n"
+            f"Top album: {top_album}\n"
+            f"Latest confirmed play: {latest_event}"
+        )
+
+    @staticmethod
+    def _format_ranked_insight(
+        items,
+        fallback: str,
+    ) -> str:
+        if not items:
+            return fallback
+
+        item = items[0]
+
+        name = str(
+            item.name
+            or ""
+        ).strip()
+
+        detail = str(
+            item.detail
+            or ""
+        ).strip()
+
+        play_count = int(
+            item.play_count
+            or 0
+        )
+
+        if not name:
+            return fallback
+
+        if detail:
+            display_name = (
+                f"{name} by {detail}"
+            )
+        else:
+            display_name = name
+
+        play_text = LibraryPage._format_count(
+            play_count,
+            "play",
+            "plays",
+        ).lower()
+
+        return (
+            f"{display_name} | {play_text}"
+        )
+
+    @staticmethod
+    def _format_recent_event(
+        events,
+    ) -> str:
+        if not events:
+            return "None yet"
+
+        event = events[0]
+
+        title = str(
+            event.title
+            or ""
+        ).strip()
+
+        artist = str(
+            event.artist
+            or ""
+        ).strip()
+
+        played_at = str(
+            event.played_at
+            or ""
+        ).strip()
+
+        if artist:
+            track_text = (
+                f"{title} by {artist}"
+            )
+        else:
+            track_text = (
+                title
+                or "Unknown track"
+            )
+
+        formatted_time = (
+            LibraryPage._format_timestamp(
+                played_at
+            )
+            if played_at
+            else ""
+        )
+
+        if formatted_time:
+            return (
+                f"{track_text} | "
+                f"{formatted_time}"
+            )
+
+        return track_text
 
     def reset_pagination_and_load(
         self,
