@@ -311,31 +311,58 @@ class HistoryStore:
                     "Recorded track could not be found."
                 )
 
-            connection.execute(
-                """
-                INSERT INTO play_events (
-                    track_id,
-                    track_key,
-                    title,
-                    artist,
-                    album,
-                    source_app,
-                    played_at,
-                    status
+            if values["status"] == "Playing":
+                self._insert_play_event(
+                    connection,
+                    track_id=int(
+                        track_row["id"]
+                    ),
+                    values=values,
+                    played_at=now,
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
+    def record_event(
+        self,
+        song: Song,
+    ) -> bool:
+        values = self._song_values(
+            song
+        )
+
+        if values["status"] != "Playing":
+            return False
+
+        now = self._current_timestamp()
+        track_id = None
+
+        with self._connect() as connection:
+            track_row = connection.execute(
+                """
+                SELECT id
+                FROM tracks
+                WHERE track_key = ?
                 """,
                 (
-                    int(track_row["id"]),
                     values["track_key"],
-                    values["title"],
-                    values["artist"],
-                    values["album"],
-                    values["source_app"],
-                    now,
-                    values["status"],
                 ),
-            )
+            ).fetchone()
+
+            if track_row is not None:
+                track_id = int(
+                    track_row["id"]
+                )
+
+                self._insert_play_event(
+                    connection,
+                    track_id=track_id,
+                    values=values,
+                    played_at=now,
+                )
+
+        if track_id is None:
+            self.record_play(song)
+
+        return True
 
     def update_current(
         self,
@@ -790,6 +817,40 @@ class HistoryStore:
             connection.execute(
                 "DELETE FROM tracks"
             )
+
+    @staticmethod
+    def _insert_play_event(
+        connection: sqlite3.Connection,
+        *,
+        track_id: int,
+        values: dict[str, str],
+        played_at: str,
+    ):
+        connection.execute(
+            """
+            INSERT INTO play_events (
+                track_id,
+                track_key,
+                title,
+                artist,
+                album,
+                source_app,
+                played_at,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(track_id),
+                values["track_key"],
+                values["title"],
+                values["artist"],
+                values["album"],
+                values["source_app"],
+                played_at,
+                values["status"],
+            ),
+        )
 
     def _song_values(
         self,

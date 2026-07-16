@@ -49,6 +49,7 @@ class LibraryPage(QWidget):
 
         self._last_track_key = None
         self._last_status = None
+        self._current_track_event_recorded = False
 
         self._page_size = 50
         self._page_offset = 0
@@ -1385,6 +1386,20 @@ class LibraryPage(QWidget):
                     song
                 )
 
+                if (
+                    status == "Playing"
+                    and not self
+                    ._current_track_event_recorded
+                ):
+                    event_recorded = (
+                        self.history_store
+                        .record_event(song)
+                    )
+
+                    self._current_track_event_recorded = (
+                        bool(event_recorded)
+                    )
+
                 self._last_status = status
                 self.load_history()
 
@@ -1399,6 +1414,9 @@ class LibraryPage(QWidget):
 
         self._last_track_key = track_key
         self._last_status = status
+        self._current_track_event_recorded = (
+            status == "Playing"
+        )
 
         self.latest_status.setText(
             f"{status}: {title}"
@@ -1431,6 +1449,7 @@ class LibraryPage(QWidget):
 
         self._last_track_key = None
         self._last_status = None
+        self._current_track_event_recorded = False
         self._page_offset = 0
 
         self.load_history()

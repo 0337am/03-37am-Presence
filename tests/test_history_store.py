@@ -760,6 +760,96 @@ class HistoryStoreTests(unittest.TestCase):
             "Needle Star",
         )
 
+    def test_paused_record_does_not_add_event(
+        self,
+    ):
+        store = self.make_store()
+
+        store.record_play(
+            self.make_song(
+                playing=False,
+            )
+        )
+
+        self.assertEqual(
+            store.count_tracks(),
+            1,
+        )
+
+        self.assertEqual(
+            store.total_plays(),
+            1,
+        )
+
+        self.assertEqual(
+            store.count_events(),
+            0,
+        )
+
+    def test_record_event_confirms_play_without_increment(
+        self,
+    ):
+        store = self.make_store()
+
+        store.record_play(
+            self.make_song(
+                playing=False,
+            )
+        )
+
+        recorded = store.record_event(
+            self.make_song(
+                playing=True,
+            )
+        )
+
+        self.assertTrue(
+            recorded
+        )
+
+        self.assertEqual(
+            store.total_plays(),
+            1,
+        )
+
+        self.assertEqual(
+            store.count_events(),
+            1,
+        )
+
+        event = store.list_events()[0]
+
+        self.assertEqual(
+            event.status,
+            "Playing",
+        )
+
+    def test_record_event_ignores_paused_state(
+        self,
+    ):
+        store = self.make_store()
+
+        store.record_play(
+            self.make_song(
+                playing=False,
+            )
+        )
+
+        recorded = store.record_event(
+            self.make_song(
+                playing=False,
+            )
+        )
+
+        self.assertFalse(
+            recorded
+        )
+
+        self.assertEqual(
+            store.count_events(),
+            0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
