@@ -850,6 +850,379 @@ class HistoryStoreTests(unittest.TestCase):
             0,
         )
 
+    def test_empty_insights_are_safe(
+        self,
+    ):
+        store = self.make_store()
+
+        insights = store.get_insights(
+            today="2026-07-16",
+        )
+
+        self.assertEqual(
+            insights.aggregate_track_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.aggregate_play_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.unique_artist_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.unique_album_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.detailed_play_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.listening_day_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.current_streak_days,
+            0,
+        )
+
+        self.assertEqual(
+            insights.longest_streak_days,
+            0,
+        )
+
+        self.assertEqual(
+            insights.top_tracks,
+            (),
+        )
+
+        self.assertEqual(
+            insights.recent_events,
+            (),
+        )
+
+    def test_insights_rank_aggregate_history(
+        self,
+    ):
+        store = self.make_store()
+
+        for _ in range(3):
+            store.record_play(
+                self.make_song(
+                    title="First Track",
+                    artist="Artist One",
+                    album="Album One",
+                    playing=True,
+                )
+            )
+
+        for _ in range(2):
+            store.record_play(
+                self.make_song(
+                    title="Second Track",
+                    artist="Artist One",
+                    album="Album Two",
+                    playing=True,
+                )
+            )
+
+        store.record_play(
+            self.make_song(
+                title="Third Track",
+                artist="Artist Two",
+                album="Album Three",
+                playing=True,
+            )
+        )
+
+        insights = store.get_insights(
+            top_limit=3,
+            today="2026-07-16",
+        )
+
+        self.assertEqual(
+            insights.aggregate_track_count,
+            3,
+        )
+
+        self.assertEqual(
+            insights.aggregate_play_count,
+            6,
+        )
+
+        self.assertEqual(
+            insights.unique_artist_count,
+            2,
+        )
+
+        self.assertEqual(
+            insights.unique_album_count,
+            3,
+        )
+
+        self.assertEqual(
+            insights.top_tracks[0].name,
+            "First Track",
+        )
+
+        self.assertEqual(
+            insights.top_tracks[0].play_count,
+            3,
+        )
+
+        self.assertEqual(
+            insights.top_artists[0].name,
+            "Artist One",
+        )
+
+        self.assertEqual(
+            insights.top_artists[0].play_count,
+            5,
+        )
+
+        self.assertEqual(
+            insights.top_artists[0].track_count,
+            2,
+        )
+
+        self.assertEqual(
+            insights.top_albums[0].name,
+            "Album One",
+        )
+
+    def test_paused_events_are_excluded(
+        self,
+    ):
+        store = self.make_store()
+
+        store.record_play(
+            self.make_song(
+                title="Legacy Paused",
+                artist="Test Artist",
+                album="Test Album",
+                playing=True,
+            )
+        )
+
+        with store._connect() as connection:
+            connection.execute(
+                """
+                UPDATE play_events
+                SET status = 'Paused'
+                WHERE title = ?
+                """,
+                (
+                    "Legacy Paused",
+                ),
+            )
+
+        insights = store.get_insights(
+            today="2026-07-16",
+        )
+
+        self.assertEqual(
+            insights.aggregate_play_count,
+            1,
+        )
+
+        self.assertEqual(
+            insights.detailed_play_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.listening_day_count,
+            0,
+        )
+
+        self.assertEqual(
+            insights.recent_events,
+            (),
+        )
+
+    def test_detailed_days_recent_and_streak(
+        self,
+    ):
+        store = self.make_store()
+
+        for title in (
+            "Day One",
+            "Day Two",
+            "Day Three",
+        ):
+            store.record_play(
+                self.make_song(
+                    title=title,
+                    artist="Timeline Artist",
+                    album="Timeline Album",
+                    playing=True,
+                )
+            )
+
+        timestamps = {
+            "Day One": "2026-07-14 12:00:00",
+            "Day Two": "2026-07-15 12:00:00",
+            "Day Three": "2026-07-16 12:00:00",
+        }
+
+        with store._connect() as connection:
+            for title, timestamp in timestamps.items():
+                connection.execute(
+                    """
+                    UPDATE play_events
+                    SET played_at = ?
+                    WHERE title = ?
+                    """,
+                    (
+                        timestamp,
+                        title,
+                    ),
+                )
+
+        insights = store.get_insights(
+            today="2026-07-16",
+        )
+
+        self.assertEqual(
+            insights.detailed_play_count,
+            3,
+        )
+
+        self.assertEqual(
+            insights.listening_day_count,
+            3,
+        )
+
+        self.assertEqual(
+            insights.current_streak_days,
+            3,
+        )
+
+        self.assertEqual(
+            insights.longest_streak_days,
+            3,
+        )
+
+        self.assertEqual(
+            insights.first_detailed_play,
+            "2026-07-14 12:00:00",
+        )
+
+        self.assertEqual(
+            insights.latest_detailed_play,
+            "2026-07-16 12:00:00",
+        )
+
+        self.assertEqual(
+            [
+                event.title
+                for event
+                in insights.recent_events
+            ],
+            [
+                "Day Three",
+                "Day Two",
+                "Day One",
+            ],
+        )
+
+    def test_streak_gap_behavior(
+        self,
+    ):
+        current, longest = (
+            HistoryStore._calculate_streaks(
+                [
+                    "2026-07-08",
+                    "2026-07-09",
+                    "2026-07-12",
+                    "2026-07-13",
+                    "2026-07-14",
+                ],
+                today="2026-07-16",
+            )
+        )
+
+        self.assertEqual(
+            current,
+            0,
+        )
+
+        self.assertEqual(
+            longest,
+            3,
+        )
+
+        current, longest = (
+            HistoryStore._calculate_streaks(
+                [
+                    "2026-07-13",
+                    "2026-07-14",
+                    "2026-07-15",
+                ],
+                today="2026-07-16",
+            )
+        )
+
+        self.assertEqual(
+            current,
+            3,
+        )
+
+        self.assertEqual(
+            longest,
+            3,
+        )
+
+    def test_insight_limits_are_applied(
+        self,
+    ):
+        store = self.make_store()
+
+        for index in range(4):
+            store.record_play(
+                self.make_song(
+                    title=f"Track {index}",
+                    artist=f"Artist {index}",
+                    album=f"Album {index}",
+                    playing=True,
+                )
+            )
+
+        insights = store.get_insights(
+            top_limit=2,
+            recent_limit=2,
+            today="2026-07-16",
+        )
+
+        self.assertEqual(
+            len(insights.top_tracks),
+            2,
+        )
+
+        self.assertEqual(
+            len(insights.top_artists),
+            2,
+        )
+
+        self.assertEqual(
+            len(insights.top_albums),
+            2,
+        )
+
+        self.assertEqual(
+            len(insights.recent_events),
+            2,
+        )
+
+
 
 if __name__ == "__main__":
     unittest.main()
