@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.7.0 - Updates & Distribution
+
+Status: Release rehearsal.
+
+- Added repeatable standalone and installer release builds with matching Windows metadata.
+- Added GitHub release checks with friendly offline, rate-limit, malformed-response, and no-release states.
+- Added background update downloads with visible progress and mandatory SHA-256 verification.
+- Added explicit approval before installation and an integrity recheck immediately before launch.
+- Added safe shutdown through the existing tray lifecycle after the installer starts.
+- Added a guided Cloudinary setup dialog with official links and a copyable checklist.
+- The app never requests Cloudinary API keys, API secrets, passwords, or access tokens.
+- Updates do not use silent installation, shell execution, automatic downgrades, or listening-data uploads.
+
 ## v2.6.0 - Library & Insights Update
 
 Released 17 July 2026.

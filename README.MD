@@ -2,14 +2,18 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.6.0 highlights
+## v2.7.0 highlights
 
-- The Library now supports SQL-backed search, source filters, date ranges, sorting, result totals, and pagination.
-- Library Insights show all-time tracks, plays, artists, albums, rankings, and confirmed-activity metrics including listening days and streaks.
-- Confirmed listening events are stored separately from aggregate track history, preserving accurate semantics after the v2.6 database migration.
-- Safe Library Summary and Listening Activity CSV exports use UTF-8, atomic replacement, and spreadsheet-formula protection.
-- Artwork recovery now restores matching cached artwork before Dashboard and Discord presence updates.
-- Existing v2.5 settings, layouts, cards, presets, Atmosphere settings, backups, and aggregate listening history remain compatible.
+- Check the official public release feed from Settings.
+- Download updates outside the UI thread with visible progress.
+- Verify installers against the published SHA-256 checksum.
+- Require explicit approval before launching an update installer.
+- Recheck installer integrity immediately before launch.
+- Close safely through the existing tray lifecycle after a successful launch.
+- Keep the app open when installation is cancelled or fails.
+- Follow the guided Cloudinary setup without entering API keys or secrets.
+- Build repeatable standalone and installer artifacts with `SHA256SUMS.txt`.
+- No silent installs, automatic downgrades, shell execution, or listening-data uploads.
 
 ## Core features
 
