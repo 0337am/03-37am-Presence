@@ -13,11 +13,18 @@ SETTINGS_PATH = (
     / "settings.py"
 )
 
-CONTROLLER_PATH = (
+CHECK_CONTROLLER_PATH = (
     ROOT
     / "src"
     / "ui"
     / "update_controller.py"
+)
+
+DOWNLOAD_CONTROLLER_PATH = (
+    ROOT
+    / "src"
+    / "ui"
+    / "update_download_controller.py"
 )
 
 
@@ -32,8 +39,14 @@ class SettingsUpdateUiTests(
             )
         )
 
-        cls.controller_source = (
-            CONTROLLER_PATH.read_text(
+        cls.check_controller_source = (
+            CHECK_CONTROLLER_PATH.read_text(
+                encoding="utf-8-sig"
+            )
+        )
+
+        cls.download_controller_source = (
+            DOWNLOAD_CONTROLLER_PATH.read_text(
                 encoding="utf-8-sig"
             )
         )
@@ -68,7 +81,7 @@ class SettingsUpdateUiTests(
             self.settings_source,
         )
 
-    def test_settings_uses_controller(self):
+    def test_settings_uses_check_controller(self):
         self.assertIn(
             "UpdateCheckController",
             self.settings_source,
@@ -89,6 +102,117 @@ class SettingsUpdateUiTests(
             self.settings_source,
         )
 
+    def test_settings_uses_download_controller(self):
+        self.assertIn(
+            "UpdateDownloadController",
+            self.settings_source,
+        )
+
+        self.assertIn(
+            "describe_download_progress",
+            self.settings_source,
+        )
+
+        self.assertIn(
+            "describe_download_result",
+            self.settings_source,
+        )
+
+        self.assertIn(
+            ".start_download(",
+            self.settings_source,
+        )
+
+    def test_update_card_is_navigable(self):
+        self.assertIn(
+            '"updates": updates',
+            self.settings_source,
+        )
+
+    def test_download_button_and_progress_exist(self):
+        self.assertIn(
+            '"Download update"',
+            self.settings_source,
+        )
+
+        self.assertIn(
+            "QProgressBar",
+            self.settings_source,
+        )
+
+        self.assertIn(
+            '"updateProgress"',
+            self.settings_source,
+        )
+
+    def test_download_is_connected_but_install_is_not(self):
+        self.assertIn(
+            "download_update",
+            self.download_controller_source,
+        )
+
+        self.assertNotIn(
+            "update_installer",
+            self.settings_source,
+        )
+
+        self.assertNotIn(
+            "update_installer",
+            self.download_controller_source,
+        )
+
+        self.assertNotIn(
+            "launch_downloaded_update",
+            self.settings_source,
+        )
+
+        self.assertNotIn(
+            "launch_downloaded_update",
+            self.download_controller_source,
+        )
+
+    def test_controllers_use_daemon_threads(self):
+        self.assertIn(
+            "threading.Thread",
+            self.check_controller_source,
+        )
+
+        self.assertIn(
+            "daemon=True",
+            self.check_controller_source,
+        )
+
+        self.assertIn(
+            "threading.Thread",
+            self.download_controller_source,
+        )
+
+        self.assertIn(
+            "daemon=True",
+            self.download_controller_source,
+        )
+
+    def test_official_checker_and_downloader_are_used(self):
+        self.assertIn(
+            "check_for_updates",
+            self.check_controller_source,
+        )
+
+        self.assertIn(
+            "timeout_seconds",
+            self.check_controller_source,
+        )
+
+        self.assertIn(
+            "download_update",
+            self.download_controller_source,
+        )
+
+        self.assertIn(
+            "progress_callback",
+            self.download_controller_source,
+        )
+
     def test_update_labels_use_existing_style(self):
         self.assertGreaterEqual(
             self.settings_source.count(
@@ -102,53 +226,15 @@ class SettingsUpdateUiTests(
             self.settings_source,
         )
 
-    def test_update_card_is_navigable(self):
+    def test_verified_download_state_is_retained(self):
         self.assertIn(
-            '"updates": updates',
+            "_verified_update_download",
             self.settings_source,
         )
 
-    def test_patch_does_not_download_or_install(self):
-        self.assertNotIn(
-            "update_downloader",
+        self.assertIn(
+            "Downloaded & verified",
             self.settings_source,
-        )
-
-        self.assertNotIn(
-            "update_installer",
-            self.settings_source,
-        )
-
-        self.assertNotIn(
-            "download_update",
-            self.controller_source,
-        )
-
-        self.assertNotIn(
-            "launch_downloaded_update",
-            self.controller_source,
-        )
-
-    def test_controller_uses_daemon_thread(self):
-        self.assertIn(
-            "threading.Thread",
-            self.controller_source,
-        )
-
-        self.assertIn(
-            "daemon=True",
-            self.controller_source,
-        )
-
-    def test_official_checker_is_used(self):
-        self.assertIn(
-            "check_for_updates",
-            self.controller_source,
-        )
-
-        self.assertIn(
-            "timeout_seconds",
-            self.controller_source,
         )
 
 

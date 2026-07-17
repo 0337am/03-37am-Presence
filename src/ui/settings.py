@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QScrollArea,
     QSlider,
     QVBoxLayout,
@@ -34,6 +35,11 @@ from src.system.startup import StartupManager
 from src.ui.update_controller import (
     UpdateCheckController,
     describe_update_result,
+)
+from src.ui.update_download_controller import (
+    UpdateDownloadController,
+    describe_download_progress,
+    describe_download_result,
 )
 from src.version import APP_VERSION, RELEASE_NAME
 from src.system.settings_backup import (
@@ -230,7 +236,12 @@ class SettingsPage(QWidget):
             UpdateCheckController(self)
         )
 
+        self.update_download_controller = (
+            UpdateDownloadController(self)
+        )
+
         self._latest_update_result = None
+        self._verified_update_download = None
 
         self.build_ui()
 
@@ -1501,13 +1512,54 @@ class SettingsPage(QWidget):
             self.check_for_updates
         )
 
+        self.download_update_button = QPushButton(
+            "Download update"
+        )
+        self.download_update_button.setObjectName(
+            "secondaryButton"
+        )
+        self.download_update_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.download_update_button.setVisible(
+            False
+        )
+        self.download_update_button.clicked.connect(
+            self.download_available_update
+        )
+
         update_button_row.addWidget(
             self.check_updates_button
+        )
+        update_button_row.addWidget(
+            self.download_update_button
         )
         update_button_row.addStretch()
 
         updates_layout.addLayout(
             update_button_row
+        )
+
+        self.update_progress = QProgressBar()
+        self.update_progress.setObjectName(
+            "updateProgress"
+        )
+        self.update_progress.setRange(
+            0,
+            100,
+        )
+        self.update_progress.setValue(
+            0
+        )
+        self.update_progress.setTextVisible(
+            True
+        )
+        self.update_progress.setVisible(
+            False
+        )
+
+        updates_layout.addWidget(
+            self.update_progress
         )
 
         self.update_controller.busy_changed.connect(
@@ -1518,6 +1570,19 @@ class SettingsPage(QWidget):
         )
         self.update_controller.result_ready.connect(
             self._handle_update_result
+        )
+
+        self.update_download_controller.busy_changed.connect(
+            self._set_download_busy
+        )
+        self.update_download_controller.status_changed.connect(
+            self._set_update_status
+        )
+        self.update_download_controller.progress_changed.connect(
+            self._handle_download_progress
+        )
+        self.update_download_controller.result_ready.connect(
+            self._handle_download_result
         )
 
         diagnostics = self.create_card(
@@ -1727,6 +1792,24 @@ class SettingsPage(QWidget):
         )
 
     def check_for_updates(self):
+        if (
+            self.update_download_controller
+            .is_busy
+        ):
+            self._set_update_status(
+                "Wait for the current update "
+                "download to finish."
+            )
+            return
+
+        self._verified_update_download = None
+        self.download_update_button.setVisible(
+            False
+        )
+        self.update_progress.setVisible(
+            False
+        )
+
         started = (
             self.update_controller
             .start_check()
@@ -1737,14 +1820,66 @@ class SettingsPage(QWidget):
                 "An update check is already running."
             )
 
+    def download_available_update(self):
+        if self.update_controller.is_busy:
+            self._set_update_status(
+                "Wait for the update check "
+                "to finish."
+            )
+            return
+
+        result = self._latest_update_result
+
+        release = getattr(
+            result,
+            "release",
+            None,
+        )
+
+        if release is None:
+            self._set_update_status(
+                "No verified release is "
+                "available to download."
+            )
+            return
+
+        self._verified_update_download = None
+
+        self.update_progress.setRange(
+            0,
+            0,
+        )
+        self.update_progress.setVisible(
+            True
+        )
+
+        started = (
+            self.update_download_controller
+            .start_download(
+                release
+            )
+        )
+
+        if not started:
+            self._set_update_status(
+                "An update download is "
+                "already running."
+            )
+
     def _set_update_busy(
         self,
         busy: bool,
     ):
         busy = bool(busy)
 
+        download_busy = (
+            self.update_download_controller
+            .is_busy
+        )
+
         self.check_updates_button.setEnabled(
             not busy
+            and not download_busy
         )
 
         self.check_updates_button.setText(
@@ -1753,6 +1888,60 @@ class SettingsPage(QWidget):
                 if busy
                 else "Check for updates"
             )
+        )
+
+        if (
+            self.download_update_button
+            .isVisible()
+        ):
+            self.download_update_button.setEnabled(
+                not busy
+                and not download_busy
+                and (
+                    self._verified_update_download
+                    is None
+                )
+            )
+
+    def _set_download_busy(
+        self,
+        busy: bool,
+    ):
+        busy = bool(busy)
+
+        check_busy = (
+            self.update_controller
+            .is_busy
+        )
+
+        self.check_updates_button.setEnabled(
+            not busy
+            and not check_busy
+        )
+
+        if (
+            self._verified_update_download
+            is not None
+        ):
+            self.download_update_button.setText(
+                "Downloaded & verified"
+            )
+            self.download_update_button.setEnabled(
+                False
+            )
+            return
+
+        self.download_update_button.setText(
+            (
+                "Downloading..."
+                if busy
+                else "Download update"
+            )
+        )
+
+        self.download_update_button.setEnabled(
+            not busy
+            and not check_busy
         )
 
     def _set_update_status(
@@ -1770,11 +1959,31 @@ class SettingsPage(QWidget):
             message
         )
 
+    @staticmethod
+    def _result_boolean(
+        result,
+        name: str,
+    ) -> bool:
+        value = getattr(
+            result,
+            name,
+            False,
+        )
+
+        if callable(value):
+            try:
+                value = value()
+            except TypeError:
+                return False
+
+        return bool(value)
+
     def _handle_update_result(
         self,
         result,
     ):
         self._latest_update_result = result
+        self._verified_update_download = None
 
         presentation = (
             describe_update_result(
@@ -1790,6 +1999,128 @@ class SettingsPage(QWidget):
         self.update_details_label.setText(
             presentation.detail
         )
+
+        can_download = (
+            self._result_boolean(
+                result,
+                "can_download_update",
+            )
+        )
+
+        release = getattr(
+            result,
+            "release",
+            None,
+        )
+
+        show_download = bool(
+            presentation.update_available
+            and can_download
+            and release is not None
+        )
+
+        self.download_update_button.setVisible(
+            show_download
+        )
+        self.download_update_button.setEnabled(
+            show_download
+        )
+        self.download_update_button.setText(
+            "Download update"
+        )
+
+        self.update_progress.setVisible(
+            False
+        )
+
+        self.set_status_message(
+            presentation.headline
+        )
+
+    def _handle_download_progress(
+        self,
+        progress,
+    ):
+        presentation = (
+            describe_download_progress(
+                progress
+            )
+        )
+
+        if presentation.indeterminate:
+            self.update_progress.setRange(
+                0,
+                0,
+            )
+        else:
+            self.update_progress.setRange(
+                0,
+                presentation.maximum,
+            )
+            self.update_progress.setValue(
+                presentation.value
+            )
+
+        self.update_progress.setVisible(
+            True
+        )
+
+        self.update_status_label.setText(
+            presentation.text
+        )
+
+    def _handle_download_result(
+        self,
+        result,
+    ):
+        presentation = (
+            describe_download_result(
+                result
+            )
+        )
+
+        self.update_status_label.setText(
+            presentation.headline
+        )
+
+        self.update_details_label.setText(
+            presentation.detail
+        )
+
+        if presentation.ready:
+            self._verified_update_download = (
+                result
+            )
+
+            self.update_progress.setRange(
+                0,
+                100,
+            )
+            self.update_progress.setValue(
+                100
+            )
+            self.update_progress.setVisible(
+                True
+            )
+
+            self.download_update_button.setText(
+                "Downloaded & verified"
+            )
+            self.download_update_button.setEnabled(
+                False
+            )
+
+        else:
+            self._verified_update_download = None
+            self.update_progress.setVisible(
+                False
+            )
+            self.download_update_button.setText(
+                "Download update"
+            )
+            self.download_update_button.setEnabled(
+                True
+            )
 
         self.set_status_message(
             presentation.headline
@@ -3650,6 +3981,25 @@ class SettingsPage(QWidget):
             QCheckBox::indicator:checked {{
                 background: {theme["accent"]};
                 border: 2px solid {theme["accent"]};
+            }}
+
+            QProgressBar#updateProgress {{
+                color: {theme["text"]};
+                background: {card_alt_glass};
+                border: 1px solid {theme["border"]};
+                border-radius: 7px;
+                min-height: 18px;
+                text-align: center;
+            }}
+
+            QProgressBar#updateProgress::chunk {{
+                background: {theme["accent"]};
+                border-radius: 6px;
+            }}
+
+            QPushButton#secondaryButton:disabled {{
+                color: {theme["muted"]};
+                border-color: {theme["border"]};
             }}
 
             QPushButton#secondaryButton {{

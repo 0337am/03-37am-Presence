@@ -164,6 +164,14 @@ def describe_update_result(
         )
     ).lower()
 
+    error_code_value = _clean_text(
+        getattr(
+            result,
+            "error_code",
+            "",
+        )
+    ).lower()
+
     if update_available:
         headline = (
             "Update available"
@@ -205,6 +213,33 @@ def describe_update_result(
             release_name=release_name,
         )
 
+    if (
+        status_value in {
+            "no_release",
+            "no_releases",
+        }
+        or error_code_value in {
+            "no_release",
+            "no_releases",
+        }
+    ):
+        return UpdatePresentation(
+            headline=(
+                "No public release is "
+                "available yet."
+            ),
+            detail=(
+                message
+                or (
+                    "The official release feed "
+                    "does not contain a published "
+                    "release."
+                )
+            ),
+            update_available=False,
+            is_error=False,
+        )
+
     if is_error:
         return UpdatePresentation(
             headline=(
@@ -236,27 +271,6 @@ def describe_update_result(
                 or (
                     "No downgrade will be "
                     "offered."
-                )
-            ),
-            update_available=False,
-            is_error=False,
-        )
-
-    if status_value in {
-        "no_release",
-        "no_releases",
-    }:
-        return UpdatePresentation(
-            headline=(
-                "No public release is "
-                "available yet."
-            ),
-            detail=(
-                message
-                or (
-                    "The official release feed "
-                    "does not contain a published "
-                    "release."
                 )
             ),
             update_available=False,

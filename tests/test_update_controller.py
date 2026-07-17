@@ -77,7 +77,8 @@ class UpdateControllerTests(
 
     def test_method_based_result_is_classified(self):
         class MethodResult:
-            status = "no_release"
+            status = "error"
+            error_code = "no_release"
             message = (
                 "No published app release "
                 "was found on GitHub."
@@ -88,7 +89,7 @@ class UpdateControllerTests(
                 return False
 
             def is_error(self):
-                return False
+                return True
 
         presentation = (
             describe_update_result(
@@ -106,6 +107,11 @@ class UpdateControllerTests(
 
         self.assertIn(
             "No public release",
+            presentation.headline,
+        )
+
+        self.assertNotIn(
+            "Could not check",
             presentation.headline,
         )
 
