@@ -41,6 +41,9 @@ from src.ui.update_download_controller import (
     describe_download_progress,
     describe_download_result,
 )
+from src.ui.update_install_controller import (
+    UpdateInstallController,
+)
 from src.version import APP_VERSION, RELEASE_NAME
 from src.system.settings_backup import (
     SettingsBackupError,
@@ -238,6 +241,10 @@ class SettingsPage(QWidget):
 
         self.update_download_controller = (
             UpdateDownloadController(self)
+        )
+
+        self.update_install_controller = (
+            UpdateInstallController()
         )
 
         self._latest_update_result = None
@@ -1528,11 +1535,30 @@ class SettingsPage(QWidget):
             self.download_available_update
         )
 
+        self.install_update_button = QPushButton(
+            "Install update"
+        )
+        self.install_update_button.setObjectName(
+            "secondaryButton"
+        )
+        self.install_update_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.install_update_button.setVisible(
+            False
+        )
+        self.install_update_button.clicked.connect(
+            self.install_verified_update
+        )
+
         update_button_row.addWidget(
             self.check_updates_button
         )
         update_button_row.addWidget(
             self.download_update_button
+        )
+        update_button_row.addWidget(
+            self.install_update_button
         )
         update_button_row.addStretch()
 
@@ -1791,6 +1817,168 @@ class SettingsPage(QWidget):
             str(message)
         )
 
+    def set_update_quit_callback(
+        self,
+        callback,
+    ):
+        self.update_install_controller.set_quit_callback(
+            callback
+        )
+
+    def install_verified_update(self):
+        download_result = (
+            self._verified_update_download
+        )
+
+        if download_result is None:
+            self._set_update_status(
+                "No verified update is ready "
+                "to install."
+            )
+            return
+
+        if (
+            not self.update_install_controller
+            .quit_callback_available
+        ):
+            QMessageBox.warning(
+                self,
+                "Update cannot start",
+                (
+                    "The app shutdown callback is "
+                    "unavailable. Restart 03:37am "
+                    "Presence and try again."
+                ),
+            )
+            return
+
+        version = str(
+            getattr(
+                download_result,
+                "version",
+                "",
+            )
+            or ""
+        ).strip()
+
+        version_label = (
+            f"v{version}"
+            if version
+            else "the downloaded version"
+        )
+
+        response = QMessageBox.question(
+            self,
+            "Install update?",
+            (
+                f"{version_label} has been downloaded "
+                "and verified."
+                "\n\n"
+                "03:37am Presence will launch the "
+                "installer and close."
+                "\n\n"
+                "Continue?"
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if (
+            response
+            != QMessageBox.StandardButton.Yes
+        ):
+            self._set_update_status(
+                "Update installation cancelled."
+            )
+            return
+
+        self.install_update_button.setEnabled(
+            False
+        )
+
+        install_result = (
+            self.update_install_controller.launch(
+                download_result,
+                user_approved=True,
+            )
+        )
+
+        message = str(
+            getattr(
+                install_result,
+                "message",
+                "",
+            )
+            or ""
+        ).strip()
+
+        error_code = str(
+            getattr(
+                install_result,
+                "error_code",
+                "",
+            )
+            or ""
+        ).strip()
+
+        launched = bool(
+            getattr(
+                install_result,
+                "launched",
+                False,
+            )
+        )
+
+        if launched:
+            self._set_update_status(
+                message
+                or (
+                    "The verified installer "
+                    "was launched."
+                )
+            )
+
+            if error_code == "quit_failed":
+                QMessageBox.warning(
+                    self,
+                    "Installer started",
+                    (
+                        message
+                        or (
+                            "The installer started, "
+                            "but the app could not "
+                            "close automatically."
+                        )
+                    ),
+                )
+
+            return
+
+        self.install_update_button.setEnabled(
+            True
+        )
+
+        failure_message = (
+            message
+            or (
+                "The verified installer could "
+                "not be launched."
+            )
+        )
+
+        QMessageBox.warning(
+            self,
+            "Update could not start",
+            failure_message,
+        )
+
+        self._set_update_status(
+            failure_message
+        )
+
     def check_for_updates(self):
         if (
             self.update_download_controller
@@ -1804,6 +1992,9 @@ class SettingsPage(QWidget):
 
         self._verified_update_download = None
         self.download_update_button.setVisible(
+            False
+        )
+        self.install_update_button.setVisible(
             False
         )
         self.update_progress.setVisible(
@@ -1844,6 +2035,9 @@ class SettingsPage(QWidget):
             return
 
         self._verified_update_download = None
+        self.install_update_button.setVisible(
+            False
+        )
 
         self.update_progress.setRange(
             0,
@@ -1984,6 +2178,9 @@ class SettingsPage(QWidget):
     ):
         self._latest_update_result = result
         self._verified_update_download = None
+        self.install_update_button.setVisible(
+            False
+        )
 
         presentation = (
             describe_update_result(
@@ -2110,6 +2307,16 @@ class SettingsPage(QWidget):
                 False
             )
 
+            self.install_update_button.setText(
+                "Install update"
+            )
+            self.install_update_button.setEnabled(
+                True
+            )
+            self.install_update_button.setVisible(
+                True
+            )
+
         else:
             self._verified_update_download = None
             self.update_progress.setVisible(
@@ -2120,6 +2327,10 @@ class SettingsPage(QWidget):
             )
             self.download_update_button.setEnabled(
                 True
+            )
+
+            self.install_update_button.setVisible(
+                False
             )
 
         self.set_status_message(

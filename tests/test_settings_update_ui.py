@@ -27,6 +27,13 @@ DOWNLOAD_CONTROLLER_PATH = (
     / "update_download_controller.py"
 )
 
+INSTALL_CONTROLLER_PATH = (
+    ROOT
+    / "src"
+    / "ui"
+    / "update_install_controller.py"
+)
+
 
 class SettingsUpdateUiTests(
     unittest.TestCase
@@ -47,6 +54,12 @@ class SettingsUpdateUiTests(
 
         cls.download_controller_source = (
             DOWNLOAD_CONTROLLER_PATH.read_text(
+                encoding="utf-8-sig"
+            )
+        )
+
+        cls.install_controller_source = (
+            INSTALL_CONTROLLER_PATH.read_text(
                 encoding="utf-8-sig"
             )
         )
@@ -145,7 +158,7 @@ class SettingsUpdateUiTests(
             self.settings_source,
         )
 
-    def test_download_is_connected_but_install_is_not(self):
+    def test_download_and_install_are_connected_safely(self):
         self.assertIn(
             "download_update",
             self.download_controller_source,
@@ -153,22 +166,32 @@ class SettingsUpdateUiTests(
 
         self.assertNotIn(
             "update_installer",
+            self.download_controller_source,
+        )
+
+        self.assertIn(
+            "launch_downloaded_update",
+            self.install_controller_source,
+        )
+
+        self.assertIn(
+            "UpdateInstallController",
+            self.settings_source,
+        )
+
+        self.assertIn(
+            '"Install update"',
+            self.settings_source,
+        )
+
+        self.assertIn(
+            "install_verified_update",
             self.settings_source,
         )
 
         self.assertNotIn(
-            "update_installer",
-            self.download_controller_source,
-        )
-
-        self.assertNotIn(
-            "launch_downloaded_update",
+            "TrayController",
             self.settings_source,
-        )
-
-        self.assertNotIn(
-            "launch_downloaded_update",
-            self.download_controller_source,
         )
 
     def test_controllers_use_daemon_threads(self):

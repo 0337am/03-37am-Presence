@@ -856,6 +856,14 @@ class MainWindow(QMainWindow):
             lambda: self.switch_page(4)
         )
 
+    def set_update_quit_callback(
+        self,
+        callback,
+    ):
+        self.settings_page.set_update_quit_callback(
+            callback
+        )
+
     def open_settings_section(
         self,
         section_name: str,

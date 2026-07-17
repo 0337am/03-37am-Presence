@@ -309,6 +309,10 @@ def main() -> int:
         window,
     )
 
+    window.set_update_quit_callback(
+        tray_controller.quit_application
+    )
+
     window.show()
 
     return app.exec()
