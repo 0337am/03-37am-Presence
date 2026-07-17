@@ -1,5 +1,5 @@
-APP_VERSION = "2.5.0"
-RELEASE_NAME = "Control Room Update"
+APP_VERSION = "2.6.0"
+RELEASE_NAME = "Library & Insights Update"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

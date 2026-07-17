@@ -1,15 +1,15 @@
 # 03:37am Presence
 
-03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link cards, listening history, automatic AFK handling, custom themes, custom blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
+03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.5.0 highlights
+## v2.6.0 highlights
 
-- Launcher Cards let you add local applications and folders to the Dashboard with guarded target validation, optional custom images, editing, duplication, hiding, and deletion.
-- Dashboard editing now includes Undo and Redo, keyboard movement and resizing, editing-session Revert, and clearer accessible names, descriptions, focus order, and focus styling.
-- Magnetic alignment snaps cards to nearby edges, card centres, canvas edges, and the canvas centre, with temporary guide lines and the existing 24 px grid as a fallback.
-- The Control Room toolbar and editing canvas now have clearer locked and editing states, compact behaviour, polished handles, and improved responsive controls.
-- Launcher Card images are imported locally, scaled, deduplicated, and excluded from portable settings backups.
-- Existing Dashboard layouts, Layout Profiles, Link Cards, Presence Presets, Atmosphere settings, and older settings backups remain compatible.
+- The Library now supports SQL-backed search, source filters, date ranges, sorting, result totals, and pagination.
+- Library Insights show all-time tracks, plays, artists, albums, rankings, and confirmed-activity metrics including listening days and streaks.
+- Confirmed listening events are stored separately from aggregate track history, preserving accurate semantics after the v2.6 database migration.
+- Safe Library Summary and Listening Activity CSV exports use UTF-8, atomic replacement, and spreadsheet-formula protection.
+- Artwork recovery now restores matching cached artwork before Dashboard and Discord presence updates.
+- Existing v2.5 settings, layouts, cards, presets, Atmosphere settings, backups, and aggregate listening history remain compatible.
 
 ## Core features
 
@@ -17,12 +17,12 @@
 - Custom Dashboard Link Cards and Launcher Cards with optional website icons or local card images.
 - Dashboard Layout Profiles with Undo, Redo, keyboard editing, grid snapping, magnetic alignment, and visual guides.
 - Custom presence modes and presets.
-- Persistent listening history backed by SQLite.
+- Searchable and filterable listening Library backed by SQLite, with pagination, aggregate rankings, confirmed activity, listening days, and streaks.
 - Recently Played artwork caching.
 - Automatic AFK presence with restoration of the previous mode.
 - Theme presets, custom colours, editable title and subtitle, an optional fixed About footer, and fixed app-icon About artwork.
 - System tray controls and Windows startup options.
-- Diagnostics, data controls, CSV library export, and settings backup.
+- Diagnostics, data controls, safe Library Summary and Listening Activity CSV exports, and settings backup.
 
 ## Requirements
 

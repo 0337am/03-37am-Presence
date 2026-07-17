@@ -1,5 +1,49 @@
 # Changelog
 
+## v2.6.0 - Library & Insights Update
+
+Released 17 July 2026.
+
+### Added
+
+- Added a detailed listening-event timeline for confirmed playback, stored alongside the existing aggregate Library history.
+- Added SQL-backed Library searching, source filtering, date ranges, sorting, stable totals, and paginated result browsing.
+- Added Library Insights covering aggregate tracks, plays, artists, albums, top tracks, top artists, and top albums.
+- Added confirmed-activity insights covering listening days, current and longest streaks, first and latest confirmed plays, and recent playback activity.
+- Added a dedicated Listening Activity CSV export for confirmed playback events.
+- Added permanent automated coverage for Library queries, listening events, insights, exports, and Settings export integration.
+
+### Improved
+
+- Improved Library performance by moving filtering, sorting, date boundaries, totals, and pagination into the SQLite query layer.
+- Improved Library wording so all-time aggregate history remains clearly separated from confirmed activity recorded by the newer timeline.
+- Improved CSV exports with UTF-8 compatibility, automatic `.csv` filenames, atomic file replacement, parent-folder creation, and header-only empty exports.
+- Improved artwork recovery so matching cached artwork is restored before Dashboard and Discord presence updates.
+- Expanded the Library interface with date controls, result summaries, navigation controls, accessible names, disabled states, and responsive Insights presentation.
+
+### Fixed
+
+- Fixed an artwork synchronisation race where Recently Played could show artwork before Now Playing or Discord presence updated.
+- Fixed first-observed Paused tracks so a later transition to Playing records one confirmed playback event.
+- Fixed pause and resume transitions after confirmed playback so they do not create duplicate listening events.
+- Fixed stale artwork recovery so cached artwork from another track cannot be applied to the current song.
+
+### Privacy and security
+
+- Listening history and detailed playback events remain local to the device and are excluded from portable settings backups.
+- Library and activity exports occur only after an explicit user action.
+- CSV cells beginning with spreadsheet-formula characters are neutralised before export.
+- CSV files are written to temporary files and atomically replaced, protecting existing exports when a write fails.
+- Listening Activity exports include confirmed Playing events only and exclude legacy Paused timeline entries.
+
+### Upgrade notes
+
+- Existing v2.5 settings, Dashboard layouts, Layout Profiles, Link Cards, Launcher Cards, Presence Presets, Atmosphere settings, and aggregate listening history continue to load normally.
+- The Library database upgrades automatically to schema version 2 while preserving existing track records and play counts.
+- Detailed timeline tracking begins after the database upgrade. Earlier aggregate plays cannot be reconstructed as dated events, so confirmed-play totals, listening days, and streaks initially cover only newly recorded activity.
+- Existing settings backups remain restorable because listening history and Library database contents are intentionally excluded from portable settings backups.
+- A restart is recommended after restoring settings so every service and Dashboard component reloads the restored values.
+
 ## v2.5.0 - Control Room Update
 
 Released 15 July 2026.
