@@ -9,6 +9,7 @@ from PyQt6.QtCore import QLockFile
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
+from src.system.startup import StartupManager
 from src.ui.main_window import MainWindow
 from src.ui.tray import TrayController
 
@@ -265,6 +266,8 @@ def main() -> int:
     )
 
     set_windows_app_id()
+
+    StartupManager.repair_packaged_entry()
 
     app = QApplication(
         sys.argv
