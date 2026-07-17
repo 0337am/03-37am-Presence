@@ -73,7 +73,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "Status: Release rehearsal.",
+            "Released 17 July 2026.",
             source,
         )
 

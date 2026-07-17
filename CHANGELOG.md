@@ -2,7 +2,7 @@
 
 ## v2.7.0 - Updates & Distribution
 
-Status: Release rehearsal.
+Released 17 July 2026.
 
 - Added repeatable standalone and installer release builds with matching Windows metadata.
 - Added GitHub release checks with friendly offline, rate-limit, malformed-response, and no-release states.
