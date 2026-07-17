@@ -29,6 +29,9 @@ from src.artwork.cloudinary_preferences import (
 from src.artwork.uploader import (
     ArtworkUploader,
 )
+from src.ui.cloudinary_setup_guide import (
+    CloudinarySetupGuide,
+)
 
 
 class _ConnectionTestPreferencesStore:
@@ -223,6 +226,20 @@ class ArtworkHostingCard(QFrame):
             True
         )
 
+        guide_note = QLabel(
+            (
+                "New to Cloudinary? Open the setup "
+                "guide for a step-by-step walkthrough "
+                "and official Cloudinary links."
+            )
+        )
+        guide_note.setObjectName(
+            "helpText"
+        )
+        guide_note.setWordWrap(
+            True
+        )
+
         test_note = QLabel(
             (
                 "Testing uploads one tiny transparent "
@@ -248,6 +265,19 @@ class ArtworkHostingCard(QFrame):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
+
+        self.setup_guide_button = QPushButton(
+            "Cloudinary setup guide"
+        )
+        self.setup_guide_button.setObjectName(
+            "secondaryButton"
+        )
+        self.setup_guide_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.setup_guide_button.clicked.connect(
+            self.show_setup_guide
+        )
 
         self.test_button = QPushButton(
             "Test connection"
@@ -289,6 +319,9 @@ class ArtworkHostingCard(QFrame):
         )
 
         buttons.addWidget(
+            self.setup_guide_button
+        )
+        buttons.addWidget(
             self.test_button
         )
         buttons.addWidget(
@@ -306,6 +339,7 @@ class ArtworkHostingCard(QFrame):
         )
         layout.addLayout(fields)
         layout.addWidget(warning)
+        layout.addWidget(guide_note)
         layout.addWidget(test_note)
         layout.addWidget(
             self.status_label
@@ -356,13 +390,21 @@ class ArtworkHostingCard(QFrame):
 
         else:
             message = (
-                "Not configured. Artwork remains on "
-                "this device and Discord shows text only."
+                "Not configured. Open the Cloudinary "
+                "setup guide for help, or leave artwork "
+                "hosting disabled."
             )
 
         self.status_label.setText(
             message
         )
+
+    def show_setup_guide(self):
+        dialog = CloudinarySetupGuide(
+            self
+        )
+
+        dialog.exec()
 
     def test_connection(self):
         if self._test_in_progress:
@@ -535,6 +577,7 @@ class ArtworkHostingCard(QFrame):
             self.enabled_box,
             self.cloud_name_input,
             self.upload_preset_input,
+            self.setup_guide_button,
             self.test_button,
             self.save_button,
             self.disconnect_button,
