@@ -31,6 +31,11 @@ from PyQt6.QtWidgets import (
 
 from src.library.history_store import HistoryStore
 from src.system.startup import StartupManager
+from src.ui.update_controller import (
+    UpdateCheckController,
+    describe_update_result,
+)
+from src.version import APP_VERSION, RELEASE_NAME
 from src.system.settings_backup import (
     SettingsBackupError,
     SettingsBackupManager,
@@ -220,6 +225,12 @@ class SettingsPage(QWidget):
 
         self.diagnostics_provider = None
         self._last_diagnostics_text = ""
+
+        self.update_controller = (
+            UpdateCheckController(self)
+        )
+
+        self._latest_update_result = None
 
         self.build_ui()
 
@@ -1404,6 +1415,111 @@ class SettingsPage(QWidget):
             backup_button_row
         )
 
+        updates = self.create_card(
+            "Updates",
+            (
+                "Check the official public release "
+                "feed without interrupting playback."
+            ),
+        )
+
+        updates_layout = updates.layout()
+
+        update_version_row = QHBoxLayout()
+        update_version_row.setSpacing(10)
+
+        update_version_title = QLabel(
+            "Installed version"
+        )
+        update_version_title.setObjectName(
+            "fieldLabel"
+        )
+
+        self.update_current_version = QLabel(
+            f"v{APP_VERSION} — {RELEASE_NAME}"
+        )
+        self.update_current_version.setObjectName(
+            "valueLabel"
+        )
+
+        update_version_row.addWidget(
+            update_version_title
+        )
+        update_version_row.addWidget(
+            self.update_current_version
+        )
+        update_version_row.addStretch()
+
+        updates_layout.addLayout(
+            update_version_row
+        )
+
+        self.update_status_label = QLabel(
+            "Updates have not been checked yet."
+        )
+        self.update_status_label.setObjectName(
+            "helpText"
+        )
+        self.update_status_label.setWordWrap(
+            True
+        )
+
+        self.update_details_label = QLabel(
+            (
+                "Checks run only when requested "
+                "and contact the official public "
+                "release repository."
+            )
+        )
+        self.update_details_label.setObjectName(
+            "helpText"
+        )
+        self.update_details_label.setWordWrap(
+            True
+        )
+
+        updates_layout.addWidget(
+            self.update_status_label
+        )
+        updates_layout.addWidget(
+            self.update_details_label
+        )
+
+        update_button_row = QHBoxLayout()
+        update_button_row.setSpacing(8)
+
+        self.check_updates_button = QPushButton(
+            "Check for updates"
+        )
+        self.check_updates_button.setObjectName(
+            "secondaryButton"
+        )
+        self.check_updates_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.check_updates_button.clicked.connect(
+            self.check_for_updates
+        )
+
+        update_button_row.addWidget(
+            self.check_updates_button
+        )
+        update_button_row.addStretch()
+
+        updates_layout.addLayout(
+            update_button_row
+        )
+
+        self.update_controller.busy_changed.connect(
+            self._set_update_busy
+        )
+        self.update_controller.status_changed.connect(
+            self._set_update_status
+        )
+        self.update_controller.result_ready.connect(
+            self._handle_update_result
+        )
+
         diagnostics = self.create_card(
             "Diagnostics & Support",
             (
@@ -1574,6 +1690,7 @@ class SettingsPage(QWidget):
         root.addWidget(
             settings_backup
         )
+        root.addWidget(updates)
         root.addWidget(diagnostics)
         root.addWidget(self.status)
         root.addLayout(button_row)
@@ -1591,6 +1708,7 @@ class SettingsPage(QWidget):
             "settings_backup": (
                 settings_backup
             ),
+            "updates": updates,
             "diagnostics": diagnostics,
         }
 
@@ -1606,6 +1724,75 @@ class SettingsPage(QWidget):
     ):
         self.status.setText(
             str(message)
+        )
+
+    def check_for_updates(self):
+        started = (
+            self.update_controller
+            .start_check()
+        )
+
+        if not started:
+            self._set_update_status(
+                "An update check is already running."
+            )
+
+    def _set_update_busy(
+        self,
+        busy: bool,
+    ):
+        busy = bool(busy)
+
+        self.check_updates_button.setEnabled(
+            not busy
+        )
+
+        self.check_updates_button.setText(
+            (
+                "Checking..."
+                if busy
+                else "Check for updates"
+            )
+        )
+
+    def _set_update_status(
+        self,
+        message: str,
+    ):
+        message = str(
+            message or ""
+        ).strip()
+
+        if not message:
+            return
+
+        self.update_status_label.setText(
+            message
+        )
+
+    def _handle_update_result(
+        self,
+        result,
+    ):
+        self._latest_update_result = result
+
+        presentation = (
+            describe_update_result(
+                result,
+                current_version=APP_VERSION,
+            )
+        )
+
+        self.update_status_label.setText(
+            presentation.headline
+        )
+
+        self.update_details_label.setText(
+            presentation.detail
+        )
+
+        self.set_status_message(
+            presentation.headline
         )
 
     def set_diagnostics_provider(
