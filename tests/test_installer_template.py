@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
 INSTALLER_PATH = (
     REPOSITORY_ROOT
     / "installer"
@@ -25,28 +26,24 @@ class InstallerTemplateTests(unittest.TestCase):
     def test_installer_requires_release_metadata(self):
         source = installer_source()
 
-        self.assertIn(
+        required_values = (
             "#ifndef MyAppVersion",
-            source,
-        )
-        self.assertIn(
             "#ifndef MyReleaseName",
-            source,
-        )
-        self.assertIn(
             (
                 "#error MyAppVersion must be supplied "
                 "by the release build script."
             ),
-            source,
-        )
-        self.assertIn(
             (
                 "#error MyReleaseName must be supplied "
                 "by the release build script."
             ),
-            source,
         )
+
+        for required_value in required_values:
+            self.assertIn(
+                required_value,
+                source,
+            )
 
     def test_installer_preserves_upgrade_identity(self):
         source = installer_source()
@@ -55,7 +52,7 @@ class InstallerTemplateTests(unittest.TestCase):
             "AppId=0337am.Presence.Desktop",
             (
                 "DefaultDirName={autopf}"
-                "\\03-37am Presence"
+                "\\{#MyInstallName}"
             ),
             "PrivilegesRequired=admin",
             "ArchitecturesAllowed=x64compatible",
@@ -65,6 +62,39 @@ class InstallerTemplateTests(unittest.TestCase):
             ),
             "CloseApplications=yes",
             "RestartApplications=no",
+        )
+
+        for required_value in required_values:
+            self.assertIn(
+                required_value,
+                source,
+            )
+
+    def test_installer_separates_display_and_file_names(self):
+        source = installer_source()
+
+        required_values = (
+            (
+                '#define MyAppDisplayName '
+                '"03:37am Presence"'
+            ),
+            (
+                '#define MyInstallName '
+                '"03-37am Presence"'
+            ),
+            (
+                '#define MyAppExeName '
+                '"03-37am Presence.exe"'
+            ),
+            "AppName={#MyAppDisplayName}",
+            (
+                "DefaultGroupName="
+                "{#MyInstallName}"
+            ),
+            (
+                "VersionInfoProductName="
+                "{#MyAppDisplayName}"
+            ),
         )
 
         for required_value in required_values:
@@ -108,7 +138,8 @@ class InstallerTemplateTests(unittest.TestCase):
             ),
             (
                 "VersionInfoDescription="
-                "{#MyAppName} - {#MyReleaseName}"
+                "{#MyAppDisplayName} - "
+                "{#MyReleaseName}"
             ),
             (
                 "VersionInfoProductVersion="

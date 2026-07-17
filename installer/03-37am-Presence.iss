@@ -1,4 +1,5 @@
-﻿#define MyAppName "03-37am Presence"
+﻿#define MyAppDisplayName "03:37am Presence"
+#define MyInstallName "03-37am Presence"
 #define MyAppPublisher "0337am"
 #define MyAppExeName "03-37am Presence.exe"
 
@@ -12,14 +13,14 @@
 
 [Setup]
 AppId=0337am.Presence.Desktop
-AppName={#MyAppName}
+AppName={#MyAppDisplayName}
 AppVersion={#MyAppVersion}
-AppVerName={#MyAppName} v{#MyAppVersion}
+AppVerName={#MyAppDisplayName} v{#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 
 SourceDir=..
-DefaultDirName={autopf}\03-37am Presence
-DefaultGroupName=03-37am Presence
+DefaultDirName={autopf}\{#MyInstallName}
+DefaultGroupName={#MyInstallName}
 DisableProgramGroupPage=yes
 
 OutputDir=release
@@ -41,19 +42,19 @@ RestartApplications=no
 
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription={#MyAppName} - {#MyReleaseName}
-VersionInfoProductName={#MyAppName}
+VersionInfoDescription={#MyAppDisplayName} - {#MyReleaseName}
+VersionInfoProductName={#MyAppDisplayName}
 VersionInfoProductVersion={#MyAppVersion}.0
 
 [Files]
 Source: "dist\03-37am Presence.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\03-37am Presence"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{commondesktop}\03-37am Presence"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#MyInstallName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{commondesktop}\{#MyInstallName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch 03-37am Presence"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppDisplayName}"; Flags: nowait postinstall skipifsilent
