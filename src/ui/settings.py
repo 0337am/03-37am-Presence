@@ -155,6 +155,13 @@ class SleekComboBox(QComboBox):
         self._position_arrow()
 
 
+from src.library.csv_export import (
+    export_listening_activity_csv
+    as write_listening_activity_csv,
+    export_track_summary_csv
+    as write_track_summary_csv,
+)
+
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
@@ -1190,11 +1197,34 @@ class SettingsPage(QWidget):
             self.export_library_csv
         )
 
+        export_activity_button = QPushButton(
+            "Export Activity CSV"
+        )
+        export_activity_button.setObjectName(
+            "secondaryButton"
+        )
+        export_activity_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        export_activity_button.setAccessibleName(
+            "Export confirmed listening activity CSV"
+        )
+        export_activity_button.setToolTip(
+            "Export confirmed Playing events "
+            "recorded since timeline tracking began."
+        )
+        export_activity_button.clicked.connect(
+            self.export_listening_activity_csv
+        )
+
         storage_safe_row.addWidget(
             open_data_button
         )
         storage_safe_row.addWidget(
             export_library_button
+        )
+        storage_safe_row.addWidget(
+            export_activity_button
         )
         storage_safe_row.addStretch()
 
@@ -1881,7 +1911,7 @@ class SettingsPage(QWidget):
         selected_path, _ = (
             QFileDialog.getSaveFileName(
                 self,
-                "Export Library",
+                "Export Library Summary",
                 str(suggested_path),
                 "CSV files (*.csv)",
             )
@@ -1890,66 +1920,24 @@ class SettingsPage(QWidget):
         if not selected_path:
             return
 
-        destination = Path(
-            selected_path
-        )
-
-        if (
-            destination.suffix.lower()
-            != ".csv"
-        ):
-            destination = (
-                destination.with_suffix(
-                    ".csv"
-                )
-            )
-
         try:
             tracks = (
-                self.history_store
-                .list_tracks(
-                    limit=5000
+                self.history_store.list_tracks(
+                    limit=50000
                 )
             )
 
-            with destination.open(
-                "w",
-                encoding="utf-8-sig",
-                newline="",
-            ) as csv_file:
-                writer = csv.writer(
-                    csv_file
+            destination, row_count = (
+                write_track_summary_csv(
+                    selected_path,
+                    tracks,
                 )
-
-                writer.writerow(
-                    [
-                        "Title",
-                        "Artist",
-                        "Album",
-                        "Source",
-                        "First played",
-                        "Last played",
-                        "Play count",
-                        "Last status",
-                    ]
-                )
-
-                for track in tracks:
-                    writer.writerow(
-                        [
-                            track.title,
-                            track.artist,
-                            track.album,
-                            track.source_app,
-                            track.first_played,
-                            track.last_played,
-                            track.play_count,
-                            track.last_status,
-                        ]
-                    )
+            )
 
             self.status.setText(
-                f"Library exported to {destination.name}."
+                "Library summary exported: "
+                f"{row_count} tracks to "
+                f"{destination.name}."
             )
 
         except Exception as error:
@@ -1957,7 +1945,58 @@ class SettingsPage(QWidget):
                 self,
                 "Export failed",
                 (
-                    "The Library could not be exported."
+                    "The Library summary could not "
+                    "be exported."
+                    "\n\n"
+                    f"{error}"
+                ),
+            )
+
+    def export_listening_activity_csv(self):
+        suggested_path = (
+            self.data_directory()
+            / "03-37am-listening-activity.csv"
+        )
+
+        selected_path, _ = (
+            QFileDialog.getSaveFileName(
+                self,
+                "Export Listening Activity",
+                str(suggested_path),
+                "CSV files (*.csv)",
+            )
+        )
+
+        if not selected_path:
+            return
+
+        try:
+            events = (
+                self.history_store.list_events(
+                    limit=50000
+                )
+            )
+
+            destination, row_count = (
+                write_listening_activity_csv(
+                    selected_path,
+                    events,
+                )
+            )
+
+            self.status.setText(
+                "Listening activity exported: "
+                f"{row_count} confirmed plays to "
+                f"{destination.name}."
+            )
+
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "Export failed",
+                (
+                    "The listening activity could "
+                    "not be exported."
                     "\n\n"
                     f"{error}"
                 ),
