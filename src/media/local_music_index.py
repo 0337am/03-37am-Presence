@@ -20,6 +20,12 @@ class LocalMusicIndexError(
     pass
 
 
+class LocalMusicScanCancelled(
+    LocalMusicIndexError
+):
+    pass
+
+
 def _is_network_path(
     path: Path,
 ) -> bool:
@@ -429,7 +435,45 @@ class LocalMusicIndex:
     def scan(
         self,
         folders,
+        *,
+        cancel_requested=None,
     ) -> LocalMusicScanResult:
+        if (
+            cancel_requested is not None
+            and not callable(
+                cancel_requested
+            )
+        ):
+            raise TypeError(
+                (
+                    "cancel_requested must "
+                    "be callable"
+                )
+            )
+
+        def cancellation_requested(
+        ) -> bool:
+            if cancel_requested is None:
+                return False
+
+            try:
+                return bool(
+                    cancel_requested()
+                )
+
+            except Exception as error:
+                raise LocalMusicIndexError(
+                    (
+                        "The local music scan "
+                        "cancellation callback failed."
+                    )
+                ) from error
+
+        if cancellation_requested():
+            raise LocalMusicScanCancelled(
+                "Local music scan cancelled."
+            )
+
         roots = self._checked_roots(
             folders
         )
@@ -442,11 +486,21 @@ class LocalMusicIndex:
         limit_reached = False
 
         for root in roots:
+            if cancellation_requested():
+                raise LocalMusicScanCancelled(
+                    "Local music scan cancelled."
+                )
+
             for path in (
                 self._iter_audio_files(
                     root
                 )
             ):
+                if cancellation_requested():
+                    raise LocalMusicScanCancelled(
+                        "Local music scan cancelled."
+                    )
+
                 key = _path_key(
                     path
                 )
@@ -479,6 +533,11 @@ class LocalMusicIndex:
                 ):
                     skipped_files += 1
                     continue
+
+                if cancellation_requested():
+                    raise LocalMusicScanCancelled(
+                        "Local music scan cancelled."
+                    )
 
                 if not isinstance(
                     candidate,
