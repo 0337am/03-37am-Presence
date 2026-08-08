@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import math
@@ -19,6 +19,8 @@ from src.system.media_hotkey_preferences import (
     SCHEMA_VERSION,
     MediaHotkeyPreferences,
     MediaHotkeyPreferencesStore,
+    media_hotkey_preferences_from_payload,
+    media_hotkey_preferences_to_payload,
 )
 from src.system.media_hotkeys import (
     ACTION_NEXT,
@@ -163,6 +165,63 @@ class MediaHotkeyPreferencesTests(
                 MediaHotkeyPreferences(
                     enabled=value
                 )
+
+
+class MediaHotkeyPreferencePayloadTests(
+    unittest.TestCase
+):
+    def test_public_payload_helpers_round_trip(
+        self,
+    ):
+        preferences = (
+            MediaHotkeyPreferences(
+                enabled=True,
+                seek_seconds=15.0,
+                bindings={
+                    ACTION_PLAY_PAUSE:
+                        HotkeyBinding(
+                            modifiers=(
+                                MOD_CONTROL
+                                | MOD_ALT
+                                | MOD_SHIFT
+                            ),
+                            virtual_key=0x39,
+                        ),
+                },
+            )
+        )
+
+        payload = (
+            media_hotkey_preferences_to_payload(
+                preferences
+            )
+        )
+
+        restored = (
+            media_hotkey_preferences_from_payload(
+                payload
+            )
+        )
+
+        self.assertEqual(
+            restored,
+            preferences,
+        )
+
+    def test_public_payload_helper_rejects_invalid_schema(
+        self,
+    ):
+        with self.assertRaises(
+            ValueError
+        ):
+            media_hotkey_preferences_from_payload(
+                {
+                    "schema_version": 999,
+                    "enabled": False,
+                    "seek_seconds": 10.0,
+                    "bindings": {},
+                }
+            )
 
 
 class MediaHotkeyPreferencesStoreTests(

@@ -180,6 +180,10 @@ from src.ui.media_hotkey_settings import (
     MediaHotkeySettingsCard,
 )
 
+from src.system.media_hotkey_preferences import (
+    MediaHotkeyPreferencesStore,
+)
+
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
@@ -220,6 +224,10 @@ class SettingsPage(QWidget):
             AfkPreferencesStore()
         )
 
+        self.media_hotkey_preferences_store = (
+            MediaHotkeyPreferencesStore()
+        )
+
         self.history_store = (
             HistoryStore()
         )
@@ -232,6 +240,9 @@ class SettingsPage(QWidget):
                 ),
                 afk_store=(
                     self.afk_preferences_store
+                ),
+                media_hotkey_store=(
+                    self.media_hotkey_preferences_store
                 ),
             )
         )
@@ -1319,8 +1330,9 @@ class SettingsPage(QWidget):
 
         backup_privacy_help = QLabel(
             (
-                "Custom Link cards and Atmosphere slider "
-                "values are included. Listening history, "
+                "Custom Link cards, Atmosphere slider values, "
+                "and global media hotkeys are included. "
+                "Listening history, "
                 "artwork cache, Link-card icon cache, "
                 "OAuth tokens, API credentials, "
                 "diagnostics, local file paths, custom "
@@ -1439,6 +1451,9 @@ class SettingsPage(QWidget):
 
         self.media_hotkeys_card = (
             MediaHotkeySettingsCard(
+                preference_store=(
+                    self.media_hotkey_preferences_store
+                ),
                 status_callback=(
                     self.set_status_message
                 ),
@@ -2923,21 +2938,36 @@ class SettingsPage(QWidget):
             )
         )
 
+        hotkey_preview_note = (
+            (
+                "\n\nGlobal media hotkeys are included "
+                "and will replace your current hotkey "
+                "configuration."
+            )
+            if preview.includes_media_hotkeys
+            else (
+                "\n\nThis older backup does not contain "
+                "global media hotkeys, so your current "
+                "hotkeys will be kept."
+            )
+        )
+
         response = QMessageBox.question(
             self,
             "Restore settings?",
             (
                 "This will replace your theme, "
                 "branding text, media sources, "
-                "Auto AFK settings, dashboard "
-                "layout, custom Link cards, window "
-                "preferences, and Windows startup "
-                "preference."
+                "Auto AFK settings, global media "
+                "hotkeys, dashboard layout, custom "
+                "Link cards, window preferences, and "
+                "Windows startup preference."
                 "\n\n"
                 "Listening history, artwork cache, "
                 "and Link-card icon cache will not "
                 "be changed."
                 + personal_note
+                + hotkey_preview_note
                 + (
                     "\n\nA private local safety "
                     "backup will be created first."
@@ -2986,7 +3016,9 @@ class SettingsPage(QWidget):
             )
             return
 
-        self.refresh_after_settings_restore()
+        hotkeys_live = (
+            self.refresh_after_settings_restore()
+        )
 
         hosting_note = (
             (
@@ -3000,6 +3032,31 @@ class SettingsPage(QWidget):
             )
         )
 
+        hotkey_restore_note = (
+            (
+                "\n\nGlobal media hotkeys were restored "
+                "and applied immediately."
+            )
+            if (
+                result.restored_media_hotkeys
+                and hotkeys_live
+            )
+            else (
+                (
+                    "\n\nGlobal media hotkeys were restored, "
+                    "but Windows could not activate them "
+                    "immediately. Review the Global Media "
+                    "Hotkeys card or restart the app."
+                )
+                if result.restored_media_hotkeys
+                else (
+                    "\n\nThis backup did not contain global "
+                    "media hotkeys, so your existing hotkey "
+                    "configuration was preserved."
+                )
+            )
+        )
+
         QMessageBox.information(
             self,
             "Settings restored",
@@ -3007,11 +3064,12 @@ class SettingsPage(QWidget):
                 "Your settings were restored "
                 "successfully."
                 + hosting_note
+                + hotkey_restore_note
                 + (
                     "\n\nRestart 03:37am Presence "
                     "to apply the restored dashboard "
-                    "layout and every background "
-                    "service setting."
+                    "layout and any remaining background "
+                    "service settings."
                     "\n\nA private safety backup "
                     "was saved in the app data "
                     "folder."
@@ -3163,8 +3221,27 @@ class SettingsPage(QWidget):
             self.always_on_top
         )
 
+        hotkeys_live = True
+
+        try:
+            self.media_hotkeys_card.refresh_from_store()
+
+            hotkeys_live = (
+                self.media_hotkeys_card.reload_runtime()
+            )
+
+        except Exception as error:
+            print(
+                "Media hotkey restore refresh error:",
+                error,
+            )
+
+            hotkeys_live = False
+
         self.refresh_storage_summary()
         self.refresh_diagnostics()
+
+        return hotkeys_live
 
     def clear_artwork_cache(self):
         response = QMessageBox.question(

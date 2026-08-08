@@ -55,9 +55,16 @@ from src.ui.theme import (
     THEME_PRESETS,
 )
 
+from src.system.media_hotkey_preferences import (
+    MediaHotkeyPreferencesStore,
+    media_hotkey_preferences_from_payload,
+    media_hotkey_preferences_to_payload,
+)
+
 
 BACKUP_KIND = "0337am-presence-settings"
-BACKUP_SCHEMA_VERSION = 5
+MEDIA_HOTKEY_BACKUP_INTRODUCED_SCHEMA_VERSION = 6
+BACKUP_SCHEMA_VERSION = 6
 MAX_BACKUP_BYTES = 1024 * 1024
 
 _COLOUR_PATTERN = re.compile(
@@ -79,12 +86,14 @@ class SettingsBackupValidationError(
 class SettingsBackupPreview:
     created_at: str
     includes_artwork_hosting: bool
+    includes_media_hotkeys: bool = False
 
 
 @dataclass(frozen=True)
 class SettingsRestoreResult:
     safety_backup_path: Path
     restored_artwork_hosting: bool
+    restored_media_hotkeys: bool = False
 
 
 class SettingsBackupManager:
@@ -107,6 +116,7 @@ class SettingsBackupManager:
         dashboard_profile_store: DashboardLayoutProfileStore | None = None,
         custom_card_store: CustomCardStore | None = None,
         presence_preset_store: PresencePresetStore | None = None,
+        media_hotkey_store: MediaHotkeyPreferencesStore | None = None,
     ):
         self.settings = (
             settings
@@ -149,6 +159,11 @@ class SettingsBackupManager:
         self.presence_preset_store = (
             presence_preset_store
             or PresencePresetStore()
+        )
+
+        self.media_hotkey_store = (
+            media_hotkey_store
+            or MediaHotkeyPreferencesStore()
         )
 
     @staticmethod
@@ -284,6 +299,9 @@ class SettingsBackupManager:
                         afk.timeout_minutes
                     ),
                 },
+                "media_hotkeys": (
+                    self._capture_media_hotkeys()
+                ),
                 "dashboard_layout": (
                     dashboard.to_dict()
                 ),
@@ -363,6 +381,11 @@ class SettingsBackupManager:
                     "included"
                 ]
             ),
+            includes_media_hotkeys=bool(
+                payload["settings"][
+                    "media_hotkeys"
+                ]["included"]
+            ),
         )
 
     def restore_backup(
@@ -427,6 +450,11 @@ class SettingsBackupManager:
             restored_artwork_hosting=bool(
                 payload["settings"][
                     "artwork_hosting"
+                ]["included"]
+            ),
+            restored_media_hotkeys=bool(
+                payload["settings"][
+                    "media_hotkeys"
                 ]["included"]
             ),
         )
@@ -570,6 +598,18 @@ class SettingsBackupManager:
             )
         )
 
+        media_hotkeys = (
+            cls._validate_media_hotkeys(
+                settings.get(
+                    "media_hotkeys"
+                ),
+                required=(
+                    schema_version
+                    >= MEDIA_HOTKEY_BACKUP_INTRODUCED_SCHEMA_VERSION
+                ),
+            )
+        )
+
         dashboard_layout_payload = (
             cls._require_object(
                 settings.get(
@@ -692,6 +732,9 @@ class SettingsBackupManager:
                     media_sources
                 ),
                 "auto_afk": auto_afk,
+                "media_hotkeys": (
+                    media_hotkeys
+                ),
                 "dashboard_layout": (
                     dashboard_layout.to_dict()
                 ),
@@ -708,6 +751,18 @@ class SettingsBackupManager:
                     artwork_hosting
                 ),
             },
+        }
+
+    def _capture_media_hotkeys(
+        self,
+    ) -> dict:
+        return {
+            "included": True,
+            "preferences": (
+                media_hotkey_preferences_to_payload(
+                    self.media_hotkey_store.load()
+                )
+            ),
         }
 
     def _capture_dashboard_layout_profiles(
@@ -965,6 +1020,23 @@ class SettingsBackupManager:
                 ),
             )
         )
+
+        media_hotkeys = (
+            settings[
+                "media_hotkeys"
+            ]
+        )
+
+        if media_hotkeys[
+            "included"
+        ]:
+            self.media_hotkey_store.save(
+                media_hotkey_preferences_from_payload(
+                    media_hotkeys[
+                        "preferences"
+                    ]
+                )
+            )
 
         custom_cards = tuple(
             custom_card_from_dict(
@@ -1436,6 +1508,72 @@ class SettingsBackupManager:
                     "auto_afk.timeout_minutes",
                     minimum=1,
                     maximum=240,
+                )
+            ),
+        }
+
+    @classmethod
+    def _validate_media_hotkeys(
+        cls,
+        value,
+        *,
+        required: bool = False,
+    ) -> dict:
+        if value is None:
+            if required:
+                raise SettingsBackupValidationError(
+                    "This settings backup is missing "
+                    "its global media hotkey settings."
+                )
+
+            return {
+                "included": False,
+            }
+
+        data = cls._require_object(
+            value,
+            "media_hotkeys",
+        )
+
+        included = cls._require_boolean(
+            data.get(
+                "included"
+            ),
+            "media_hotkeys.included",
+        )
+
+        if not included:
+            return {
+                "included": False,
+            }
+
+        preferences_payload = (
+            data.get(
+                "preferences"
+            )
+        )
+
+        try:
+            preferences = (
+                media_hotkey_preferences_from_payload(
+                    preferences_payload
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The global media hotkeys "
+                "in the backup are invalid."
+            ) from error
+
+        return {
+            "included": True,
+            "preferences": (
+                media_hotkey_preferences_to_payload(
+                    preferences
                 )
             ),
         }

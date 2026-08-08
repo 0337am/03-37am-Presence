@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import math
@@ -179,6 +179,210 @@ class MediaHotkeyPreferences:
         return dict(
             self.bindings
         )
+
+
+def media_hotkey_preferences_to_payload(
+    preferences: MediaHotkeyPreferences,
+) -> dict[
+    str,
+    Any,
+]:
+    if not isinstance(
+        preferences,
+        MediaHotkeyPreferences,
+    ):
+        raise TypeError(
+            "preferences must be a "
+            "MediaHotkeyPreferences instance."
+        )
+
+    safe_preferences = (
+        MediaHotkeyPreferences(
+            enabled=(
+                preferences.enabled
+            ),
+            seek_seconds=(
+                preferences.seek_seconds
+            ),
+            bindings=dict(
+                preferences.bindings
+            ),
+        )
+    )
+
+    bindings = {}
+
+    for action in (
+        SUPPORTED_MEDIA_HOTKEY_ACTIONS
+    ):
+        binding = (
+            safe_preferences.bindings.get(
+                action
+            )
+        )
+
+        if binding is None:
+            continue
+
+        bindings[
+            action
+        ] = {
+            "modifiers": (
+                binding.modifiers
+            ),
+            "virtual_key": (
+                binding.virtual_key
+            ),
+        }
+
+    return {
+        "schema_version": (
+            SCHEMA_VERSION
+        ),
+        "enabled": (
+            safe_preferences.enabled
+        ),
+        "seek_seconds": (
+            safe_preferences.seek_seconds
+        ),
+        "bindings": bindings,
+    }
+
+
+def media_hotkey_preferences_from_payload(
+    payload,
+) -> MediaHotkeyPreferences:
+    if not isinstance(
+        payload,
+        dict,
+    ):
+        raise ValueError(
+            "Media hotkey preference payload "
+            "must be an object."
+        )
+
+    schema_version = (
+        payload.get(
+            "schema_version"
+        )
+    )
+
+    if (
+        type(
+            schema_version
+        )
+        is not int
+        or schema_version
+        != SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "Unsupported media hotkey "
+            "preference schema."
+        )
+
+    enabled = payload.get(
+        "enabled"
+    )
+
+    if not isinstance(
+        enabled,
+        bool,
+    ):
+        raise ValueError(
+            "Media hotkey enabled state "
+            "must be a boolean."
+        )
+
+    seek_seconds = (
+        _validated_seek_seconds(
+            payload.get(
+                "seek_seconds"
+            )
+        )
+    )
+
+    raw_bindings = payload.get(
+        "bindings"
+    )
+
+    if not isinstance(
+        raw_bindings,
+        dict,
+    ):
+        raise ValueError(
+            "Media hotkey bindings must "
+            "be an object."
+        )
+
+    bindings: dict[
+        str,
+        HotkeyBinding,
+    ] = {}
+
+    for (
+        action,
+        raw_binding,
+    ) in raw_bindings.items():
+        normalized_action = str(
+            action
+        ).strip()
+
+        if (
+            normalized_action
+            not in SUPPORTED_MEDIA_HOTKEY_ACTIONS
+        ):
+            raise ValueError(
+                "Unsupported media hotkey action: "
+                f"{normalized_action}"
+            )
+
+        if not isinstance(
+            raw_binding,
+            dict,
+        ):
+            raise ValueError(
+                "Each media hotkey binding "
+                "must be an object."
+            )
+
+        modifiers = raw_binding.get(
+            "modifiers"
+        )
+
+        virtual_key = (
+            raw_binding.get(
+                "virtual_key"
+            )
+        )
+
+        if type(
+            modifiers
+        ) is not int:
+            raise ValueError(
+                "Hotkey modifiers must "
+                "be an integer."
+            )
+
+        if type(
+            virtual_key
+        ) is not int:
+            raise ValueError(
+                "Hotkey virtual key must "
+                "be an integer."
+            )
+
+        bindings[
+            normalized_action
+        ] = HotkeyBinding(
+            modifiers=modifiers,
+            virtual_key=virtual_key,
+        )
+
+    return MediaHotkeyPreferences(
+        enabled=enabled,
+        seek_seconds=seek_seconds,
+        bindings=bindings,
+    )
 
 
 class MediaHotkeyPreferencesStore:
@@ -529,180 +733,16 @@ class MediaHotkeyPreferencesStore:
         str,
         Any,
     ]:
-        bindings = {}
-
-        for action in (
-            SUPPORTED_MEDIA_HOTKEY_ACTIONS
-        ):
-            binding = (
-                preferences.bindings.get(
-                    action
-                )
-            )
-
-            if binding is None:
-                continue
-
-            bindings[
-                action
-            ] = {
-                "modifiers": (
-                    binding.modifiers
-                ),
-                "virtual_key": (
-                    binding.virtual_key
-                ),
-            }
-
-        return {
-            "schema_version": (
-                SCHEMA_VERSION
-            ),
-            "enabled": (
-                preferences.enabled
-            ),
-            "seek_seconds": (
-                preferences.seek_seconds
-            ),
-            "bindings": bindings,
-        }
+        return media_hotkey_preferences_to_payload(
+            preferences
+        )
 
     def _preferences_from_payload(
         self,
         payload,
     ) -> MediaHotkeyPreferences:
-        if not isinstance(
-            payload,
-            dict,
-        ):
-            raise ValueError(
-                "Media hotkey preference payload "
-                "must be an object."
-            )
-
-        schema_version = (
-            payload.get(
-                "schema_version"
-            )
-        )
-
-        if (
-            type(
-                schema_version
-            )
-            is not int
-            or schema_version
-            != SCHEMA_VERSION
-        ):
-            raise ValueError(
-                "Unsupported media hotkey "
-                "preference schema."
-            )
-
-        enabled = payload.get(
-            "enabled"
-        )
-
-        if not isinstance(
-            enabled,
-            bool,
-        ):
-            raise ValueError(
-                "Media hotkey enabled state "
-                "must be a boolean."
-            )
-
-        seek_seconds = (
-            _validated_seek_seconds(
-                payload.get(
-                    "seek_seconds"
-                )
-            )
-        )
-
-        raw_bindings = payload.get(
-            "bindings"
-        )
-
-        if not isinstance(
-            raw_bindings,
-            dict,
-        ):
-            raise ValueError(
-                "Media hotkey bindings must "
-                "be an object."
-            )
-
-        bindings: dict[
-            str,
-            HotkeyBinding,
-        ] = {}
-
-        for (
-            action,
-            raw_binding,
-        ) in raw_bindings.items():
-            normalized_action = str(
-                action
-            ).strip()
-
-            if (
-                normalized_action
-                not in SUPPORTED_MEDIA_HOTKEY_ACTIONS
-            ):
-                raise ValueError(
-                    "Unsupported media hotkey action: "
-                    f"{normalized_action}"
-                )
-
-            if not isinstance(
-                raw_binding,
-                dict,
-            ):
-                raise ValueError(
-                    "Media hotkey binding payload "
-                    "must be an object."
-                )
-
-            modifiers = (
-                raw_binding.get(
-                    "modifiers"
-                )
-            )
-
-            virtual_key = (
-                raw_binding.get(
-                    "virtual_key"
-                )
-            )
-
-            if type(
-                modifiers
-            ) is not int:
-                raise ValueError(
-                    "Hotkey modifiers must "
-                    "be an integer."
-                )
-
-            if type(
-                virtual_key
-            ) is not int:
-                raise ValueError(
-                    "Hotkey virtual key must "
-                    "be an integer."
-                )
-
-            bindings[
-                normalized_action
-            ] = HotkeyBinding(
-                modifiers=modifiers,
-                virtual_key=virtual_key,
-            )
-
-        return MediaHotkeyPreferences(
-            enabled=enabled,
-            seek_seconds=seek_seconds,
-            bindings=bindings,
+        return media_hotkey_preferences_from_payload(
+            payload
         )
 
     def _quarantine_invalid_file(

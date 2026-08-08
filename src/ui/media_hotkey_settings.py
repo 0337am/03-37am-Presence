@@ -493,6 +493,11 @@ class MediaHotkeySettingsCard(
             bindings=bindings,
         )
 
+    def reload_runtime(
+        self,
+    ) -> bool:
+        return self._reload_runtime()
+
     def _reload_runtime(
         self,
     ) -> bool:
