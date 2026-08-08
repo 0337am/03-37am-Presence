@@ -10,8 +10,18 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.system.startup import StartupManager
+from src.system.first_run import (
+    FirstRunDecision,
+    FirstRunManager,
+)
 from src.ui.main_window import MainWindow
 from src.ui.tray import TrayController
+from src.ui.welcome import WelcomeDialog
+from src.ui.welcome_flow import (
+    WelcomeFlow,
+    command_line_starts_minimized,
+    should_show_main_window,
+)
 
 from src.system.media_hotkey_runtime import (
     MediaHotkeyRuntime,
@@ -322,6 +332,28 @@ def main() -> int:
         "03:37am"
     )
 
+    first_run_manager = (
+        FirstRunManager()
+    )
+
+    try:
+        first_run_decision = (
+            first_run_manager.evaluate()
+        )
+    except Exception as error:
+        print(
+            "First-run setup error:",
+            error,
+        )
+
+        first_run_decision = (
+            FirstRunDecision(
+                show_welcome=False,
+                migrated_existing_install=False,
+                reason="error",
+            )
+        )
+
     instance_lock = (
         acquire_single_instance_lock()
     )
@@ -369,7 +401,65 @@ def main() -> int:
         tray_controller.quit_application
     )
 
-    window.show()
+    start_minimized = (
+        command_line_starts_minimized(
+            sys.argv
+        )
+    )
+
+    show_main_window = (
+        should_show_main_window(
+            show_welcome=(
+                first_run_decision
+                .show_welcome
+            ),
+            start_minimized=(
+                start_minimized
+            ),
+        )
+    )
+
+    if show_main_window:
+        window.show()
+
+    welcome_dialog = None
+    welcome_flow = None
+
+    if (
+        first_run_decision
+        .show_welcome
+    ):
+        welcome_dialog = (
+            WelcomeDialog(
+                theme=(
+                    window
+                    .theme_manager
+                    .theme()
+                ),
+                parent=window,
+            )
+        )
+
+        if not app_icon.isNull():
+            welcome_dialog.setWindowIcon(
+                app_icon
+            )
+
+        welcome_flow = WelcomeFlow(
+            manager=(
+                first_run_manager
+            ),
+            main_window=window,
+            dialog=welcome_dialog,
+        )
+
+        welcome_dialog.action_requested.connect(
+            welcome_flow.handle_action
+        )
+
+        welcome_dialog.show()
+        welcome_dialog.raise_()
+        welcome_dialog.activateWindow()
 
     return app.exec()
 
