@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import urllib.parse
+
 from collections.abc import Mapping
 from email.message import Message
 import json
@@ -726,6 +728,434 @@ def spotify_account_from_payload(
     )
 
 
+
+
+MAX_SPOTIFY_API_URL_LENGTH = 8192
+
+
+def _contains_control_character(
+    value: str,
+) -> bool:
+    return any(
+        ord(character) < 32
+        or ord(character) == 127
+        for character in value
+    )
+
+
+def _validate_spotify_api_path(
+    path: str,
+) -> str:
+    if not isinstance(
+        path,
+        str,
+    ):
+        raise TypeError(
+            "Spotify API path must be a string."
+        )
+
+    if (
+        not path
+        or path == "/"
+    ):
+        raise ValueError(
+            "Spotify API path must identify an endpoint."
+        )
+
+    if (
+        path != path.strip()
+        or any(
+            character.isspace()
+            for character in path
+        )
+        or _contains_control_character(
+            path
+        )
+    ):
+        raise ValueError(
+            "Spotify API path contains invalid characters."
+        )
+
+    if "\\" in path:
+        raise ValueError(
+            "Spotify API path cannot contain backslashes."
+        )
+
+    if (
+        not path.startswith(
+            "/"
+        )
+        or path.startswith(
+            "//"
+        )
+    ):
+        raise ValueError(
+            (
+                "Spotify API path must be an "
+                "absolute API path without a host."
+            )
+        )
+
+    try:
+        path.encode(
+            "ascii"
+        )
+    except UnicodeEncodeError as error:
+        raise ValueError(
+            "Spotify API path must use ASCII characters."
+        ) from error
+
+    try:
+        parsed = urllib.parse.urlsplit(
+            path
+        )
+    except ValueError as error:
+        raise ValueError(
+            "Spotify API path is malformed."
+        ) from error
+
+    if (
+        parsed.scheme
+        or parsed.netloc
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            (
+                "Spotify API path cannot include "
+                "a scheme, host, query, or fragment."
+            )
+        )
+
+    decoded_once = urllib.parse.unquote(
+        parsed.path
+    )
+
+    decoded_twice = urllib.parse.unquote(
+        decoded_once
+    )
+
+    for decoded in (
+        decoded_once,
+        decoded_twice,
+    ):
+        if (
+            _contains_control_character(
+                decoded
+            )
+            or any(
+                character.isspace()
+                for character in decoded
+            )
+        ):
+            raise ValueError(
+                (
+                    "Spotify API path contains "
+                    "invalid encoded characters."
+                )
+            )
+
+        segments = decoded.split(
+            "/"
+        )
+
+        if any(
+            segment in {
+                ".",
+                "..",
+            }
+            for segment in segments
+        ):
+            raise ValueError(
+                (
+                    "Spotify API path cannot "
+                    "contain traversal segments."
+                )
+            )
+
+    return parsed.path
+
+
+def _spotify_api_query_string(
+    query: Mapping | None,
+) -> str:
+    if query is None:
+        return ""
+
+    if not isinstance(
+        query,
+        Mapping,
+    ):
+        raise TypeError(
+            "Spotify API query must be a mapping or None."
+        )
+
+    pairs = []
+
+    for key, value in query.items():
+        if not isinstance(
+            key,
+            str,
+        ):
+            raise TypeError(
+                "Spotify API query keys must be strings."
+            )
+
+        if (
+            not key
+            or not key.isascii()
+            or any(
+                not (
+                    character.isalnum()
+                    or character
+                    in "_-."
+                )
+                for character in key
+            )
+        ):
+            raise ValueError(
+                "Spotify API query contains an invalid key."
+            )
+
+        if value is None:
+            continue
+
+        if isinstance(
+            value,
+            bool,
+        ):
+            rendered = (
+                "true"
+                if value
+                else "false"
+            )
+
+        elif (
+            isinstance(
+                value,
+                int,
+            )
+            and not isinstance(
+                value,
+                bool,
+            )
+        ):
+            rendered = str(
+                value
+            )
+
+        elif isinstance(
+            value,
+            str,
+        ):
+            rendered = value
+
+        else:
+            raise TypeError(
+                (
+                    "Spotify API query values must "
+                    "be strings, integers, booleans, "
+                    "or None."
+                )
+            )
+
+        if _contains_control_character(
+            rendered
+        ):
+            raise ValueError(
+                (
+                    "Spotify API query values cannot "
+                    "contain control characters."
+                )
+            )
+
+        pairs.append(
+            (
+                key,
+                rendered,
+            )
+        )
+
+    return urllib.parse.urlencode(
+        pairs
+    )
+
+
+def _build_spotify_api_url(
+    path: str,
+    query: Mapping | None = None,
+) -> str:
+    safe_path = (
+        _validate_spotify_api_path(
+            path
+        )
+    )
+
+    base_url = (
+        SPOTIFY_API_BASE_URL.rstrip(
+            "/"
+        )
+    )
+
+    url = (
+        base_url
+        + safe_path
+    )
+
+    query_string = (
+        _spotify_api_query_string(
+            query
+        )
+    )
+
+    if query_string:
+        url = (
+            url
+            + "?"
+            + query_string
+        )
+
+    if (
+        len(
+            url
+        )
+        > MAX_SPOTIFY_API_URL_LENGTH
+    ):
+        raise ValueError(
+            "Spotify API request URL is too long."
+        )
+
+    base_parts = urllib.parse.urlsplit(
+        base_url
+    )
+
+    request_parts = urllib.parse.urlsplit(
+        url
+    )
+
+    required_path_prefix = (
+        base_parts.path.rstrip(
+            "/"
+        )
+        + "/"
+    )
+
+    if (
+        request_parts.scheme
+        != "https"
+        or request_parts.scheme
+        != base_parts.scheme
+        or request_parts.netloc
+        != base_parts.netloc
+        or not request_parts.path.startswith(
+            required_path_prefix
+        )
+    ):
+        raise ValueError(
+            "Spotify API request URL is outside the trusted API origin."
+        )
+
+    return url
+
+
+def _validate_spotify_api_request_url(
+    url: str,
+) -> str:
+    if not isinstance(
+        url,
+        str,
+    ):
+        raise TypeError(
+            "Spotify API URL must be a string."
+        )
+
+    if (
+        not url
+        or url != url.strip()
+        or _contains_control_character(
+            url
+        )
+        or any(
+            character.isspace()
+            for character in url
+        )
+    ):
+        raise ValueError(
+            "Unsupported Spotify API URL."
+        )
+
+    if (
+        len(
+            url
+        )
+        > MAX_SPOTIFY_API_URL_LENGTH
+    ):
+        raise ValueError(
+            "Spotify API request URL is too long."
+        )
+
+    try:
+        request_parts = urllib.parse.urlsplit(
+            url
+        )
+
+        base_url = (
+            SPOTIFY_API_BASE_URL.rstrip(
+                "/"
+            )
+        )
+
+        base_parts = urllib.parse.urlsplit(
+            base_url
+        )
+
+    except ValueError as error:
+        raise ValueError(
+            "Unsupported Spotify API URL."
+        ) from error
+
+    base_path = (
+        base_parts.path.rstrip(
+            "/"
+        )
+    )
+
+    required_path_prefix = (
+        base_path
+        + "/"
+    )
+
+    if (
+        request_parts.scheme
+        != "https"
+        or request_parts.scheme
+        != base_parts.scheme
+        or request_parts.netloc
+        != base_parts.netloc
+        or bool(
+            request_parts.fragment
+        )
+        or not request_parts.path.startswith(
+            required_path_prefix
+        )
+    ):
+        raise ValueError(
+            "Unsupported Spotify API URL."
+        )
+
+    endpoint_path = request_parts.path[
+        len(
+            base_path
+        ):
+    ]
+
+    _validate_spotify_api_path(
+        endpoint_path
+    )
+
+    return url
+
+
 class SpotifyWebApiClient:
     def __init__(
         self,
@@ -759,10 +1189,9 @@ class SpotifyWebApiClient:
         url: str,
         access_token: str,
     ) -> dict[str, Any]:
-        if url != CURRENT_USER_PROFILE_URL:
-            raise ValueError(
-                "Unsupported Spotify API URL."
-            )
+        url = _validate_spotify_api_request_url(
+            url
+        )
 
         token = _validate_access_token(
             access_token
@@ -914,6 +1343,24 @@ class SpotifyWebApiClient:
         return _decode_json_object(
             body
         )
+
+    def get_json(
+        self,
+        access_token: str,
+        path: str,
+        *,
+        query: Mapping | None = None,
+    ) -> dict[str, Any]:
+        url = _build_spotify_api_url(
+            path,
+            query,
+        )
+
+        return self._get_json(
+            url,
+            access_token,
+        )
+
 
     def get_current_user_profile(
         self,
