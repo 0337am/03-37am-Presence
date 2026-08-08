@@ -318,12 +318,18 @@ class UpdateChecker:
             )
 
         except urllib.error.HTTPError as error:
-            return self._http_error_result(
-                current_version=(
-                    str(local_version)
-                ),
-                error=error,
-            )
+            try:
+                return self._http_error_result(
+                    current_version=(
+                        str(local_version)
+                    ),
+                    error=error,
+                )
+            finally:
+                try:
+                    error.close()
+                except Exception:
+                    pass
 
         except urllib.error.URLError:
             return self._error_result(
