@@ -12,17 +12,17 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_python_version_metadata(self):
         self.assertEqual(
             APP_VERSION,
-            "2.7.0",
+            "2.8.0",
         )
 
         self.assertEqual(
             RELEASE_NAME,
-            "Updates & Distribution",
+            "First-Run Polish",
         )
 
         self.assertEqual(
             DISPLAY_VERSION,
-            "v2.7.0 - Updates & Distribution",
+            "v2.8.0 - First-Run Polish",
         )
 
     def test_windows_version_metadata(self):
@@ -33,61 +33,66 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "filevers=(2, 7, 0, 0)",
+            "filevers=(2, 8, 0, 0)",
             source,
         )
 
         self.assertIn(
-            "prodvers=(2, 7, 0, 0)",
+            "prodvers=(2, 8, 0, 0)",
             source,
         )
 
         self.assertEqual(
-            source.count('"2.7.0.0"'),
+            source.count('"2.8.0.0"'),
             2,
         )
 
         self.assertIn(
-            "03:37am Presence - Updates & Distribution",
+            "03:37am Presence - First-Run Polish",
             source,
         )
 
-    def test_changelog_starts_with_v27(self):
+    def test_changelog_starts_with_v28(self):
         source = Path(
             "CHANGELOG.md"
         ).read_text(
             encoding="utf-8"
         )
 
+        v28 = source.index(
+            "## v2.8.0 - First-Run Polish"
+        )
+
         v27 = source.index(
             "## v2.7.0 - Updates & Distribution"
         )
 
-        v26 = source.index(
-            "## v2.6.0 - Library & Insights Update"
-        )
-
         self.assertLess(
+            v28,
             v27,
-            v26,
         )
 
         self.assertIn(
-            "Released 17 July 2026.",
+            "configurable global media hotkeys",
             source,
         )
 
         self.assertIn(
-            "mandatory SHA-256 verification",
+            "first-run Welcome experience",
             source,
         )
 
         self.assertIn(
-            "guided Cloudinary setup dialog",
+            "honor `--minimized`",
             source,
         )
 
-    def test_readme_describes_v27(self):
+        self.assertIn(
+            "does not automatically enable global hotkeys",
+            source,
+        )
+
+    def test_readme_describes_v28(self):
         source = Path(
             "README.MD"
         ).read_text(
@@ -95,32 +100,37 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "## v2.7.0 highlights",
+            "## v2.8.0 highlights",
             source,
         )
 
         self.assertNotIn(
-            "## v2.6.0 highlights",
+            "## v2.7.0 highlights",
             source,
         )
 
         self.assertIn(
-            "published SHA-256 checksum",
+            "optional global media controls",
             source,
         )
 
         self.assertIn(
-            "explicit approval",
+            "hotkeys disabled by default",
             source,
         )
 
         self.assertIn(
-            "guided Cloudinary setup",
+            "first-launch Welcome experience",
             source,
         )
 
         self.assertIn(
-            "No silent installs",
+            "silent migration",
+            source,
+        )
+
+        self.assertIn(
+            "No automatic enabling of hotkeys",
             source,
         )
 

@@ -1,5 +1,5 @@
-APP_VERSION = "2.7.0"
-RELEASE_NAME = "Updates & Distribution"
+APP_VERSION = "2.8.0"
+RELEASE_NAME = "First-Run Polish"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

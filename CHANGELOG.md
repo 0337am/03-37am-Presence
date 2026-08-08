@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.8.0 - First-Run Polish
+
+### Added
+
+- Added reusable Windows media controls for play/pause, previous, next, shuffle, repeat, and seeking when supported by the active media session.
+- Added configurable global media hotkeys backed by the Windows hotkey API and bridged safely into the Qt application.
+- Added persistent media-hotkey preferences with duplicate-shortcut validation, safe reload behavior, and settings backup and restore support.
+- Added a compact first-run Welcome experience with direct routes to Media Sources, Discord Presence, and Global Media Controls.
+- Added durable local first-run state so incomplete onboarding can return on the next launch without relying on Qt settings.
+
+### Improved
+
+- Global media hotkeys remain disabled by default and are only registered after the user explicitly enables them.
+- Existing installations are silently marked as having completed onboarding, so upgrading users are not shown a first-launch screen.
+- Fresh installations keep onboarding visible even when the application is started with `--minimized`.
+- Completed installations now honor `--minimized` by remaining in the system tray until opened.
+- First-run evaluation occurs before application-managed LocalAppData artifacts and the single-instance lock can make a fresh installation look established.
+
+### Fixed
+
+- Fixed Windows startup launches carrying `--minimized` without the main application actually honoring the argument.
+- Fixed fresh-install detection being affected by the single-instance lock file created during startup.
+- Protected invalid or unsupported first-run state by quarantining it before recovery.
+
+### Privacy and upgrade behavior
+
+- First-run state is stored locally under `%LOCALAPPDATA%\0337am Presence` and is kept separate from portable settings backups.
+- The Welcome experience does not automatically enable global hotkeys, Windows startup, browser media sources, Spotify OAuth, or other optional features.
+- Existing settings, Dashboard layouts, Library history, Presence configuration, themes, media-source preferences, and global media-hotkey preferences continue to load normally.
+- Media hotkey commands control the existing local media session only and do not stream audio or upload listening activity.
+- Restoring application settings does not intentionally retrigger first-run onboarding.
+
 ## v2.7.0 - Updates & Distribution
 
 Released 17 July 2026.

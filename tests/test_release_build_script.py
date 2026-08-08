@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from pathlib import Path
 
 
@@ -131,8 +131,10 @@ class ReleaseBuildScriptTests(unittest.TestCase):
         forbidden_values = (
             'app_version = "2.6.0"',
             'app_version = "2.7.0"',
+            'app_version = "2.8.0"',
             "library & insights update",
             "updates & distribution",
+            "first-run polish",
             "v2.6-final-release-artifacts",
         )
 
@@ -149,6 +151,7 @@ class ReleaseBuildScriptTests(unittest.TestCase):
             "c:\\users\\gtafe",
             "03-37am-presence-clean",
             "03-37am-presence-v2.7-backups",
+            "03-37am-presence-v2.8-backups",
         )
 
         for forbidden_value in forbidden_values:

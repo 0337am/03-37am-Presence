@@ -1,19 +1,19 @@
 # 03:37am Presence
 
-03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
+03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.7.0 highlights
+## v2.8.0 highlights
 
-- Check the official public release feed from Settings.
-- Download updates outside the UI thread with visible progress.
-- Verify installers against the published SHA-256 checksum.
-- Require explicit approval before launching an update installer.
-- Recheck installer integrity immediately before launch.
-- Close safely through the existing tray lifecycle after a successful launch.
-- Keep the app open when installation is cancelled or fails.
-- Follow the guided Cloudinary setup without entering API keys or secrets.
-- Build repeatable standalone and installer artifacts with `SHA256SUMS.txt`.
-- No silent installs, automatic downgrades, shell execution, or listening-data uploads.
+- Use optional global media controls for play/pause, previous, next, shuffle, repeat, and seeking.
+- Configure global media hotkeys from Settings, with hotkeys disabled by default until explicitly enabled.
+- Back up and restore global media-hotkey preferences with the rest of the supported portable settings.
+- Guide genuinely new installations through a compact first-launch Welcome experience.
+- Jump directly from Welcome to Media Sources, Discord Presence, or Global Media Controls.
+- Leave Welcome incomplete with **Not now** or the window close button and resume it on a later launch.
+- Keep existing installations out of onboarding through silent migration to completed first-run state.
+- Honor `--minimized` for completed installations while still keeping pending first-run onboarding visible.
+- Keep first-run state local and separate from portable settings backups.
+- No automatic enabling of hotkeys, Windows startup, browser media sources, or Spotify OAuth.
 
 ## Core features
 
@@ -25,6 +25,7 @@
 - Recently Played artwork caching.
 - Automatic AFK presence with restoration of the previous mode.
 - Theme presets, custom colours, editable title and subtitle, an optional fixed About footer, and fixed app-icon About artwork.
+- Optional configurable global media hotkeys for playback, shuffle, repeat, and seeking.
 - System tray controls and Windows startup options.
 - Diagnostics, data controls, safe Library Summary and Listening Activity CSV exports, and settings backup.
 
@@ -62,7 +63,7 @@ The About-page thank-you footer can be shown or hidden, but its wording is fixed
 
 ## Settings backup and restore
 
-Settings backups are versioned JSON files. By default they include portable UI, theme, Atmosphere slider, branding text, media-source, Auto AFK, window, startup, dashboard-layout, Dashboard Layout Profile, custom Link-card, and Presence Preset settings. Local artwork files, preset image files, Atmosphere background images, favicon caches, OAuth tokens, credentials, and local paths stay private on the device.
+Settings backups are versioned JSON files. By default they include portable UI, theme, Atmosphere slider, branding text, media-source, Auto AFK, global media-hotkey, window, startup, dashboard-layout, Dashboard Layout Profile, custom Link-card, and Presence Preset settings. Local artwork files, preset image files, Atmosphere background images, favicon caches, OAuth tokens, credentials, and local paths stay private on the device.
 
 The following are always excluded:
 
