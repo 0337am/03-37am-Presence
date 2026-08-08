@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.ui.spotify_artwork import SpotifyArtworkLoader
+
 from PyQt6.QtCore import (
     Qt,
     pyqtSlot,
@@ -85,6 +87,7 @@ class SpotifySearchResultRow(
         self,
         item: SpotifySearchItem,
         parent=None,
+        artwork_loader=None,
     ) -> None:
         if not isinstance(
             item,
@@ -102,6 +105,9 @@ class SpotifySearchResultRow(
         )
 
         self.item = item
+        self.artwork_loader = (
+            artwork_loader
+        )
 
         self.setObjectName(
             "spotifySearchResultRow"
@@ -142,8 +148,8 @@ class SpotifySearchResultRow(
         )
 
         self.icon_label.setFixedSize(
-            34,
-            34,
+            52,
+            52,
         )
 
         text_layout = QVBoxLayout()
@@ -229,6 +235,135 @@ class SpotifySearchResultRow(
             ),
         )
 
+        self._request_artwork()
+
+    def _request_artwork(
+        self,
+    ) -> None:
+        artwork_url = (
+            self.item.image_url.strip()
+            if self.item.image_url
+            else ""
+        )
+
+        if (
+            not artwork_url
+            or self.artwork_loader
+            is None
+        ):
+            return
+
+        request = getattr(
+            self.artwork_loader,
+            "request",
+            None,
+        )
+
+        ready = getattr(
+            self.artwork_loader,
+            "artwork_ready",
+            None,
+        )
+
+        failed = getattr(
+            self.artwork_loader,
+            "artwork_failed",
+            None,
+        )
+
+        if (
+            not callable(
+                request
+            )
+            or ready is None
+            or failed is None
+        ):
+            return
+
+        try:
+            ready.connect(
+                self._handle_artwork_ready
+            )
+
+            failed.connect(
+                self._handle_artwork_failed
+            )
+
+            request(
+                artwork_url
+            )
+
+        except Exception:
+            return
+
+    def _handle_artwork_ready(
+        self,
+        artwork_url: str,
+        pixmap,
+    ) -> None:
+        if (
+            artwork_url
+            != self.item.image_url
+        ):
+            return
+
+        is_null = getattr(
+            pixmap,
+            "isNull",
+            None,
+        )
+
+        scaled = getattr(
+            pixmap,
+            "scaled",
+            None,
+        )
+
+        if (
+            not callable(
+                is_null
+            )
+            or not callable(
+                scaled
+            )
+            or is_null()
+        ):
+            return
+
+        try:
+            display_pixmap = scaled(
+                self.icon_label.size(),
+                (
+                    Qt.AspectRatioMode
+                    .KeepAspectRatio
+                ),
+                (
+                    Qt.TransformationMode
+                    .SmoothTransformation
+                ),
+            )
+
+        except Exception:
+            return
+
+        self.icon_label.setText(
+            ""
+        )
+
+        self.icon_label.setPixmap(
+            display_pixmap
+        )
+
+    def _handle_artwork_failed(
+        self,
+        artwork_url: str,
+    ) -> None:
+        if (
+            artwork_url
+            != self.item.image_url
+        ):
+            return
+
 
 class SpotifySearchSection(
     QFrame
@@ -237,6 +372,7 @@ class SpotifySearchSection(
         self,
         item_type: SpotifySearchItemType,
         parent=None,
+        artwork_loader=None,
     ) -> None:
         if not isinstance(
             item_type,
@@ -254,6 +390,9 @@ class SpotifySearchSection(
         )
 
         self.item_type = item_type
+        self.artwork_loader = (
+            artwork_loader
+        )
 
         self.setObjectName(
             "spotifySearchSection"
@@ -407,6 +546,9 @@ class SpotifySearchSection(
             row = SpotifySearchResultRow(
                 item,
                 parent=self,
+                artwork_loader=(
+                    self.artwork_loader
+                ),
             )
 
             self._rows.append(
@@ -440,6 +582,7 @@ class SpotifySearchPage(
         runtime,
         theme_manager=None,
         parent=None,
+        artwork_loader=None,
     ) -> None:
         super().__init__(
             parent
@@ -479,6 +622,33 @@ class SpotifySearchPage(
         )
 
         self._last_results = None
+
+        if artwork_loader is None:
+            artwork_loader = (
+                SpotifyArtworkLoader(
+                    parent=self
+                )
+            )
+
+        request_artwork = getattr(
+            artwork_loader,
+            "request",
+            None,
+        )
+
+        if not callable(
+            request_artwork
+        ):
+            raise TypeError(
+                (
+                    "artwork_loader must provide "
+                    "a callable request method"
+                )
+            )
+
+        self.artwork_loader = (
+            artwork_loader
+        )
 
         self.setObjectName(
             "spotifySearchRoot"
@@ -761,6 +931,9 @@ class SpotifySearchPage(
                 item_type,
                 parent=(
                     self.results_container
+                ),
+                artwork_loader=(
+                    self.artwork_loader
                 ),
             )
 
