@@ -1195,6 +1195,24 @@ class MainWindow(QMainWindow):
             page_index
         )
 
+        if page_index == 5:
+            spotify_page = getattr(
+                self,
+                "spotify_page",
+                None,
+            )
+
+            activate_spotify = getattr(
+                spotify_page,
+                "activate",
+                None,
+            )
+
+            if callable(
+                activate_spotify
+            ):
+                activate_spotify()
+
         navigation_page_indexes = getattr(
             self,
             "navigation_page_indexes",

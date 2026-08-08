@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from src.ui.spotify_playlist_widgets import (
+    SpotifyPlaylistHome,
+)
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFrame,
@@ -98,11 +102,15 @@ class SpotifyPage(
             )
         )
 
+        self._activated = False
+
         self.setObjectName(
             "spotifyRoot"
         )
 
         self.build_ui()
+
+        self._install_playlist_home()
         self.connect_signals()
 
         self.theme_manager.theme_changed.connect(
@@ -431,12 +439,102 @@ class SpotifyPage(
             == SPOTIFY_SEARCH_INDEX
         )
 
+    def _install_playlist_home(
+        self,
+    ) -> None:
+        previous_home = (
+            self.content_stack.widget(
+                SPOTIFY_HOME_INDEX
+            )
+        )
+
+        current_widget = (
+            self.content_stack
+            .currentWidget()
+        )
+
+        search_artwork_loader = (
+            getattr(
+                getattr(
+                    self,
+                    "search_page",
+                    None,
+                ),
+                "artwork_loader",
+                None,
+            )
+        )
+
+        self.playlist_home = (
+            SpotifyPlaylistHome(
+                self.playlist_runtime,
+                theme_manager=(
+                    self.theme_manager
+                ),
+                artwork_loader=(
+                    search_artwork_loader
+                ),
+                parent=(
+                    self.content_stack
+                ),
+            )
+        )
+
+        if previous_home is not None:
+            self.content_stack.removeWidget(
+                previous_home
+            )
+
+        self.content_stack.insertWidget(
+            SPOTIFY_HOME_INDEX,
+            self.playlist_home,
+        )
+
+        self.home_page = (
+            self.playlist_home
+        )
+
+        if (
+            current_widget is None
+            or current_widget
+            is previous_home
+        ):
+            self.content_stack.setCurrentWidget(
+                self.playlist_home
+            )
+
+        else:
+            self.content_stack.setCurrentWidget(
+                current_widget
+            )
+
+        if previous_home is not None:
+            previous_home.deleteLater()
+
+    def activate(
+        self,
+    ) -> bool:
+        self._activated = True
+
+        if (
+            self.content_stack.currentIndex()
+            != SPOTIFY_HOME_INDEX
+        ):
+            return False
+
+        return bool(
+            self.playlist_home.ensure_loaded()
+        )
+
     def show_home(
         self,
     ) -> None:
         self._set_section(
             SPOTIFY_HOME_INDEX
         )
+
+        if self._activated:
+            self.playlist_home.ensure_loaded()
 
     def show_search(
         self,
