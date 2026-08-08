@@ -5,7 +5,10 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QLockFile
+from PyQt6.QtCore import (
+    QLockFile,
+    QTimer,
+)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -372,6 +375,11 @@ def main() -> int:
         )
 
     window = MainWindow()
+
+    QTimer.singleShot(
+        0,
+        window.restore_spotify_connection,
+    )
 
     if not app_icon.isNull():
         window.setWindowIcon(

@@ -39,6 +39,12 @@ from src.system.afk_preferences import (
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
+from src.spotify.constants import (
+    SPOTIFY_PUBLIC_CLIENT_ID,
+)
+from src.spotify.qt_connection_runtime import (
+    SpotifyQtConnectionRuntime,
+)
 from src.ui.about import AboutPage
 from src.ui.dashboard import DashboardPage
 from src.ui.library import LibraryPage
@@ -799,8 +805,18 @@ class MainWindow(QMainWindow):
             self.theme_manager
         )
 
+        self.spotify_connection_runtime = (
+            SpotifyQtConnectionRuntime(
+                SPOTIFY_PUBLIC_CLIENT_ID,
+                parent=self,
+            )
+        )
+
         self.settings_page = SettingsPage(
-            self.theme_manager
+            self.theme_manager,
+            spotify_runtime=(
+                self.spotify_connection_runtime
+            ),
         )
 
         self.settings_page.set_diagnostics_provider(
@@ -871,6 +887,11 @@ class MainWindow(QMainWindow):
         self.settings_page.set_media_hotkey_reload_callback(
             callback
         )
+
+    def restore_spotify_connection(
+        self,
+    ) -> None:
+        self.settings_page.restore_spotify_connection()
 
     def open_settings_section(
         self,

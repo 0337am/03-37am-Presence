@@ -65,6 +65,10 @@ from src.ui.artwork_hosting_card import (
     ArtworkHostingCard,
 )
 
+from src.ui.spotify_connection_card import (
+    SpotifyConnectionCard,
+)
+
 from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
@@ -192,6 +196,8 @@ class SettingsPage(QWidget):
     def __init__(
         self,
         theme_manager=None,
+        *,
+        spotify_runtime=None,
     ):
         super().__init__()
 
@@ -203,6 +209,10 @@ class SettingsPage(QWidget):
         self.theme_manager = (
             theme_manager
             or ThemeManager(self)
+        )
+
+        self.spotify_runtime = (
+            spotify_runtime
         )
 
         self.color_buttons = {}
@@ -886,6 +896,16 @@ class SettingsPage(QWidget):
 
         sources_layout.addWidget(
             browser_help
+        )
+
+        self.spotify_connection_card = (
+            SpotifyConnectionCard(
+                self.spotify_runtime
+            )
+        )
+
+        self.spotify_connection_card.message_changed.connect(
+            self.set_status_message
         )
 
         self.artwork_hosting_card = (
@@ -1799,6 +1819,9 @@ class SettingsPage(QWidget):
         root.addWidget(atmosphere_card)
         root.addWidget(sources)
         root.addWidget(
+            self.spotify_connection_card
+        )
+        root.addWidget(
             self.artwork_hosting_card
         )
         root.addWidget(auto_afk)
@@ -1821,6 +1844,9 @@ class SettingsPage(QWidget):
             "theme": theme_card,
             "atmosphere": atmosphere_card,
             "media_sources": sources,
+            "spotify": (
+                self.spotify_connection_card
+            ),
             "artwork_hosting": (
                 self.artwork_hosting_card
             ),
@@ -1849,6 +1875,11 @@ class SettingsPage(QWidget):
         self.status.setText(
             str(message)
         )
+
+    def restore_spotify_connection(
+        self,
+    ) -> None:
+        self.spotify_connection_card.restore()
 
     def set_media_hotkey_reload_callback(
         self,
@@ -3351,6 +3382,10 @@ class SettingsPage(QWidget):
             "sources": "media_sources",
             "media": "media_sources",
             "media sources": "media_sources",
+            "spotify": "spotify",
+            "spotify account": "spotify",
+            "spotify connection": "spotify",
+            "connect spotify": "spotify",
             "artwork": "artwork_hosting",
             "cloudinary": "artwork_hosting",
             "hosting": "artwork_hosting",

@@ -12,6 +12,12 @@ SPOTIFY_TOKEN_URL = (
 )
 SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
 
+# Spotify application Client IDs are public identifiers.
+# OAuth credentials and refresh tokens are never stored here.
+SPOTIFY_PUBLIC_CLIENT_ID = (
+    "2e081ef05a434508b7158732cb45cfaa"
+)
+
 SPOTIFY_LOOPBACK_HOST = "127.0.0.1"
 SPOTIFY_CALLBACK_PORT = 43821
 SPOTIFY_CALLBACK_PATH = "/callback"
