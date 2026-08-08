@@ -52,6 +52,10 @@ from src.library.history_store import (
 )
 from src.music.manager import MusicManager
 from src.music.song import Song
+from src.ui.playback_presentation_clock import (
+    PlaybackPresentationClock,
+    format_playback_time,
+)
 from src.music.source_preferences import (
     SourcePreferencesStore,
 )
@@ -599,6 +603,10 @@ class DashboardPage(QWidget):
         self._branding_title = "03:37am Presence"
         self._last_worker_error = ""
 
+        self.playback_presentation_clock = (
+            PlaybackPresentationClock()
+        )
+
         self.dashboard_drag_handles = {}
         self.dashboard_resize_handles = {}
         self.dashboard_action_handles = {}
@@ -664,6 +672,20 @@ class DashboardPage(QWidget):
         self.equalizer_timer.timeout.connect(
             self.advance_equalizer
         )
+
+        self.playback_presentation_timer = QTimer(
+            self
+        )
+
+        self.playback_presentation_timer.setInterval(
+            250
+        )
+
+        self.playback_presentation_timer.timeout.connect(
+            self.refresh_playback_presentation
+        )
+
+        self.playback_presentation_timer.start()
 
         self.theme_manager.theme_changed.connect(
             self.apply_theme
@@ -8143,7 +8165,7 @@ class DashboardPage(QWidget):
         self.progress.setObjectName(
             "playbackProgress"
         )
-        self.progress.setRange(0, 100)
+        self.progress.setRange(0, 10000)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
 
@@ -10088,6 +10110,7 @@ class DashboardPage(QWidget):
     @pyqtSlot(object)
     def apply_song(self, song):
         if song is None or not song.title:
+            self.playback_presentation_clock.clear()
             self.show_nothing_playing()
             return
 
@@ -10098,6 +10121,45 @@ class DashboardPage(QWidget):
         )
 
         self.song = song
+
+        self.playback_presentation_clock.observe(
+            position_seconds=float(
+                self.time_to_seconds(
+                    song.position
+                )
+            ),
+            duration_seconds=float(
+                self.time_to_seconds(
+                    song.duration
+                )
+            ),
+            playing=bool(
+                song.playing
+            ),
+            identity=(
+                str(
+                    song.title
+                    or ""
+                ),
+                str(
+                    song.artist
+                    or ""
+                ),
+                str(
+                    song.album
+                    or ""
+                ),
+                str(
+                    getattr(
+                        song,
+                        "source_app",
+                        "",
+                    )
+                    or ""
+                ),
+            ),
+        )
+
         self.cache_song_artwork(song)
 
         self.song_title.setText(song.title)
@@ -10170,6 +10232,7 @@ class DashboardPage(QWidget):
 
         self.update_artwork(song)
         self.update_progress(song)
+        self.refresh_playback_presentation()
 
         QTimer.singleShot(
             300,
@@ -10674,6 +10737,86 @@ class DashboardPage(QWidget):
             "Loaded"
         )
 
+    def refresh_playback_presentation(
+        self,
+    ):
+        clock = getattr(
+            self,
+            "playback_presentation_clock",
+            None,
+        )
+
+        if clock is None:
+            return
+
+        try:
+            state = clock.current()
+
+        except Exception:
+            return
+
+        if state is None:
+            return
+
+        current_text = (
+            format_playback_time(
+                state.position_seconds
+            )
+        )
+
+        self.current_time.setText(
+            current_text
+        )
+
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        if (
+            state.playing
+            and song is not None
+        ):
+            self.preview_time.setText(
+                (
+                    f"{current_text} / "
+                    f"{song.duration}"
+                )
+            )
+
+        total = (
+            state.duration_seconds
+        )
+
+        if total <= 0.0:
+            self.progress.setValue(
+                0
+            )
+            return
+
+        progress_value = int(
+            round(
+                (
+                    state.position_seconds
+                    / total
+                )
+                * 10000
+            )
+        )
+
+        progress_value = max(
+            0,
+            min(
+                10000,
+                progress_value,
+            ),
+        )
+
+        self.progress.setValue(
+            progress_value
+        )
+
     def update_progress(self, song: Song):
         current = self.time_to_seconds(
             song.position
@@ -10686,17 +10829,22 @@ class DashboardPage(QWidget):
             self.progress.setValue(0)
             return
 
-        percentage = int(
-            (current / total) * 100
+        progress_value = int(
+            round(
+                (current / total) * 10000
+            )
         )
 
-        percentage = max(
+        progress_value = max(
             0,
-            min(100, percentage),
+            min(
+                10000,
+                progress_value,
+            ),
         )
 
         self.progress.setValue(
-            percentage
+            progress_value
         )
 
     def show_nothing_playing(self):
@@ -10787,6 +10935,15 @@ class DashboardPage(QWidget):
 
         if dashboard_timer is not None:
             dashboard_timer.stop()
+
+        playback_presentation_timer = getattr(
+            self,
+            "playback_presentation_timer",
+            None,
+        )
+
+        if playback_presentation_timer is not None:
+            playback_presentation_timer.stop()
 
         worker = getattr(
             self,
