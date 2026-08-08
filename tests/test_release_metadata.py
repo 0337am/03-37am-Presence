@@ -73,6 +73,11 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
+            "Released 8 August 2026.",
+            source,
+        )
+
+        self.assertIn(
             "configurable global media hotkeys",
             source,
         )

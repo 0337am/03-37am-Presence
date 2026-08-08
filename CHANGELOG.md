@@ -2,6 +2,8 @@
 
 ## v2.8.0 - First-Run Polish
 
+Released 8 August 2026.
+
 ### Added
 
 - Added reusable Windows media controls for play/pause, previous, next, shuffle, repeat, and seeking when supported by the active media session.
