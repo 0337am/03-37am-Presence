@@ -345,7 +345,15 @@ class SpotifyOAuthSessionTests(
                 "scope"
             ],
             [
-                "user-read-private",
+                (
+                    "user-read-private "
+                    "user-read-playback-state "
+                    "user-modify-playback-state "
+                    "user-library-read "
+                    "playlist-read-private "
+                    "playlist-read-collaborative "
+                    "user-read-recently-played"
+                ),
             ],
         )
 

@@ -89,11 +89,6 @@ SPOTIFY_RECENTLY_PLAYED_SCOPES = (
     SPOTIFY_SCOPE_USER_READ_RECENTLY_PLAYED,
 )
 
-# Initial account connection deliberately asks for only the account
-# permission. Later feature patches can combine their own groups.
-SPOTIFY_CONNECT_SCOPES = SPOTIFY_ACCOUNT_SCOPES
-
-
 def normalize_scopes(
     scopes: Iterable[str],
 ) -> tuple[str, ...]:
@@ -173,6 +168,20 @@ def combine_scopes(
     return normalize_scopes(
         combined
     )
+
+
+# Production Spotify authorization requests the permissions needed by
+# the complete optional v2.9 Spotify feature set. Feature-specific
+# groups remain separate so individual services can document exactly
+# which permissions they depend on.
+SPOTIFY_CONNECT_SCOPES = combine_scopes(
+    SPOTIFY_ACCOUNT_SCOPES,
+    SPOTIFY_PLAYBACK_READ_SCOPES,
+    SPOTIFY_PLAYBACK_CONTROL_SCOPES,
+    SPOTIFY_LIBRARY_READ_SCOPES,
+    SPOTIFY_PLAYLIST_READ_SCOPES,
+    SPOTIFY_RECENTLY_PLAYED_SCOPES,
+)
 
 
 def build_loopback_redirect_uri(

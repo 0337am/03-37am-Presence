@@ -167,13 +167,14 @@ class SpotifyConstantsTests(
     ):
         self.assertEqual(
             SPOTIFY_CONNECT_SCOPES,
-            SPOTIFY_ACCOUNT_SCOPES,
-        )
-
-        self.assertEqual(
-            SPOTIFY_CONNECT_SCOPES,
             (
                 "user-read-private",
+                "user-read-playback-state",
+                "user-modify-playback-state",
+                "user-library-read",
+                "playlist-read-private",
+                "playlist-read-collaborative",
+                "user-read-recently-played",
             ),
         )
 
@@ -600,7 +601,15 @@ class SpotifyAuthorizationTests(
         self.assertEqual(
             query["scope"],
             [
-                "user-read-private",
+                (
+                    "user-read-private "
+                    "user-read-playback-state "
+                    "user-modify-playback-state "
+                    "user-library-read "
+                    "playlist-read-private "
+                    "playlist-read-collaborative "
+                    "user-read-recently-played"
+                ),
             ],
         )
 
