@@ -57,6 +57,16 @@ from src.spotify.constants import (
 from src.spotify.qt_connection_runtime import (
     SpotifyQtConnectionRuntime,
 )
+from src.spotify.qt_playlist_runtime import (
+    SpotifyQtPlaylistRuntime,
+)
+from src.spotify.qt_search_runtime import (
+    SpotifyQtSearchRuntime,
+)
+from src.spotify.search_service import (
+    SpotifySearchService,
+)
+from src.ui.spotify_page import SpotifyPage
 from src.ui.about import AboutPage
 from src.ui.dashboard import DashboardPage
 from src.ui.library import LibraryPage
@@ -640,6 +650,11 @@ class MainWindow(QMainWindow):
             "Library",
         )
 
+        self.spotify_button = NavigationButton(
+            "🎧",
+            "Spotify",
+        )
+
         self.settings_button = NavigationButton(
             "⚙️",
             "Settings",
@@ -654,8 +669,18 @@ class MainWindow(QMainWindow):
             self.dashboard_button,
             self.presence_button,
             self.library_button,
+            self.spotify_button,
             self.settings_button,
             self.about_button,
+        ]
+
+        self.navigation_page_indexes = [
+            0,
+            1,
+            2,
+            5,
+            3,
+            4,
         ]
 
         for button in self.navigation_buttons:
@@ -877,6 +902,20 @@ class MainWindow(QMainWindow):
             )
         )
 
+        spotify_session_manager = (
+            self.spotify_session_manager
+        )
+
+        self.spotify_search_runtime = (
+            SpotifyQtSearchRuntime(
+                lambda manager=spotify_session_manager:
+                SpotifySearchService(
+                    manager
+                ),
+                parent=self,
+            )
+        )
+
         self.settings_page = SettingsPage(
             self.theme_manager,
             spotify_runtime=(
@@ -897,6 +936,40 @@ class MainWindow(QMainWindow):
                     self._spotify_local_candidates
                 ),
             )
+        )
+
+        spotify_playlist_service = (
+            self.spotify_playlist_service
+        )
+
+        spotify_resolved_playlist_service = (
+            self.spotify_resolved_playlist_service
+        )
+
+        self.spotify_playlist_runtime = (
+            SpotifyQtPlaylistRuntime(
+                (
+                    lambda service=spotify_playlist_service:
+                    service
+                ),
+                (
+                    lambda service=spotify_resolved_playlist_service:
+                    service
+                ),
+                parent=self,
+            )
+        )
+
+        self.spotify_page = SpotifyPage(
+            search_runtime=(
+                self.spotify_search_runtime
+            ),
+            playlist_runtime=(
+                self.spotify_playlist_runtime
+            ),
+            theme_manager=(
+                self.theme_manager
+            ),
         )
 
         self.settings_page.set_diagnostics_provider(
@@ -927,6 +1000,10 @@ class MainWindow(QMainWindow):
             self.about_page
         )
 
+        self.pages.addWidget(
+            self.spotify_page
+        )
+
         main_layout.addWidget(
             self.pages,
             stretch=1,
@@ -942,6 +1019,10 @@ class MainWindow(QMainWindow):
 
         self.library_button.clicked.connect(
             lambda: self.switch_page(2)
+        )
+
+        self.spotify_button.clicked.connect(
+            lambda: self.switch_page(5)
         )
 
         self.settings_button.clicked.connect(
@@ -1114,11 +1195,28 @@ class MainWindow(QMainWindow):
             page_index
         )
 
-        for index, button in enumerate(
-            self.navigation_buttons
+        navigation_page_indexes = getattr(
+            self,
+            "navigation_page_indexes",
+            list(
+                range(
+                    len(
+                        self.navigation_buttons
+                    )
+                )
+            ),
+        )
+
+        for (
+            button,
+            navigation_page_index,
+        ) in zip(
+            self.navigation_buttons,
+            navigation_page_indexes,
         ):
             button.setChecked(
-                index == page_index
+                navigation_page_index
+                == page_index
             )
 
         if remember:
@@ -1992,6 +2090,33 @@ class MainWindow(QMainWindow):
             ):
                 try:
                     shutdown_local_music()
+                except Exception:
+                    pass
+
+        for spotify_runtime_name in (
+            "spotify_playlist_runtime",
+            "spotify_search_runtime",
+        ):
+            feature_runtime = getattr(
+                self,
+                spotify_runtime_name,
+                None,
+            )
+
+            if feature_runtime is None:
+                continue
+
+            shutdown_feature_runtime = getattr(
+                feature_runtime,
+                "shutdown",
+                None,
+            )
+
+            if callable(
+                shutdown_feature_runtime
+            ):
+                try:
+                    shutdown_feature_runtime()
                 except Exception:
                     pass
 
