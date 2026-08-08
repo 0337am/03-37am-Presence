@@ -356,7 +356,7 @@ class SpotifySearchUiTests(
             page.search_button.isEnabled()
         )
 
-    def test_busy_state_disables_search_controls(
+    def test_busy_state_keeps_input_enabled_and_disables_button(
         self,
     ):
         page, _, _ = (
@@ -375,7 +375,7 @@ class SpotifySearchUiTests(
             page.busy
         )
 
-        self.assertFalse(
+        self.assertTrue(
             page.search_input.isEnabled()
         )
 

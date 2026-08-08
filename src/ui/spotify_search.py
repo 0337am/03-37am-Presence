@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from PyQt6.QtCore import QTimer
+
 from src.ui.spotify_artwork import SpotifyArtworkLoader
 
 from PyQt6.QtCore import (
@@ -78,6 +80,10 @@ def _theme_value(
         if value
         else fallback
     )
+
+
+SPOTIFY_LIVE_SEARCH_DEBOUNCE_MS = 350
+SPOTIFY_LIVE_SEARCH_MINIMUM_CHARACTERS = 2
 
 
 class SpotifySearchResultRow(
@@ -623,6 +629,26 @@ class SpotifySearchPage(
 
         self._last_results = None
 
+        self._active_search_query = ""
+        self._pending_search_query = None
+        self._last_submitted_query = ""
+
+        self._live_search_timer = QTimer(
+            self
+        )
+
+        self._live_search_timer.setSingleShot(
+            True
+        )
+
+        self._live_search_timer.setInterval(
+            SPOTIFY_LIVE_SEARCH_DEBOUNCE_MS
+        )
+
+        self._live_search_timer.timeout.connect(
+            self._submit_live_search
+        )
+
         if artwork_loader is None:
             artwork_loader = (
                 SpotifyArtworkLoader(
@@ -968,7 +994,7 @@ class SpotifySearchPage(
         )
 
         self.search_input.textChanged.connect(
-            lambda _text: self._sync_search_controls()
+            self.handle_search_text_changed
         )
 
         result_signal = getattr(
@@ -986,6 +1012,12 @@ class SpotifySearchPage(
         busy_signal = getattr(
             self.runtime,
             "busy_changed",
+            None,
+        )
+
+        finished_signal = getattr(
+            self.runtime,
+            "search_finished",
             None,
         )
 
@@ -1013,11 +1045,16 @@ class SpotifySearchPage(
             self.handle_busy
         )
 
+        if finished_signal is not None:
+            finished_signal.connect(
+                self.handle_search_finished
+            )
+
     def _sync_search_controls(
         self,
     ) -> None:
         self.search_input.setEnabled(
-            not self._busy
+            True
         )
 
         self.search_button.setEnabled(
@@ -1062,6 +1099,8 @@ class SpotifySearchPage(
     def start_search(
         self,
     ) -> None:
+        self._live_search_timer.stop()
+
         query = (
             self.search_input
             .text()
@@ -1069,6 +1108,8 @@ class SpotifySearchPage(
         )
 
         if not query:
+            self._pending_search_query = None
+
             self._set_status(
                 "Enter something to search for."
             )
@@ -1077,24 +1118,179 @@ class SpotifySearchPage(
 
             return
 
+        self._submit_search(
+            query,
+            allow_repeat=True,
+        )
+
+    def handle_search_text_changed(
+        self,
+        text,
+    ) -> None:
+        self._live_search_timer.stop()
+        self._pending_search_query = None
+
+        query = str(
+            text
+            or ""
+        ).strip()
+
+        if not query:
+            self.clear_results()
+
+            self._set_status(
+                "Enter a search to browse Spotify."
+            )
+
+            self._sync_search_controls()
+
+            return
+
+        if (
+            len(
+                query
+            )
+            < SPOTIFY_LIVE_SEARCH_MINIMUM_CHARACTERS
+        ):
+            self.clear_results()
+
+            self._set_status(
+                (
+                    "Type at least 2 characters for "
+                    "live search, or press Search."
+                )
+            )
+
+            self._sync_search_controls()
+
+            return
+
+        self._live_search_timer.start()
+
+        if (
+            self._busy
+            and query
+            != self._active_search_query
+        ):
+            self._set_status(
+                (
+                    'Waiting to search Spotify for "'
+                    + query
+                    + '"...'
+                )
+            )
+
+        self._sync_search_controls()
+
+    def _submit_live_search(
+        self,
+    ) -> None:
+        query = (
+            self.search_input
+            .text()
+            .strip()
+        )
+
+        if (
+            len(
+                query
+            )
+            < SPOTIFY_LIVE_SEARCH_MINIMUM_CHARACTERS
+        ):
+            return
+
+        self._submit_search(
+            query,
+            allow_repeat=False,
+        )
+
+    def _submit_search(
+        self,
+        query: str,
+        *,
+        allow_repeat: bool,
+    ) -> bool:
+        checked_query = str(
+            query
+            or ""
+        ).strip()
+
+        if not checked_query:
+            return False
+
+        runtime_busy = bool(
+            getattr(
+                self.runtime,
+                "busy",
+                False,
+            )
+        )
+
+        if (
+            self._busy
+            or runtime_busy
+        ):
+            if (
+                checked_query
+                != self._active_search_query
+            ):
+                self._pending_search_query = (
+                    checked_query
+                )
+
+                self._set_status(
+                    (
+                        'Waiting to search Spotify for "'
+                        + checked_query
+                        + '"...'
+                    )
+                )
+
+            return False
+
+        if (
+            not allow_repeat
+            and checked_query
+            == self._last_submitted_query
+            and self._last_results
+            is not None
+        ):
+            return False
+
+        self._pending_search_query = None
+
         self.clear_results()
 
         self._set_status(
             (
                 'Searching Spotify for "'
-                + query
+                + checked_query
                 + '"...'
             )
         )
 
+        self._active_search_query = (
+            checked_query
+        )
+
         try:
             self.runtime.search(
-                query,
+                checked_query,
                 limit=5,
                 offset=0,
             )
 
         except SpotifyQtSearchRuntimeError as error:
+            self._active_search_query = ""
+
+            if (
+                error.error_code
+                == "busy"
+            ):
+                self._pending_search_query = (
+                    checked_query
+                )
+
             self._set_status(
                 error.message
                 or (
@@ -1103,10 +1299,16 @@ class SpotifySearchPage(
                 )
             )
 
+            self._sync_search_controls()
+
+            return False
+
         except (
             TypeError,
             ValueError,
         ):
+            self._active_search_query = ""
+
             self._set_status(
                 (
                     "The Spotify Search request "
@@ -1114,7 +1316,13 @@ class SpotifySearchPage(
                 )
             )
 
+            self._sync_search_controls()
+
+            return False
+
         except Exception:
+            self._active_search_query = ""
+
             self._set_status(
                 (
                     "Spotify Search could not "
@@ -1122,7 +1330,104 @@ class SpotifySearchPage(
                 )
             )
 
+            self._sync_search_controls()
+
+            return False
+
+        self._last_submitted_query = (
+            checked_query
+        )
+
         self._sync_search_controls()
+
+        return True
+
+    def _should_ignore_search_completion(
+        self,
+    ) -> bool:
+        active_query = (
+            self._active_search_query
+            or str(
+                getattr(
+                    self.runtime,
+                    "active_query",
+                    "",
+                )
+                or ""
+            ).strip()
+        )
+
+        if not active_query:
+            return False
+
+        current_query = (
+            self.search_input
+            .text()
+            .strip()
+        )
+
+        return (
+            current_query
+            != active_query
+        )
+
+    def handle_search_finished(
+        self,
+        finished_query,
+    ) -> None:
+        checked_finished = str(
+            finished_query
+            or ""
+        ).strip()
+
+        if (
+            not checked_finished
+            or self._active_search_query
+            == checked_finished
+        ):
+            self._active_search_query = ""
+
+        pending_query = (
+            self._pending_search_query
+        )
+
+        self._pending_search_query = None
+
+        if not pending_query:
+            return
+
+        QTimer.singleShot(
+            0,
+            lambda query=pending_query:
+            self._submit_pending_search(
+                query
+            ),
+        )
+
+    def _submit_pending_search(
+        self,
+        pending_query: str,
+    ) -> None:
+        current_query = (
+            self.search_input
+            .text()
+            .strip()
+        )
+
+        if (
+            pending_query
+            != current_query
+            or len(
+                pending_query
+            )
+            < SPOTIFY_LIVE_SEARCH_MINIMUM_CHARACTERS
+        ):
+            return
+
+        self._submit_search(
+            pending_query,
+            allow_repeat=False,
+        )
 
     @pyqtSlot(
         bool
@@ -1144,6 +1449,8 @@ class SpotifySearchPage(
         self,
         result,
     ) -> None:
+        if self._should_ignore_search_completion():
+            return
         if not isinstance(
             result,
             SpotifySearchServiceResult,
@@ -1335,6 +1642,8 @@ class SpotifySearchPage(
         error_code: str,
         message: str,
     ) -> None:
+        if self._should_ignore_search_completion():
+            return
         self.clear_results()
 
         self.connection_badge.setText(
