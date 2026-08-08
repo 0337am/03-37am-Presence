@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Callable
 
@@ -131,9 +131,10 @@ class MediaHotkeyRuntime:
             return False
 
         self._preferences = preferences
-        self._started = True
 
         if not preferences.enabled:
+            self._started = True
+
             return True
 
         bindings = (
@@ -141,6 +142,8 @@ class MediaHotkeyRuntime:
         )
 
         if not bindings:
+            self._started = True
+
             return True
 
         controller = None
@@ -163,6 +166,8 @@ class MediaHotkeyRuntime:
             ):
                 controller.close()
 
+                self._started = False
+
                 return False
 
         except Exception as error:
@@ -177,9 +182,12 @@ class MediaHotkeyRuntime:
                 except Exception:
                     pass
 
+            self._started = False
+
             return False
 
         self._controller = controller
+        self._started = True
 
         return True
 

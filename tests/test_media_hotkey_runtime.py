@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 
@@ -452,6 +452,10 @@ class MediaHotkeyRuntimeTests(
             runtime.controller
         )
 
+        self.assertFalse(
+            runtime.started
+        )
+
     def test_stop_closes_controller(
         self,
     ):
@@ -855,6 +859,64 @@ class MediaHotkeyRuntimeTests(
         self.assertTrue(
             runtime.active
         )
+
+    def test_start_can_retry_after_controller_failure(
+        self,
+    ):
+        preferences = (
+            MediaHotkeyPreferences(
+                enabled=True,
+                bindings={
+                    ACTION_PLAY_PAUSE:
+                        binding(
+                            0x39
+                        ),
+                },
+            )
+        )
+
+        runtime, store, factory = (
+            self.make_runtime(
+                preferences
+            )
+        )
+
+        factory.start_results = [
+            False,
+            True,
+        ]
+
+        self.assertFalse(
+            runtime.start()
+        )
+
+        self.assertFalse(
+            runtime.started
+        )
+
+        self.assertIsNone(
+            runtime.controller
+        )
+
+        self.assertTrue(
+            runtime.start()
+        )
+
+        self.assertTrue(
+            runtime.started
+        )
+
+        self.assertTrue(
+            runtime.active
+        )
+
+        self.assertEqual(
+            len(
+                factory.controllers
+            ),
+            2,
+        )
+
 
     def test_close_aliases_stop(
         self,

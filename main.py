@@ -13,6 +13,10 @@ from src.system.startup import StartupManager
 from src.ui.main_window import MainWindow
 from src.ui.tray import TrayController
 
+from src.system.media_hotkey_runtime import (
+    MediaHotkeyRuntime,
+)
+
 
 def resource_path(
     relative_path: str,
@@ -260,6 +264,44 @@ def set_windows_app_id():
 
 
 
+def start_media_hotkey_runtime(
+    app,
+):
+    runtime = None
+
+    try:
+        runtime = MediaHotkeyRuntime(
+            app=app
+        )
+
+        app.aboutToQuit.connect(
+            runtime.close
+        )
+
+        if not runtime.start():
+            print(
+                "Media hotkey runtime "
+                "could not start."
+            )
+
+        return runtime
+
+    except Exception as error:
+        print(
+            "Media hotkey runtime "
+            "setup error:",
+            error,
+        )
+
+        if runtime is not None:
+            try:
+                runtime.close()
+            except Exception:
+                pass
+
+        return None
+
+
 def main() -> int:
     sys.excepthook = (
         handle_unhandled_exception
@@ -307,6 +349,12 @@ def main() -> int:
     tray_controller = TrayController(
         app,
         window,
+    )
+
+    media_hotkey_runtime = (
+        start_media_hotkey_runtime(
+            app
+        )
     )
 
     window.set_update_quit_callback(
