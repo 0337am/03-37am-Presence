@@ -508,6 +508,11 @@ class LocalMusicQtScanRuntime(
 
         return True
 
+    def clear_latest_result(
+        self,
+    ) -> None:
+        self._latest_result = None
+
     @pyqtSlot(
         object
     )

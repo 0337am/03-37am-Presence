@@ -1894,6 +1894,27 @@ class MainWindow(QMainWindow):
         if auto_afk_timer is not None:
             auto_afk_timer.stop()
 
+        settings_page = getattr(
+            self,
+            "settings_page",
+            None,
+        )
+
+        if settings_page is not None:
+            shutdown_local_music = getattr(
+                settings_page,
+                "shutdown_local_music",
+                None,
+            )
+
+            if callable(
+                shutdown_local_music
+            ):
+                try:
+                    shutdown_local_music()
+                except Exception:
+                    pass
+
         spotify_runtime = getattr(
             self,
             "spotify_connection_runtime",

@@ -188,6 +188,16 @@ from src.system.media_hotkey_preferences import (
     MediaHotkeyPreferencesStore,
 )
 
+from src.system.local_music_preferences import (
+    LocalMusicPreferencesStore,
+)
+from src.media.qt_local_music_runtime import (
+    LocalMusicQtScanRuntime,
+)
+from src.ui.local_music_settings import (
+    LocalMusicSettingsCard,
+)
+
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
@@ -237,6 +247,16 @@ class SettingsPage(QWidget):
         self.media_hotkey_preferences_store = (
             MediaHotkeyPreferencesStore()
         )
+        self.local_music_preferences_store = (
+            LocalMusicPreferencesStore()
+        )
+
+        self.local_music_runtime = (
+            LocalMusicQtScanRuntime(
+                parent=self
+            )
+        )
+
 
         self.history_store = (
             HistoryStore()
@@ -1479,6 +1499,16 @@ class SettingsPage(QWidget):
                 ),
             )
         )
+        self.local_music_card = (
+            LocalMusicSettingsCard(
+                self.local_music_preferences_store,
+                self.local_music_runtime,
+                theme_manager=(
+                    self.theme_manager
+                ),
+            )
+        )
+
 
         updates = self.create_card(
             "Updates",
@@ -1830,6 +1860,9 @@ class SettingsPage(QWidget):
         root.addWidget(
             self.media_hotkeys_card
         )
+        root.addWidget(
+            self.local_music_card
+        )
         root.addWidget(storage)
         root.addWidget(
             settings_backup
@@ -1841,6 +1874,9 @@ class SettingsPage(QWidget):
         root.addStretch()
 
         self.settings_sections = {
+            "local_music": (
+                self.local_music_card
+            ),
             "theme": theme_card,
             "atmosphere": atmosphere_card,
             "media_sources": sources,
@@ -1880,6 +1916,38 @@ class SettingsPage(QWidget):
         self,
     ) -> None:
         self.spotify_connection_card.restore()
+
+    def shutdown_local_music(
+        self,
+    ) -> bool:
+        runtime = getattr(
+            self,
+            "local_music_runtime",
+            None,
+        )
+
+        if runtime is None:
+            return True
+
+        shutdown = getattr(
+            runtime,
+            "shutdown",
+            None,
+        )
+
+        if not callable(
+            shutdown
+        ):
+            return True
+
+        try:
+            return bool(
+                shutdown()
+            )
+
+        except Exception:
+            return False
+
 
     def set_media_hotkey_reload_callback(
         self,
@@ -3377,6 +3445,9 @@ class SettingsPage(QWidget):
         ).strip().lower()
 
         aliases = {
+            "local music": "local_music",
+            "local files": "local_music",
+            "music folders": "local_music",
             "afk": "auto_afk",
             "auto afk": "auto_afk",
             "sources": "media_sources",
