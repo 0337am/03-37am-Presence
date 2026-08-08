@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
 from http.server import BaseHTTPRequestHandler
@@ -53,6 +54,12 @@ class LoopbackCallbackError(
 
 class LoopbackCallbackTimeout(
     TimeoutError,
+    LoopbackCallbackError,
+):
+    pass
+
+
+class LoopbackCallbackCancelled(
     LoopbackCallbackError,
 ):
     pass
@@ -351,6 +358,7 @@ class SpotifyLoopbackCallbackServer:
         self,
         *,
         timeout_seconds: float = 120.0,
+        cancel_requested: Callable[[], bool] | None = None,
     ) -> LoopbackCallbackResult:
         if self._closed:
             raise LoopbackCallbackError(
@@ -385,6 +393,16 @@ class SpotifyLoopbackCallbackServer:
                 "callback timeout must be positive"
             )
 
+        if (
+            cancel_requested is not None
+            and not callable(
+                cancel_requested
+            )
+        ):
+            raise TypeError(
+                "cancel_requested must be callable or None"
+            )
+
         self._consumed = True
 
         deadline = (
@@ -397,6 +415,16 @@ class SpotifyLoopbackCallbackServer:
                 self._server.callback_target
                 is None
             ):
+                if (
+                    cancel_requested is not None
+                    and bool(
+                        cancel_requested()
+                    )
+                ):
+                    raise LoopbackCallbackCancelled(
+                        "Spotify authorization was cancelled."
+                    )
+
                 remaining = (
                     deadline
                     - time.monotonic()

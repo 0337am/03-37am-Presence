@@ -377,6 +377,9 @@ class SpotifyConnectionWorker(
                 browser_bridge_timeout_seconds
             )
         )
+        self._cancel_event = (
+            threading.Event()
+        )
 
     @property
     def operation(
@@ -412,6 +415,12 @@ class SpotifyConnectionWorker(
         )
 
     @pyqtSlot()
+    def request_cancel(
+        self,
+    ) -> None:
+        self._cancel_event.set()
+
+
     def run(
         self,
     ) -> None:
@@ -419,6 +428,18 @@ class SpotifyConnectionWorker(
             controller = (
                 self._build_controller()
             )
+            set_cancel_requested = getattr(
+                controller,
+                "set_cancel_requested",
+                None,
+            )
+
+            if callable(
+                set_cancel_requested
+            ):
+                set_cancel_requested(
+                    self._cancel_event.is_set
+                )
 
             operation_method = getattr(
                 controller,
@@ -583,6 +604,7 @@ class SpotifyQtConnectionRuntime(
         self._thread = None
         self._worker = None
         self._operation = None
+        self._shutting_down = False
 
     @property
     def busy(
@@ -597,6 +619,69 @@ class SpotifyQtConnectionRuntime(
         self,
     ) -> str | None:
         return self._operation
+
+    def shutdown(
+        self,
+    ) -> bool:
+        self._shutting_down = True
+
+        worker = self._worker
+        thread = self._thread
+
+        if worker is not None:
+            request_cancel = getattr(
+                worker,
+                "request_cancel",
+                None,
+            )
+
+            if callable(
+                request_cancel
+            ):
+                try:
+                    request_cancel()
+                except Exception:
+                    pass
+
+        if thread is None:
+            self._worker = None
+            self._operation = None
+            return True
+
+        try:
+            running = bool(
+                thread.isRunning()
+            )
+        except Exception:
+            running = False
+
+        if not running:
+            self._worker = None
+            self._thread = None
+            self._operation = None
+            return True
+
+        try:
+            thread.quit()
+        except Exception:
+            pass
+
+        try:
+            finished = bool(
+                thread.wait(
+                    20000
+                )
+            )
+        except Exception:
+            finished = False
+
+        if finished:
+            self._worker = None
+            self._thread = None
+            self._operation = None
+
+        return finished
+
 
     def restore(
         self,
@@ -623,6 +708,15 @@ class SpotifyQtConnectionRuntime(
         self,
         operation: str,
     ) -> None:
+        if self._shutting_down:
+            raise SpotifyQtConnectionRuntimeError(
+                "closed",
+                (
+                    "The Spotify connection runtime "
+                    "is shutting down."
+                ),
+            )
+
         if self.busy:
             raise SpotifyQtConnectionRuntimeError(
                 "busy",
@@ -708,6 +802,22 @@ class SpotifyQtConnectionRuntime(
         url: str,
         request,
     ) -> None:
+        if self._shutting_down:
+            complete = getattr(
+                request,
+                "complete",
+                None,
+            )
+
+            if callable(
+                complete
+            ):
+                complete(
+                    False
+                )
+
+            return
+
         result = False
 
         try:
@@ -739,6 +849,9 @@ class SpotifyQtConnectionRuntime(
         self,
         result,
     ) -> None:
+        if self._shutting_down:
+            return
+
         operation = (
             self._operation
             or ""
@@ -758,6 +871,9 @@ class SpotifyQtConnectionRuntime(
         error_code: str,
         message: str,
     ) -> None:
+        if self._shutting_down:
+            return
+
         operation = (
             self._operation
             or ""

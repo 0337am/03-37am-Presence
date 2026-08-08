@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from src.spotify.oauth_callback import (
+    LoopbackCallbackCancelled,
+)
 from collections.abc import Callable
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -51,6 +54,7 @@ class SpotifyOAuthSessionStatus(
 ):
     CONNECTED = "connected"
     DENIED = "denied"
+    CANCELLED = "cancelled"
 
 
 class SpotifyOAuthSessionError(
@@ -113,6 +117,15 @@ class SpotifyOAuthSessionResult:
                 "denied OAuth result cannot contain a token"
             )
 
+        if (
+            self.status
+            is SpotifyOAuthSessionStatus.CANCELLED
+            and self.token is not None
+        ):
+            raise ValueError(
+                "cancelled OAuth result cannot contain a token"
+            )
+
         if not isinstance(
             self.message,
             str,
@@ -137,6 +150,16 @@ class SpotifyOAuthSessionResult:
         return (
             self.status
             is SpotifyOAuthSessionStatus.DENIED
+        )
+
+
+    @property
+    def cancelled(
+        self,
+    ) -> bool:
+        return (
+            self.status
+            is SpotifyOAuthSessionStatus.CANCELLED
         )
 
 
@@ -211,6 +234,7 @@ class SpotifyOAuthSession:
         callback_server_factory=(
             SpotifyLoopbackCallbackServer
         ),
+        cancel_requested: Callable[[], bool] | None = None,
         token_client=None,
     ) -> None:
         self._client_id = _validate_client_id(
@@ -267,12 +291,58 @@ class SpotifyOAuthSession:
             )
 
         self._token_client = token_client
+        if (
+            cancel_requested is not None
+            and not callable(
+                cancel_requested
+            )
+        ):
+            raise TypeError(
+                "cancel_requested must be callable or None"
+            )
+
+        self._cancel_requested = (
+            cancel_requested
+        )
 
     @property
     def scopes(
         self,
     ) -> tuple[str, ...]:
         return self._scopes
+
+    def _cancelled(
+        self,
+    ) -> bool:
+        if self._cancel_requested is None:
+            return False
+
+        try:
+            return bool(
+                self._cancel_requested()
+            )
+
+        except Exception as error:
+            raise SpotifyOAuthSessionError(
+                "cancellation_error",
+                (
+                    "Spotify authorization cancellation "
+                    "state could not be checked."
+                ),
+            ) from error
+
+    @staticmethod
+    def _cancelled_result(
+    ) -> SpotifyOAuthSessionResult:
+        return SpotifyOAuthSessionResult(
+            status=(
+                SpotifyOAuthSessionStatus.CANCELLED
+            ),
+            message=(
+                "Spotify authorization was cancelled."
+            ),
+        )
+
 
     def _open_authorization_page(
         self,
@@ -305,6 +375,9 @@ class SpotifyOAuthSession:
     def connect(
         self,
     ) -> SpotifyOAuthSessionResult:
+        if self._cancelled():
+            return self._cancelled_result()
+
         try:
             callback_server = (
                 self._callback_server_factory()
@@ -354,13 +427,28 @@ class SpotifyOAuthSession:
                 )
 
                 try:
+                    wait_kwargs = {
+                        "timeout_seconds": (
+                            self._callback_timeout_seconds
+                        ),
+                    }
+
+                    if (
+                        self._cancel_requested
+                        is not None
+                    ):
+                        wait_kwargs[
+                            "cancel_requested"
+                        ] = self._cancel_requested
+
                     callback_result = (
                         callback_server.wait_for_callback(
-                            timeout_seconds=(
-                                self._callback_timeout_seconds
-                            )
+                            **wait_kwargs
                         )
                     )
+                except LoopbackCallbackCancelled:
+                    return self._cancelled_result()
+
                 except LoopbackCallbackTimeout as error:
                     raise SpotifyOAuthSessionError(
                         "callback_timeout",

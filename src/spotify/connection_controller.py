@@ -283,6 +283,7 @@ class SpotifyConnectionController:
                 callback_timeout_seconds
             )
         )
+        self._cancel_requested = None
 
     @property
     def client_id(
@@ -295,6 +296,25 @@ class SpotifyConnectionController:
         self,
     ) -> bool:
         return self._browser_opener is not None
+
+    def set_cancel_requested(
+        self,
+        cancel_requested,
+    ) -> None:
+        if (
+            cancel_requested is not None
+            and not callable(
+                cancel_requested
+            )
+        ):
+            raise TypeError(
+                "cancel_requested must be callable or None"
+            )
+
+        self._cancel_requested = (
+            cancel_requested
+        )
+
 
     def restore(
         self,
@@ -384,15 +404,27 @@ class SpotifyConnectionController:
             )
 
         try:
+            oauth_kwargs = {
+                "browser_opener": (
+                    self._browser_opener
+                ),
+                "callback_timeout_seconds": (
+                    self._callback_timeout_seconds
+                ),
+            }
+
+            if (
+                self._cancel_requested
+                is not None
+            ):
+                oauth_kwargs[
+                    "cancel_requested"
+                ] = self._cancel_requested
+
             oauth_session = (
                 self._oauth_session_factory(
                     self._client_id,
-                    browser_opener=(
-                        self._browser_opener
-                    ),
-                    callback_timeout_seconds=(
-                        self._callback_timeout_seconds
-                    ),
+                    **oauth_kwargs,
                 )
             )
         except Exception:
@@ -432,10 +464,17 @@ class SpotifyConnectionController:
                 ),
             ) from None
 
-        if getattr(
-            oauth_result,
-            "denied",
-            False,
+        if (
+            getattr(
+                oauth_result,
+                "denied",
+                False,
+            )
+            or getattr(
+                oauth_result,
+                "cancelled",
+                False,
+            )
         ):
             return SpotifyConnectionResult(
                 status=(

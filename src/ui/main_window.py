@@ -1894,6 +1894,27 @@ class MainWindow(QMainWindow):
         if auto_afk_timer is not None:
             auto_afk_timer.stop()
 
+        spotify_runtime = getattr(
+            self,
+            "spotify_connection_runtime",
+            None,
+        )
+
+        if spotify_runtime is not None:
+            shutdown_spotify = getattr(
+                spotify_runtime,
+                "shutdown",
+                None,
+            )
+
+            if callable(
+                shutdown_spotify
+            ):
+                try:
+                    shutdown_spotify()
+                except Exception:
+                    pass
+
         self.discord.close()
 
     def closeEvent(
