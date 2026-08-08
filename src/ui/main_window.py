@@ -864,6 +864,14 @@ class MainWindow(QMainWindow):
             callback
         )
 
+    def set_media_hotkey_reload_callback(
+        self,
+        callback,
+    ):
+        self.settings_page.set_media_hotkey_reload_callback(
+            callback
+        )
+
     def open_settings_section(
         self,
         section_name: str,

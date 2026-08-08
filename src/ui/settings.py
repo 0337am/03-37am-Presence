@@ -176,6 +176,10 @@ from src.library.csv_export import (
     as write_track_summary_csv,
 )
 
+from src.ui.media_hotkey_settings import (
+    MediaHotkeySettingsCard,
+)
+
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
@@ -1433,6 +1437,14 @@ class SettingsPage(QWidget):
             backup_button_row
         )
 
+        self.media_hotkeys_card = (
+            MediaHotkeySettingsCard(
+                status_callback=(
+                    self.set_status_message
+                ),
+            )
+        )
+
         updates = self.create_card(
             "Updates",
             (
@@ -1777,6 +1789,9 @@ class SettingsPage(QWidget):
         root.addWidget(auto_afk)
         root.addWidget(appearance)
         root.addWidget(startup)
+        root.addWidget(
+            self.media_hotkeys_card
+        )
         root.addWidget(storage)
         root.addWidget(
             settings_backup
@@ -1795,6 +1810,9 @@ class SettingsPage(QWidget):
                 self.artwork_hosting_card
             ),
             "auto_afk": auto_afk,
+            "media_hotkeys": (
+                self.media_hotkeys_card
+            ),
             "data_storage": storage,
             "settings_backup": (
                 settings_backup
@@ -1815,6 +1833,14 @@ class SettingsPage(QWidget):
     ):
         self.status.setText(
             str(message)
+        )
+
+    def set_media_hotkey_reload_callback(
+        self,
+        callback,
+    ):
+        self.media_hotkeys_card.set_reload_callback(
+            callback
         )
 
     def set_update_quit_callback(
@@ -3254,6 +3280,13 @@ class SettingsPage(QWidget):
             "artwork hosting": "artwork_hosting",
             "colours": "theme",
             "colors": "theme",
+            "hotkey": "media_hotkeys",
+            "hotkeys": "media_hotkeys",
+            "shortcut": "media_hotkeys",
+            "shortcuts": "media_hotkeys",
+            "media hotkeys": "media_hotkeys",
+            "global hotkeys": "media_hotkeys",
+            "media controls": "media_hotkeys",
             "data": "data_storage",
             "storage": "data_storage",
             "data storage": "data_storage",
@@ -4334,6 +4367,8 @@ class SettingsPage(QWidget):
         self.windows_box.setChecked(False)
 
         self.artwork_hosting_card.reset_preferences()
+
+        self.media_hotkeys_card.reset_preferences()
 
         self.status.setText(
             "All settings reset."

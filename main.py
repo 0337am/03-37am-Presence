@@ -357,6 +357,14 @@ def main() -> int:
         )
     )
 
+    window.set_media_hotkey_reload_callback(
+        (
+            media_hotkey_runtime.reload
+            if media_hotkey_runtime is not None
+            else None
+        )
+    )
+
     window.set_update_quit_callback(
         tray_controller.quit_application
     )
