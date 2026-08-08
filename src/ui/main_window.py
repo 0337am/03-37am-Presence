@@ -39,6 +39,18 @@ from src.system.afk_preferences import (
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
+from src.spotify.connection_controller import (
+    SpotifyConnectionController,
+)
+from src.spotify.playlist_service import (
+    SpotifyPlaylistService,
+)
+from src.spotify.resolved_playlist_service import (
+    SpotifyResolvedPlaylistService,
+)
+from src.spotify.session_manager import (
+    SpotifySessionManager,
+)
 from src.spotify.constants import (
     SPOTIFY_PUBLIC_CLIENT_ID,
 )
@@ -783,6 +795,50 @@ class MainWindow(QMainWindow):
             self.sidebar
         )
 
+    def _create_spotify_connection_controller(
+        self,
+        client_id: str,
+        *,
+        browser_opener,
+    ):
+        return SpotifyConnectionController(
+            client_id,
+            session_manager=(
+                self.spotify_session_manager
+            ),
+            browser_opener=browser_opener,
+        )
+
+    def _spotify_local_candidates(
+        self,
+    ):
+        settings_page = getattr(
+            self,
+            "settings_page",
+            None,
+        )
+
+        if settings_page is None:
+            return None
+
+        runtime = getattr(
+            settings_page,
+            "local_music_runtime",
+            None,
+        )
+
+        if runtime is None:
+            return None
+
+        scan_result = (
+            runtime.latest_result
+        )
+
+        if scan_result is None:
+            return None
+
+        return scan_result.candidates
+
     def build_pages(
         self,
         main_layout,
@@ -805,9 +861,18 @@ class MainWindow(QMainWindow):
             self.theme_manager
         )
 
+        self.spotify_session_manager = (
+            SpotifySessionManager(
+                SPOTIFY_PUBLIC_CLIENT_ID
+            )
+        )
+
         self.spotify_connection_runtime = (
             SpotifyQtConnectionRuntime(
                 SPOTIFY_PUBLIC_CLIENT_ID,
+                controller_factory=(
+                    self._create_spotify_connection_controller
+                ),
                 parent=self,
             )
         )
@@ -817,6 +882,21 @@ class MainWindow(QMainWindow):
             spotify_runtime=(
                 self.spotify_connection_runtime
             ),
+        )
+
+        self.spotify_playlist_service = (
+            SpotifyPlaylistService(
+                self.spotify_session_manager
+            )
+        )
+
+        self.spotify_resolved_playlist_service = (
+            SpotifyResolvedPlaylistService(
+                self.spotify_playlist_service,
+                candidate_provider=(
+                    self._spotify_local_candidates
+                ),
+            )
         )
 
         self.settings_page.set_diagnostics_provider(
