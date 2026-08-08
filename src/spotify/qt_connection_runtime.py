@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 import math
 from numbers import Real
 import threading
@@ -48,6 +49,81 @@ _ALLOWED_OPERATIONS = frozenset(
         _OPERATION_DISCONNECT,
     }
 )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class SpotifyQtConnectionState:
+    status: object
+    message: str = ""
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not isinstance(
+            self.message,
+            str,
+        ):
+            raise TypeError(
+                "message must be a string"
+            )
+
+    @property
+    def connected(
+        self,
+    ) -> bool:
+        return bool(
+            getattr(
+                self.status,
+                "value",
+                "",
+            )
+            in {
+                "connected",
+                "refreshed",
+            }
+        )
+
+    @property
+    def refreshed(
+        self,
+    ) -> bool:
+        return (
+            getattr(
+                self.status,
+                "value",
+                "",
+            )
+            == "refreshed"
+        )
+
+    @property
+    def requires_reauthorization(
+        self,
+    ) -> bool:
+        return (
+            getattr(
+                self.status,
+                "value",
+                "",
+            )
+            == "reauthorization_required"
+        )
+
+    @property
+    def cancelled(
+        self,
+    ) -> bool:
+        return (
+            getattr(
+                self.status,
+                "value",
+                "",
+            )
+            == "cancelled"
+        )
 
 
 class SpotifyQtConnectionRuntimeError(
@@ -399,8 +475,13 @@ class SpotifyConnectionWorker(
             )
 
         else:
+            safe_result = SpotifyQtConnectionState(
+                status=result.status,
+                message=result.message,
+            )
+
             self.result_ready.emit(
-                result
+                safe_result
             )
 
         finally:

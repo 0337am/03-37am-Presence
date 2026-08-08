@@ -30,6 +30,9 @@ from src.spotify.qt_connection_runtime import (
     SpotifyQtConnectionRuntimeError,
 )
 from src.spotify.qt_connection_runtime import (
+    SpotifyQtConnectionState,
+)
+from src.spotify.qt_connection_runtime import (
     open_spotify_authorization_url,
 )
 
@@ -656,6 +659,127 @@ class SpotifyQtConnectionRuntimeTests(
             ].connected
         )
 
+    def test_gui_result_contains_no_oauth_credentials(
+        self,
+    ):
+        token = SpotifyTokenBundle(
+            access_token=(
+                "access-secret-must-not-cross-ui"
+            ),
+            refresh_token=(
+                "refresh-secret-must-not-cross-ui"
+            ),
+            token_type="Bearer",
+            expires_in=3600,
+            granted_scopes=(
+                "user-read-private",
+            ),
+            obtained_at=1000.0,
+            authorized_at=900.0,
+        )
+
+        controller_result = (
+            SpotifyConnectionResult(
+                status=(
+                    SpotifyConnectionStatus.CONNECTED
+                ),
+                token=token,
+                message="Spotify is connected.",
+            )
+        )
+
+        factory = FakeControllerFactory(
+            result_map={
+                "restore": controller_result,
+            }
+        )
+
+        runtime = (
+            SpotifyQtConnectionRuntime(
+                TEST_CLIENT_ID,
+                controller_factory=factory,
+                browser_launcher=(
+                    lambda url: True
+                ),
+            )
+        )
+
+        received = []
+
+        runtime.result_ready.connect(
+            lambda operation, result: (
+                received.append(
+                    (
+                        operation,
+                        result,
+                    )
+                )
+            )
+        )
+
+        runtime.restore()
+
+        self.wait_for_runtime(
+            runtime
+        )
+
+        self.assertEqual(
+            len(
+                received
+            ),
+            1,
+        )
+
+        gui_result = received[
+            0
+        ][
+            1
+        ]
+
+        self.assertIsInstance(
+            gui_result,
+            SpotifyQtConnectionState,
+        )
+
+        self.assertTrue(
+            gui_result.connected
+        )
+
+        self.assertFalse(
+            hasattr(
+                gui_result,
+                "token",
+            )
+        )
+
+        self.assertFalse(
+            hasattr(
+                gui_result,
+                "access_token",
+            )
+        )
+
+        self.assertFalse(
+            hasattr(
+                gui_result,
+                "refresh_token",
+            )
+        )
+
+        rendered = repr(
+            gui_result
+        )
+
+        self.assertNotIn(
+            "access-secret-must-not-cross-ui",
+            rendered,
+        )
+
+        self.assertNotIn(
+            "refresh-secret-must-not-cross-ui",
+            rendered,
+        )
+
     def test_disconnect_runs_off_gui_thread(
         self,
     ):
@@ -1070,6 +1194,7 @@ class SpotifyQtConnectionRuntimeBoundaryTests(
             "worker.deleteLater",
             "thread.deleteLater",
             "QDesktopServices",
+            "SpotifyQtConnectionState",
         )
 
         for marker in required:
