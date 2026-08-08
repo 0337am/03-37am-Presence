@@ -32,6 +32,9 @@ from src.spotify.constants import (
     SPOTIFY_AUTHORIZE_URL,
 )
 from src.spotify.constants import (
+    SPOTIFY_CALLBACK_PORT,
+)
+from src.spotify.constants import (
     SPOTIFY_CONNECT_SCOPES,
 )
 from src.spotify.constants import (
@@ -108,12 +111,17 @@ TEST_PORT = 54321
 class SpotifyConstantsTests(
     unittest.TestCase
 ):
-    def test_registration_uri_uses_explicit_loopback_ip(
+    def test_registration_uri_uses_fixed_loopback_port(
         self,
     ):
         self.assertEqual(
+            SPOTIFY_CALLBACK_PORT,
+            43821,
+        )
+
+        self.assertEqual(
             SPOTIFY_LOOPBACK_REGISTRATION_URI,
-            "http://127.0.0.1/callback",
+            "http://127.0.0.1:43821/callback",
         )
 
     def test_dynamic_redirect_uri(
@@ -717,20 +725,12 @@ class SpotifyAuthorizationTests(
                 )
             )
 
-    def test_authorization_redirect_requires_port(
+    def test_registered_redirect_contains_required_port(
         self,
     ):
-        with self.assertRaises(
-            OAuthValidationError
-        ):
-            validate_loopback_redirect_uri(
-                SPOTIFY_LOOPBACK_REGISTRATION_URI
-            )
-
         self.assertEqual(
             validate_loopback_redirect_uri(
-                SPOTIFY_LOOPBACK_REGISTRATION_URI,
-                require_port=False,
+                SPOTIFY_LOOPBACK_REGISTRATION_URI
             ),
             SPOTIFY_LOOPBACK_REGISTRATION_URI,
         )

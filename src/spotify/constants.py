@@ -13,13 +13,14 @@ SPOTIFY_TOKEN_URL = (
 SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
 
 SPOTIFY_LOOPBACK_HOST = "127.0.0.1"
+SPOTIFY_CALLBACK_PORT = 43821
 SPOTIFY_CALLBACK_PATH = "/callback"
 
-# Spotify permits a dynamically assigned port for a loopback IP
-# literal. This is the URI shape registered in the developer
-# dashboard; the authorization request uses the concrete port.
+# This exact loopback URI is registered in the Spotify Developer
+# Dashboard. The desktop app must use the same fixed port.
 SPOTIFY_LOOPBACK_REGISTRATION_URI = (
-    f"http://{SPOTIFY_LOOPBACK_HOST}"
+    f"http://{SPOTIFY_LOOPBACK_HOST}:"
+    f"{SPOTIFY_CALLBACK_PORT}"
     f"{SPOTIFY_CALLBACK_PATH}"
 )
 

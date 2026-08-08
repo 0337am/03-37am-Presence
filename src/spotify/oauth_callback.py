@@ -13,6 +13,9 @@ from src.spotify.constants import (
     SPOTIFY_CALLBACK_PATH,
 )
 from src.spotify.constants import (
+    SPOTIFY_CALLBACK_PORT,
+)
+from src.spotify.constants import (
     SPOTIFY_LOOPBACK_HOST,
 )
 from src.spotify.constants import (
@@ -256,7 +259,7 @@ class SpotifyLoopbackCallbackServer:
         self,
         *,
         host: str = SPOTIFY_LOOPBACK_HOST,
-        port: int = 0,
+        port: int = SPOTIFY_CALLBACK_PORT,
     ) -> None:
         if host != SPOTIFY_LOOPBACK_HOST:
             raise ValueError(

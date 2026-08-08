@@ -13,6 +13,9 @@ from urllib.parse import parse_qs
 from urllib.request import urlopen
 
 from src.spotify.constants import (
+    SPOTIFY_CALLBACK_PORT,
+)
+from src.spotify.constants import (
     SPOTIFY_CONNECT_SCOPES,
 )
 from src.spotify.constants import (
@@ -170,7 +173,7 @@ def token_payload(
 class SpotifyLoopbackCallbackTests(
     unittest.TestCase
 ):
-    def test_server_binds_only_to_loopback_with_dynamic_port(
+    def test_server_binds_only_to_registered_loopback_port(
         self,
     ):
         with SpotifyLoopbackCallbackServer() as server:
@@ -179,22 +182,14 @@ class SpotifyLoopbackCallbackTests(
                 "127.0.0.1",
             )
 
-            self.assertGreater(
+            self.assertEqual(
                 server.port,
-                0,
-            )
-
-            self.assertLessEqual(
-                server.port,
-                65535,
+                SPOTIFY_CALLBACK_PORT,
             )
 
             self.assertEqual(
                 server.redirect_uri,
-                (
-                    "http://127.0.0.1:"
-                    f"{server.port}/callback"
-                ),
+                "http://127.0.0.1:43821/callback",
             )
 
     def test_non_loopback_bind_is_rejected(
