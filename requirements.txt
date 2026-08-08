@@ -2,6 +2,7 @@
 PyQt6
 pypresence
 winsdk
+tinytag==2.2.1
 
 # Windows executable build
 PyInstaller
