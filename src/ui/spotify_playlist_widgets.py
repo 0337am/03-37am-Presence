@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import (
     Qt,
+    pyqtSignal,
 )
 from PyQt6.QtWidgets import (
     QFrame,
@@ -57,6 +58,7 @@ def _theme_value(
 class SpotifyPlaylistRow(
     QFrame
 ):
+    activated = pyqtSignal(object)
     def __init__(
         self,
         playlist: SpotifyPlaylistSummary,
@@ -75,8 +77,15 @@ class SpotifyPlaylistRow(
                 )
             )
 
+
         super().__init__(
             parent
+        )
+
+        self._playlist_summary = playlist
+
+        self.setCursor(
+            Qt.CursorShape.PointingHandCursor
         )
 
         self.playlist = playlist
@@ -348,10 +357,34 @@ class SpotifyPlaylistRow(
         ):
             return
 
+    def activate(
+        self,
+    ) -> bool:
+        self.activated.emit(
+            self._playlist_summary
+        )
+
+        return True
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            self.activate()
+
+        super().mouseReleaseEvent(
+            event
+        )
+
 
 class SpotifyPlaylistHome(
     QWidget
 ):
+    playlist_activated = pyqtSignal(object)
     def __init__(
         self,
         runtime,
@@ -1240,6 +1273,10 @@ class SpotifyPlaylistHome(
                 parent=(
                     self.list_container
                 ),
+            )
+
+            row.activated.connect(
+                self.playlist_activated.emit
             )
 
             self._rows.append(

@@ -18,6 +18,9 @@ from PyQt6.QtWidgets import (
 
 from src.ui.spotify_search import SpotifySearchPage
 from src.ui.theme import ThemeManager
+from src.ui.spotify_playlist_detail import (
+    SpotifyPlaylistDetail,
+)
 
 
 SPOTIFY_HOME_INDEX = 0
@@ -40,6 +43,7 @@ def _theme_value(
     return value
 
 
+SPOTIFY_PLAYLIST_DETAIL_INDEX = 2
 class SpotifyPage(
     QWidget
 ):
@@ -116,6 +120,7 @@ class SpotifyPage(
         self.build_ui()
 
         self._install_playlist_home()
+        self._install_playlist_detail()
         self.connect_signals()
 
         self.theme_manager.theme_changed.connect(
@@ -132,6 +137,11 @@ class SpotifyPage(
     def current_section(
         self,
     ) -> str:
+        if (
+            self.content_stack.currentIndex()
+            == SPOTIFY_PLAYLIST_DETAIL_INDEX
+        ):
+            return "playlist_detail"
         if (
             self.content_stack.currentIndex()
             == SPOTIFY_SEARCH_INDEX
@@ -417,11 +427,35 @@ class SpotifyPage(
         self.search_button.clicked.connect(
             self.show_search
         )
+        self.playlist_home.playlist_activated.connect(
+            self.show_playlist_detail
+        )
+
+        self.playlist_detail.back_requested.connect(
+            self.show_home
+        )
 
     def _set_section(
         self,
         index: int,
     ) -> None:
+        if (
+            index
+            == SPOTIFY_PLAYLIST_DETAIL_INDEX
+        ):
+            self.content_stack.setCurrentIndex(
+                SPOTIFY_PLAYLIST_DETAIL_INDEX
+            )
+
+            self.home_button.setChecked(
+                False
+            )
+
+            self.search_button.setChecked(
+                False
+            )
+
+            return
         if index not in (
             SPOTIFY_HOME_INDEX,
             SPOTIFY_SEARCH_INDEX,
@@ -680,4 +714,51 @@ class SpotifyPage(
                 border: none;
             }}
             """
+        )
+
+    def _install_playlist_detail(
+        self,
+    ) -> None:
+        self.playlist_detail = (
+            SpotifyPlaylistDetail(
+                self.playlist_runtime,
+                theme_manager=(
+                    self.theme_manager
+                ),
+                parent=(
+                    self.content_stack
+                ),
+            )
+        )
+
+        index = self.content_stack.addWidget(
+            self.playlist_detail
+        )
+
+        if (
+            index
+            != SPOTIFY_PLAYLIST_DETAIL_INDEX
+        ):
+            raise RuntimeError(
+                (
+                    "Spotify playlist detail page "
+                    "was inserted at an unexpected "
+                    "stack index."
+                )
+            )
+
+    def show_playlist_detail(
+        self,
+        playlist,
+    ) -> bool:
+        self.playlist_detail.set_playlist(
+            playlist
+        )
+
+        self._set_section(
+            SPOTIFY_PLAYLIST_DETAIL_INDEX
+        )
+
+        return bool(
+            self.playlist_detail.load()
         )

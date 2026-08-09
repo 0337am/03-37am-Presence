@@ -1,0 +1,1133 @@
+from __future__ import annotations
+
+from PyQt6.QtCore import (
+    Qt,
+    pyqtSignal,
+)
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.spotify.playlist_models import (
+    SpotifyPlaylistSummary,
+)
+from src.spotify.qt_playlist_runtime import (
+    OPERATION_PLAYLIST_ITEMS,
+)
+from src.ui.theme import (
+    ThemeManager,
+)
+
+
+SPOTIFY_PLAYLIST_DETAIL_LIMIT = 50
+
+
+def _theme_value(
+    theme: dict,
+    key: str,
+    fallback: str,
+) -> str:
+    return str(
+        theme.get(
+            key,
+            fallback,
+        )
+        or fallback
+    ).strip()
+
+
+def format_duration(
+    duration_ms,
+) -> str:
+    if (
+        duration_ms is None
+        or isinstance(
+            duration_ms,
+            bool,
+        )
+    ):
+        return "--:--"
+
+    try:
+        milliseconds = int(
+            duration_ms
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return "--:--"
+
+    if milliseconds < 0:
+        return "--:--"
+
+    total_seconds = (
+        milliseconds // 1000
+    )
+
+    hours = (
+        total_seconds // 3600
+    )
+
+    minutes = (
+        total_seconds % 3600
+    ) // 60
+
+    seconds = (
+        total_seconds % 60
+    )
+
+    if hours:
+        return (
+            str(hours)
+            + ":"
+            + str(minutes).zfill(2)
+            + ":"
+            + str(seconds).zfill(2)
+        )
+
+    return (
+        str(minutes)
+        + ":"
+        + str(seconds).zfill(2)
+    )
+
+
+class SpotifyPlaylistTrackRow(
+    QFrame
+):
+    def __init__(
+        self,
+        resolved_item,
+        *,
+        number: int,
+        parent=None,
+    ) -> None:
+        super().__init__(
+            parent
+        )
+
+        self.resolved_item = (
+            resolved_item
+        )
+
+        self.setObjectName(
+            "spotifyPlaylistTrackRow"
+        )
+
+        layout = QHBoxLayout(
+            self
+        )
+
+        layout.setContentsMargins(
+            12,
+            9,
+            12,
+            9,
+        )
+
+        layout.setSpacing(
+            10
+        )
+
+        self.number_label = QLabel(
+            str(
+                number
+            ),
+            self,
+        )
+
+        self.number_label.setObjectName(
+            "spotifyPlaylistTrackNumber"
+        )
+
+        self.number_label.setFixedWidth(
+            28
+        )
+
+        self.number_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        track = getattr(
+            resolved_item,
+            "unified_track",
+            None,
+        )
+
+        title = str(
+            getattr(
+                track,
+                "title",
+                "",
+            )
+            or "Unknown track"
+        )
+
+        artist = str(
+            getattr(
+                track,
+                "artist",
+                "",
+            )
+            or "Unknown artist"
+        )
+
+        information = QVBoxLayout()
+
+        information.setSpacing(
+            1
+        )
+
+        self.title_label = QLabel(
+            title,
+            self,
+        )
+
+        self.title_label.setObjectName(
+            "spotifyPlaylistTrackTitle"
+        )
+
+        self.title_label.setWordWrap(
+            True
+        )
+
+        self.artist_label = QLabel(
+            artist,
+            self,
+        )
+
+        self.artist_label.setObjectName(
+            "spotifyPlaylistTrackArtist"
+        )
+
+        self.artist_label.setWordWrap(
+            True
+        )
+
+        information.addWidget(
+            self.title_label
+        )
+
+        information.addWidget(
+            self.artist_label
+        )
+
+        is_local = bool(
+            getattr(
+                resolved_item,
+                "is_local",
+                False,
+            )
+        )
+
+        local_available = getattr(
+            resolved_item,
+            "local_available",
+            None,
+        )
+
+        self.local_badge = QLabel(
+            "",
+            self,
+        )
+
+        self.local_badge.setObjectName(
+            "spotifyPlaylistLocalBadge"
+        )
+
+        self.local_badge.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        if is_local:
+            if local_available is True:
+                self.local_badge.setText(
+                    "LOCAL"
+                )
+
+            else:
+                self.local_badge.setText(
+                    "LOCAL • UNAVAILABLE"
+                )
+
+                self.local_badge.setObjectName(
+                    "spotifyPlaylistUnavailableBadge"
+                )
+
+            self.local_badge.setVisible(
+                True
+            )
+
+        else:
+            self.local_badge.setVisible(
+                False
+            )
+
+        self.duration_label = QLabel(
+            format_duration(
+                getattr(
+                    track,
+                    "duration_ms",
+                    None,
+                )
+            ),
+            self,
+        )
+
+        self.duration_label.setObjectName(
+            "spotifyPlaylistTrackDuration"
+        )
+
+        self.duration_label.setAlignment(
+            (
+                Qt.AlignmentFlag.AlignRight
+                | Qt.AlignmentFlag.AlignVCenter
+            )
+        )
+
+        self.duration_label.setMinimumWidth(
+            52
+        )
+
+        layout.addWidget(
+            self.number_label
+        )
+
+        layout.addLayout(
+            information,
+            stretch=1,
+        )
+
+        layout.addWidget(
+            self.local_badge
+        )
+
+        layout.addWidget(
+            self.duration_label
+        )
+
+
+class SpotifyPlaylistDetail(
+    QWidget
+):
+    back_requested = pyqtSignal()
+
+    def __init__(
+        self,
+        runtime,
+        *,
+        theme_manager=None,
+        parent=None,
+    ) -> None:
+        super().__init__(
+            parent
+        )
+
+        load_items = getattr(
+            runtime,
+            "load_playlist_items",
+            None,
+        )
+
+        if not callable(
+            load_items
+        ):
+            raise TypeError(
+                (
+                    "runtime must provide a callable "
+                    "load_playlist_items method"
+                )
+            )
+
+        self.runtime = runtime
+
+        self.theme_manager = (
+            theme_manager
+            or ThemeManager(
+                self
+            )
+        )
+
+        self.playlist = None
+        self.rows = []
+        self.last_result = None
+
+        self._pending_load = False
+        self._request_active = False
+
+        self.setObjectName(
+            "spotifyPlaylistDetailRoot"
+        )
+
+        self.build_ui()
+        self.connect_signals()
+
+        theme_signal = getattr(
+            self.theme_manager,
+            "theme_changed",
+            None,
+        )
+
+        connect_theme = getattr(
+            theme_signal,
+            "connect",
+            None,
+        )
+
+        if callable(
+            connect_theme
+        ):
+            connect_theme(
+                self.apply_theme
+            )
+
+        theme_getter = getattr(
+            self.theme_manager,
+            "theme",
+            None,
+        )
+
+        if callable(
+            theme_getter
+        ):
+            self.apply_theme(
+                theme_getter()
+            )
+
+    def build_ui(
+        self,
+    ) -> None:
+        root = QVBoxLayout(
+            self
+        )
+
+        root.setContentsMargins(
+            20,
+            18,
+            20,
+            18,
+        )
+
+        root.setSpacing(
+            12
+        )
+
+        header = QHBoxLayout()
+
+        header.setSpacing(
+            12
+        )
+
+        self.back_button = QPushButton(
+            "← Back"
+        )
+
+        self.back_button.setObjectName(
+            "spotifyPlaylistBackButton"
+        )
+
+        self.back_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        heading = QVBoxLayout()
+
+        heading.setSpacing(
+            1
+        )
+
+        self.title_label = QLabel(
+            "Playlist"
+        )
+
+        self.title_label.setObjectName(
+            "spotifyPlaylistDetailTitle"
+        )
+
+        self.subtitle_label = QLabel(
+            "Choose a playlist from Spotify Home."
+        )
+
+        self.subtitle_label.setObjectName(
+            "spotifyPlaylistDetailSubtitle"
+        )
+
+        heading.addWidget(
+            self.title_label
+        )
+
+        heading.addWidget(
+            self.subtitle_label
+        )
+
+        header.addWidget(
+            self.back_button,
+            alignment=(
+                Qt.AlignmentFlag.AlignTop
+            ),
+        )
+
+        header.addLayout(
+            heading,
+            stretch=1,
+        )
+
+        root.addLayout(
+            header
+        )
+
+        self.status_label = QLabel(
+            "Select a playlist to view its tracks."
+        )
+
+        self.status_label.setObjectName(
+            "spotifyPlaylistDetailStatus"
+        )
+
+        self.status_label.setWordWrap(
+            True
+        )
+
+        root.addWidget(
+            self.status_label
+        )
+
+        self.scroll = QScrollArea()
+
+        self.scroll.setObjectName(
+            "spotifyPlaylistTrackScroll"
+        )
+
+        self.scroll.setWidgetResizable(
+            True
+        )
+
+        self.scroll.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+        self.track_container = QWidget()
+
+        self.track_container.setObjectName(
+            "spotifyPlaylistTrackContainer"
+        )
+
+        self.track_layout = QVBoxLayout(
+            self.track_container
+        )
+
+        self.track_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        self.track_layout.setSpacing(
+            6
+        )
+
+        self.empty_label = QLabel(
+            "No tracks to display."
+        )
+
+        self.empty_label.setObjectName(
+            "spotifyPlaylistDetailEmpty"
+        )
+
+        self.empty_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        self.empty_label.setWordWrap(
+            True
+        )
+
+        self.track_layout.addWidget(
+            self.empty_label
+        )
+
+        self.track_layout.addStretch()
+
+        self.scroll.setWidget(
+            self.track_container
+        )
+
+        root.addWidget(
+            self.scroll,
+            stretch=1,
+        )
+
+    def connect_signals(
+        self,
+    ) -> None:
+        self.back_button.clicked.connect(
+            self.back_requested.emit
+        )
+
+        signal_specs = (
+            (
+                "playlist_items_ready",
+                self.handle_items_ready,
+            ),
+            (
+                "failed",
+                self.handle_runtime_failure,
+            ),
+            (
+                "busy_changed",
+                self.handle_busy_changed,
+            ),
+        )
+
+        for (
+            signal_name,
+            handler,
+        ) in signal_specs:
+            signal = getattr(
+                self.runtime,
+                signal_name,
+                None,
+            )
+
+            connect = getattr(
+                signal,
+                "connect",
+                None,
+            )
+
+            if callable(
+                connect
+            ):
+                connect(
+                    handler
+                )
+
+    def set_playlist(
+        self,
+        playlist,
+    ) -> None:
+        if not isinstance(
+            playlist,
+            SpotifyPlaylistSummary,
+        ):
+            raise TypeError(
+                (
+                    "playlist must be a "
+                    "SpotifyPlaylistSummary"
+                )
+            )
+
+        self.playlist = playlist
+        self.last_result = None
+        self._pending_load = False
+        self._request_active = False
+
+        self.clear_tracks()
+
+        self.title_label.setText(
+            playlist.name
+        )
+
+        owner = (
+            playlist.owner_name
+            or "Unknown owner"
+        )
+
+        count = (
+            str(
+                playlist.total_items
+            )
+            + (
+                " track"
+                if playlist.total_items == 1
+                else " tracks"
+            )
+        )
+
+        self.subtitle_label.setText(
+            (
+                owner
+                + " • "
+                + count
+            )
+        )
+
+        self.status_label.setText(
+            "Ready to load playlist tracks."
+        )
+
+    def load(
+        self,
+    ) -> bool:
+        if self.playlist is None:
+            return False
+
+        if bool(
+            getattr(
+                self.runtime,
+                "busy",
+                False,
+            )
+        ):
+            self._pending_load = True
+
+            self.status_label.setText(
+                "Waiting for the current Spotify request to finish..."
+            )
+
+            return False
+
+        self._pending_load = False
+        self._request_active = True
+
+        self.status_label.setText(
+            "Loading playlist tracks..."
+        )
+
+        try:
+            self.runtime.load_playlist_items(
+                self.playlist.spotify_id,
+                limit=(
+                    SPOTIFY_PLAYLIST_DETAIL_LIMIT
+                ),
+                offset=0,
+            )
+
+        except Exception:
+            self._request_active = False
+
+            self.status_label.setText(
+                (
+                    "Playlist tracks could not be "
+                    "requested right now."
+                )
+            )
+
+            return False
+
+        return True
+
+    def clear_tracks(
+        self,
+    ) -> None:
+        for row in self.rows:
+            self.track_layout.removeWidget(
+                row
+            )
+
+            row.deleteLater()
+
+        self.rows.clear()
+
+        self.empty_label.setVisible(
+            True
+        )
+
+    def set_resolved_page(
+        self,
+        page,
+        *,
+        local_snapshot_available=None,
+    ) -> None:
+        self.clear_tracks()
+
+        items = tuple(
+            getattr(
+                page,
+                "items",
+                (),
+            )
+        )
+
+        offset = int(
+            getattr(
+                page,
+                "offset",
+                0,
+            )
+            or 0
+        )
+
+        stretch_index = (
+            self.track_layout.count()
+            - 1
+        )
+
+        for index, item in enumerate(
+            items,
+            start=offset + 1,
+        ):
+            row = (
+                SpotifyPlaylistTrackRow(
+                    item,
+                    number=index,
+                    parent=(
+                        self.track_container
+                    ),
+                )
+            )
+
+            self.rows.append(
+                row
+            )
+
+            self.track_layout.insertWidget(
+                stretch_index,
+                row,
+            )
+
+            stretch_index += 1
+
+        self.empty_label.setVisible(
+            not bool(
+                items
+            )
+        )
+
+        total = int(
+            getattr(
+                page,
+                "total",
+                len(
+                    items
+                ),
+            )
+            or 0
+        )
+
+        shown = len(
+            items
+        )
+
+        if total > shown:
+            summary = (
+                "Showing "
+                + str(shown)
+                + " of "
+                + str(total)
+                + " tracks"
+            )
+
+        else:
+            summary = (
+                str(total)
+                + (
+                    " track"
+                    if total == 1
+                    else " tracks"
+                )
+            )
+
+        local_count = int(
+            getattr(
+                page,
+                "local_count",
+                0,
+            )
+            or 0
+        )
+
+        unavailable_count = int(
+            getattr(
+                page,
+                "unavailable_local_count",
+                0,
+            )
+            or 0
+        )
+
+        if local_count:
+            summary += (
+                " • "
+                + str(local_count)
+                + " local"
+            )
+
+        if unavailable_count:
+            summary += (
+                " • "
+                + str(unavailable_count)
+                + " unavailable"
+            )
+
+        if (
+            local_count
+            and local_snapshot_available
+            is False
+        ):
+            summary += (
+                " • Rescan Local Music in Settings "
+                "to resolve local tracks"
+            )
+
+        self.status_label.setText(
+            summary
+        )
+
+    def handle_items_ready(
+        self,
+        playlist_id: str,
+        result,
+    ) -> None:
+        if self.playlist is None:
+            return
+
+        if (
+            str(
+                playlist_id
+            )
+            != self.playlist.spotify_id
+        ):
+            return
+
+        self._request_active = False
+        self._pending_load = False
+        self.last_result = result
+
+        if not bool(
+            getattr(
+                result,
+                "ready",
+                False,
+            )
+        ):
+            message = str(
+                getattr(
+                    result,
+                    "message",
+                    "",
+                )
+                or (
+                    "Spotify could not load "
+                    "this playlist."
+                )
+            )
+
+            self.clear_tracks()
+
+            self.status_label.setText(
+                message
+            )
+
+            return
+
+        page = getattr(
+            result,
+            "resolved_page",
+            None,
+        )
+
+        if page is None:
+            self.clear_tracks()
+
+            self.status_label.setText(
+                (
+                    "Spotify returned no usable "
+                    "playlist track page."
+                )
+            )
+
+            return
+
+        self.set_resolved_page(
+            page,
+            local_snapshot_available=(
+                getattr(
+                    result,
+                    "local_snapshot_available",
+                    None,
+                )
+            ),
+        )
+
+    def handle_runtime_failure(
+        self,
+        operation: str,
+        target: str,
+        error_code: str,
+        message: str,
+    ) -> None:
+        if (
+            operation
+            != OPERATION_PLAYLIST_ITEMS
+        ):
+            return
+
+        if self.playlist is None:
+            return
+
+        if (
+            str(
+                target
+            )
+            != self.playlist.spotify_id
+        ):
+            return
+
+        self._request_active = False
+
+        safe_message = str(
+            message
+            or (
+                "Spotify could not load "
+                "this playlist."
+            )
+        ).strip()
+
+        self.status_label.setText(
+            safe_message
+        )
+
+    def handle_busy_changed(
+        self,
+        busy: bool,
+    ) -> None:
+        if busy:
+            return
+
+        if not self._pending_load:
+            return
+
+        if self.playlist is None:
+            self._pending_load = False
+            return
+
+        self.load()
+
+    def apply_theme(
+        self,
+        theme: dict,
+    ) -> None:
+        if not isinstance(
+            theme,
+            dict,
+        ):
+            return
+
+        background = _theme_value(
+            theme,
+            "background",
+            "#101014",
+        )
+
+        card = _theme_value(
+            theme,
+            "card",
+            "#18181f",
+        )
+
+        card_alt = _theme_value(
+            theme,
+            "card_alt",
+            "#202028",
+        )
+
+        border = _theme_value(
+            theme,
+            "border",
+            "#34343e",
+        )
+
+        accent = _theme_value(
+            theme,
+            "accent",
+            "#ff4f91",
+        )
+
+        text = _theme_value(
+            theme,
+            "text",
+            "#f4f4f6",
+        )
+
+        muted = _theme_value(
+            theme,
+            "muted",
+            "#a6a6b1",
+        )
+
+        self.setStyleSheet(
+            f"""
+            QWidget#spotifyPlaylistDetailRoot {{
+                background: transparent;
+                color: {text};
+            }}
+
+            QPushButton#spotifyPlaylistBackButton {{
+                color: {text};
+                background: {card_alt};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 7px 10px;
+                font-weight: 650;
+            }}
+
+            QPushButton#spotifyPlaylistBackButton:hover {{
+                border: 1px solid {accent};
+            }}
+
+            QLabel#spotifyPlaylistDetailTitle {{
+                color: {text};
+                font-size: 22px;
+                font-weight: 750;
+            }}
+
+            QLabel#spotifyPlaylistDetailSubtitle,
+            QLabel#spotifyPlaylistDetailStatus,
+            QLabel#spotifyPlaylistDetailEmpty,
+            QLabel#spotifyPlaylistTrackArtist,
+            QLabel#spotifyPlaylistTrackDuration,
+            QLabel#spotifyPlaylistTrackNumber {{
+                color: {muted};
+            }}
+
+            QScrollArea#spotifyPlaylistTrackScroll {{
+                background: transparent;
+                border: none;
+            }}
+
+            QWidget#spotifyPlaylistTrackContainer {{
+                background: transparent;
+            }}
+
+            QFrame#spotifyPlaylistTrackRow {{
+                background: {card};
+                border: 1px solid {border};
+                border-radius: 10px;
+            }}
+
+            QLabel#spotifyPlaylistTrackTitle {{
+                color: {text};
+                font-weight: 650;
+            }}
+
+            QLabel#spotifyPlaylistLocalBadge {{
+                color: {accent};
+                background: {background};
+                border: 1px solid {accent};
+                border-radius: 6px;
+                padding: 3px 7px;
+                font-size: 9px;
+                font-weight: 750;
+            }}
+
+            QLabel#spotifyPlaylistUnavailableBadge {{
+                color: {muted};
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 6px;
+                padding: 3px 7px;
+                font-size: 9px;
+                font-weight: 750;
+            }}
+            """
+        )
