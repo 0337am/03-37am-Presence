@@ -886,6 +886,75 @@ class LocalMusicQtRuntimeTests(
         )
 
 
+    def test_clear_latest_result_emits_result_cleared(
+        self,
+    ):
+        runtime = (
+            LocalMusicQtScanRuntime()
+        )
+
+        self.addCleanup(
+            runtime.shutdown
+        )
+
+        runtime._latest_result = (
+            empty_result(
+                (
+                    r"C:\Music",
+                )
+            )
+        )
+
+        cleared = []
+
+        runtime.result_cleared.connect(
+            lambda: cleared.append(
+                True
+            )
+        )
+
+        runtime.clear_latest_result()
+
+        self.assertIsNone(
+            runtime.latest_result
+        )
+
+        self.assertEqual(
+            cleared,
+            [
+                True,
+            ],
+        )
+
+    def test_clear_signal_emits_without_cached_result(
+        self,
+    ):
+        runtime = (
+            LocalMusicQtScanRuntime()
+        )
+
+        self.addCleanup(
+            runtime.shutdown
+        )
+
+        cleared = []
+
+        runtime.result_cleared.connect(
+            lambda: cleared.append(
+                True
+            )
+        )
+
+        runtime.clear_latest_result()
+
+        self.assertEqual(
+            cleared,
+            [
+                True,
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main(
         verbosity=2

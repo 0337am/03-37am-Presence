@@ -268,18 +268,11 @@ class SpotifyPlaylistProductionWiringTests(
         )
 
         fake = SimpleNamespace(
-            settings_page=(
+            spotify_local_candidate_snapshot=(
                 SimpleNamespace(
-                    local_music_runtime=(
-                        SimpleNamespace(
-                            latest_result=(
-                                SimpleNamespace(
-                                    candidates=(
-                                        candidates
-                                    )
-                                )
-                            )
-                        )
+                    get=(
+                        lambda:
+                        candidates
                     )
                 )
             )
@@ -333,6 +326,71 @@ class SpotifyPlaylistProductionWiringTests(
             "client123",
             session_manager=manager,
             browser_opener=browser_opener,
+        )
+
+
+    def test_candidate_provider_reads_thread_neutral_snapshot_only(
+        self,
+    ):
+        self.assertIn(
+            (
+                "spotify_local_candidate_snapshot"
+            ),
+            self.provider_source,
+        )
+
+        self.assertIn(
+            '"get"',
+            self.provider_source,
+        )
+
+        for forbidden in (
+            "settings_page",
+            "local_music_runtime",
+            "latest_result",
+            "start_scan",
+        ):
+            self.assertNotIn(
+                forbidden,
+                self.provider_source,
+            )
+
+    def test_build_pages_keeps_snapshot_synced_with_local_runtime(
+        self,
+    ):
+        for marker in (
+            "LocalCandidateSnapshot(",
+            "result_ready.connect(",
+            "replace_scan_result",
+            "result_cleared.connect(",
+            "spotify_local_candidate_snapshot",
+        ):
+            self.assertIn(
+                marker,
+                self.build_pages_source,
+            )
+
+        snapshot_position = (
+            self.build_pages_source.index(
+                (
+                    "self."
+                    "spotify_local_candidate_snapshot"
+                )
+            )
+        )
+
+        resolved_position = (
+            self.build_pages_source.index(
+                (
+                    "self."
+                    "spotify_resolved_playlist_service"
+                )
+            )
+        )
+
+        self.assertLess(
+            snapshot_position,
+            resolved_position,
         )
 
 

@@ -39,6 +39,9 @@ from src.system.afk_preferences import (
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
+from src.media.local_candidate_snapshot import (
+    LocalCandidateSnapshot,
+)
 from src.spotify.connection_controller import (
     SpotifyConnectionController,
 )
@@ -843,32 +846,27 @@ class MainWindow(QMainWindow):
     def _spotify_local_candidates(
         self,
     ):
-        settings_page = getattr(
+        snapshot = getattr(
             self,
-            "settings_page",
+            "spotify_local_candidate_snapshot",
             None,
         )
 
-        if settings_page is None:
+        if snapshot is None:
             return None
 
-        runtime = getattr(
-            settings_page,
-            "local_music_runtime",
+        getter = getattr(
+            snapshot,
+            "get",
             None,
         )
 
-        if runtime is None:
+        if not callable(
+            getter
+        ):
             return None
 
-        scan_result = (
-            runtime.latest_result
-        )
-
-        if scan_result is None:
-            return None
-
-        return scan_result.candidates
+        return getter()
 
     def build_pages(
         self,
@@ -928,6 +926,33 @@ class MainWindow(QMainWindow):
                 self.spotify_connection_runtime
             ),
         )
+
+        self.spotify_local_candidate_snapshot = (
+            LocalCandidateSnapshot()
+        )
+
+        local_music_runtime = (
+            self.settings_page.local_music_runtime
+        )
+
+        local_music_runtime.result_ready.connect(
+            self.spotify_local_candidate_snapshot
+            .replace_scan_result
+        )
+
+        local_music_runtime.result_cleared.connect(
+            self.spotify_local_candidate_snapshot
+            .clear
+        )
+
+        existing_local_result = (
+            local_music_runtime.latest_result
+        )
+
+        if existing_local_result is not None:
+            self.spotify_local_candidate_snapshot.replace_scan_result(
+                existing_local_result
+            )
 
         self.spotify_playlist_service = (
             SpotifyPlaylistService(

@@ -281,6 +281,8 @@ class LocalMusicQtScanRuntime(
         bool
     )
 
+    result_cleared = pyqtSignal()
+
     def __init__(
         self,
         *,
@@ -512,6 +514,8 @@ class LocalMusicQtScanRuntime(
         self,
     ) -> None:
         self._latest_result = None
+
+        self.result_cleared.emit()
 
     @pyqtSlot(
         object
