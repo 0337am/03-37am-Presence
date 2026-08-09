@@ -142,6 +142,8 @@ def resolved_page(
     *items,
     total=None,
     offset=0,
+    limit=50,
+    omitted_items=0,
 ):
     local_count = sum(
         1
@@ -171,6 +173,8 @@ def resolved_page(
             else total
         ),
         offset=offset,
+        limit=limit,
+        omitted_items=omitted_items,
         local_count=local_count,
         unavailable_local_count=(
             unavailable
@@ -496,6 +500,8 @@ class SpotifyPlaylistDetailTests(
             playlist()
         )
 
+        widget.load()
+
         page = resolved_page(
             resolved_item(
                 title="Rental",
@@ -542,7 +548,7 @@ class SpotifyPlaylistDetailTests(
         )
 
         self.assertIn(
-            "Showing 3 of 94 tracks",
+            "3 / 94 tracks loaded",
             widget.status_label.text(),
         )
 
@@ -596,6 +602,8 @@ class SpotifyPlaylistDetailTests(
             playlist()
         )
 
+        widget.load()
+
         widget.handle_items_ready(
             "playlist123",
             SimpleNamespace(
@@ -610,6 +618,8 @@ class SpotifyPlaylistDetailTests(
             widget.status_label.text(),
             "Reconnect Spotify.",
         )
+
+        widget.load()
 
         widget.handle_runtime_failure(
             OPERATION_PLAYLIST_ITEMS,

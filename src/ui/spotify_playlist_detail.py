@@ -363,6 +363,18 @@ class SpotifyPlaylistDetail(
         self._pending_load = False
         self._request_active = False
 
+        self._pending_next_page = False
+        self._requested_offset = None
+        self._next_offset = 0
+        self._total = None
+
+        self._omitted_items = 0
+        self._local_count = 0
+        self._unavailable_local_count = 0
+        self._local_snapshot_missing = False
+
+        self._pagination_enabled = True
+
         self.setObjectName(
             "spotifyPlaylistDetailRoot"
         )
@@ -570,7 +582,7 @@ class SpotifyPlaylistDetail(
         self,
     ) -> None:
         self.back_button.clicked.connect(
-            self.back_requested.emit
+            self._handle_back_clicked
         )
 
         signal_specs = (
@@ -581,6 +593,10 @@ class SpotifyPlaylistDetail(
             (
                 "failed",
                 self.handle_runtime_failure,
+            ),
+            (
+                "operation_finished",
+                self.handle_operation_finished,
             ),
             (
                 "busy_changed",
@@ -628,8 +644,21 @@ class SpotifyPlaylistDetail(
 
         self.playlist = playlist
         self.last_result = None
+
         self._pending_load = False
         self._request_active = False
+        self._pending_next_page = False
+
+        self._requested_offset = None
+        self._next_offset = 0
+        self._total = None
+
+        self._omitted_items = 0
+        self._local_count = 0
+        self._unavailable_local_count = 0
+        self._local_snapshot_missing = False
+
+        self._pagination_enabled = True
 
         self.clear_tracks()
 
@@ -671,6 +700,9 @@ class SpotifyPlaylistDetail(
         if self.playlist is None:
             return False
 
+        if not self._pagination_enabled:
+            return False
+
         if bool(
             getattr(
                 self.runtime,
@@ -681,40 +713,17 @@ class SpotifyPlaylistDetail(
             self._pending_load = True
 
             self.status_label.setText(
-                "Waiting for the current Spotify request to finish..."
-            )
-
-            return False
-
-        self._pending_load = False
-        self._request_active = True
-
-        self.status_label.setText(
-            "Loading playlist tracks..."
-        )
-
-        try:
-            self.runtime.load_playlist_items(
-                self.playlist.spotify_id,
-                limit=(
-                    SPOTIFY_PLAYLIST_DETAIL_LIMIT
-                ),
-                offset=0,
-            )
-
-        except Exception:
-            self._request_active = False
-
-            self.status_label.setText(
                 (
-                    "Playlist tracks could not be "
-                    "requested right now."
+                    "Waiting for the current "
+                    "Spotify request to finish..."
                 )
             )
 
             return False
 
-        return True
+        return self._request_page(
+            0
+        )
 
     def clear_tracks(
         self,
@@ -737,140 +746,22 @@ class SpotifyPlaylistDetail(
         page,
         *,
         local_snapshot_available=None,
-    ) -> None:
+    ) -> bool:
         self.clear_tracks()
 
-        items = tuple(
-            getattr(
-                page,
-                "items",
-                (),
-            )
-        )
+        self._omitted_items = 0
+        self._local_count = 0
+        self._unavailable_local_count = 0
+        self._local_snapshot_missing = False
 
-        offset = int(
-            getattr(
-                page,
-                "offset",
-                0,
-            )
-            or 0
-        )
+        self._next_offset = 0
+        self._total = None
 
-        stretch_index = (
-            self.track_layout.count()
-            - 1
-        )
-
-        for index, item in enumerate(
-            items,
-            start=offset + 1,
-        ):
-            row = (
-                SpotifyPlaylistTrackRow(
-                    item,
-                    number=index,
-                    parent=(
-                        self.track_container
-                    ),
-                )
-            )
-
-            self.rows.append(
-                row
-            )
-
-            self.track_layout.insertWidget(
-                stretch_index,
-                row,
-            )
-
-            stretch_index += 1
-
-        self.empty_label.setVisible(
-            not bool(
-                items
-            )
-        )
-
-        total = int(
-            getattr(
-                page,
-                "total",
-                len(
-                    items
-                ),
-            )
-            or 0
-        )
-
-        shown = len(
-            items
-        )
-
-        if total > shown:
-            summary = (
-                "Showing "
-                + str(shown)
-                + " of "
-                + str(total)
-                + " tracks"
-            )
-
-        else:
-            summary = (
-                str(total)
-                + (
-                    " track"
-                    if total == 1
-                    else " tracks"
-                )
-            )
-
-        local_count = int(
-            getattr(
-                page,
-                "local_count",
-                0,
-            )
-            or 0
-        )
-
-        unavailable_count = int(
-            getattr(
-                page,
-                "unavailable_local_count",
-                0,
-            )
-            or 0
-        )
-
-        if local_count:
-            summary += (
-                " • "
-                + str(local_count)
-                + " local"
-            )
-
-        if unavailable_count:
-            summary += (
-                " • "
-                + str(unavailable_count)
-                + " unavailable"
-            )
-
-        if (
-            local_count
-            and local_snapshot_available
-            is False
-        ):
-            summary += (
-                " • Rescan Local Music in Settings "
-                "to resolve local tracks"
-            )
-
-        self.status_label.setText(
-            summary
+        return self._append_resolved_page(
+            page,
+            local_snapshot_available=(
+                local_snapshot_available
+            ),
         )
 
     def handle_items_ready(
@@ -889,8 +780,19 @@ class SpotifyPlaylistDetail(
         ):
             return
 
+        if not self._request_active:
+            return
+
+        requested_offset = (
+            self._requested_offset
+        )
+
         self._request_active = False
-        self._pending_load = False
+        self._requested_offset = None
+
+        if not self._pagination_enabled:
+            return
+
         self.last_result = result
 
         if not bool(
@@ -900,6 +802,9 @@ class SpotifyPlaylistDetail(
                 False,
             )
         ):
+            self._pending_load = False
+            self._pending_next_page = False
+
             message = str(
                 getattr(
                     result,
@@ -912,11 +817,25 @@ class SpotifyPlaylistDetail(
                 )
             )
 
-            self.clear_tracks()
+            if self.rows:
+                self.status_label.setText(
+                    (
+                        str(
+                            len(
+                                self.rows
+                            )
+                        )
+                        + " tracks loaded • "
+                        + message
+                    )
+                )
 
-            self.status_label.setText(
-                message
-            )
+            else:
+                self.clear_tracks()
+
+                self.status_label.setText(
+                    message
+                )
 
             return
 
@@ -927,26 +846,94 @@ class SpotifyPlaylistDetail(
         )
 
         if page is None:
-            self.clear_tracks()
+            self._pending_load = False
+            self._pending_next_page = False
+
+            message = (
+                "Spotify returned no usable "
+                "playlist track page."
+            )
+
+            if self.rows:
+                self.status_label.setText(
+                    (
+                        str(
+                            len(
+                                self.rows
+                            )
+                        )
+                        + " tracks loaded • "
+                        + message
+                    )
+                )
+
+            else:
+                self.clear_tracks()
+
+                self.status_label.setText(
+                    message
+                )
+
+            return
+
+        page_offset = int(
+            getattr(
+                page,
+                "offset",
+                -1,
+            )
+        )
+
+        if (
+            requested_offset is None
+            or page_offset
+            != requested_offset
+        ):
+            self._pending_load = False
+            self._pending_next_page = False
 
             self.status_label.setText(
                 (
-                    "Spotify returned no usable "
-                    "playlist track page."
+                    "Spotify returned playlist "
+                    "pagination out of sequence."
                 )
             )
 
             return
 
-        self.set_resolved_page(
-            page,
-            local_snapshot_available=(
-                getattr(
-                    result,
-                    "local_snapshot_available",
-                    None,
+        if page_offset == 0:
+            complete = (
+                self.set_resolved_page(
+                    page,
+                    local_snapshot_available=(
+                        getattr(
+                            result,
+                            "local_snapshot_available",
+                            None,
+                        )
+                    ),
                 )
-            ),
+            )
+
+        else:
+            complete = (
+                self._append_resolved_page(
+                    page,
+                    local_snapshot_available=(
+                        getattr(
+                            result,
+                            "local_snapshot_available",
+                            None,
+                        )
+                    ),
+                )
+            )
+
+        self._pending_load = False
+
+        self._pending_next_page = (
+            not complete
+            and self._pagination_enabled
         )
 
     def handle_runtime_failure(
@@ -973,7 +960,17 @@ class SpotifyPlaylistDetail(
         ):
             return
 
+        if not self._request_active:
+            return
+
         self._request_active = False
+        self._requested_offset = None
+
+        self._pending_load = False
+        self._pending_next_page = False
+
+        if not self._pagination_enabled:
+            return
 
         safe_message = str(
             message
@@ -983,9 +980,23 @@ class SpotifyPlaylistDetail(
             )
         ).strip()
 
-        self.status_label.setText(
-            safe_message
-        )
+        if self.rows:
+            self.status_label.setText(
+                (
+                    str(
+                        len(
+                            self.rows
+                        )
+                    )
+                    + " tracks loaded • "
+                    + safe_message
+                )
+            )
+
+        else:
+            self.status_label.setText(
+                safe_message
+            )
 
     def handle_busy_changed(
         self,
@@ -997,11 +1008,461 @@ class SpotifyPlaylistDetail(
         if not self._pending_load:
             return
 
-        if self.playlist is None:
-            self._pending_load = False
+        operation_finished = getattr(
+            self.runtime,
+            "operation_finished",
+            None,
+        )
+
+        if operation_finished is not None:
             return
 
         self.load()
+
+    def _handle_back_clicked(
+        self,
+    ) -> None:
+        self._pagination_enabled = False
+        self._pending_load = False
+        self._pending_next_page = False
+
+        self.back_requested.emit()
+
+    def _request_page(
+        self,
+        offset: int,
+    ) -> bool:
+        if self.playlist is None:
+            return False
+
+        if not self._pagination_enabled:
+            return False
+
+        if self._request_active:
+            return False
+
+        if bool(
+            getattr(
+                self.runtime,
+                "busy",
+                False,
+            )
+        ):
+            if offset == 0:
+                self._pending_load = True
+
+            else:
+                self._pending_next_page = True
+
+            return False
+
+        checked_offset = int(
+            offset
+        )
+
+        if checked_offset < 0:
+            return False
+
+        self._pending_load = False
+
+        if checked_offset > 0:
+            self._pending_next_page = False
+
+        self._request_active = True
+        self._requested_offset = (
+            checked_offset
+        )
+
+        if checked_offset == 0:
+            self.status_label.setText(
+                "Loading playlist tracks..."
+            )
+
+        else:
+            total = (
+                self._total
+                if self._total is not None
+                else self.playlist.total_items
+            )
+
+            self.status_label.setText(
+                (
+                    str(
+                        len(
+                            self.rows
+                        )
+                    )
+                    + " / "
+                    + str(
+                        total
+                    )
+                    + " tracks loaded • "
+                    "loading more..."
+                )
+            )
+
+        try:
+            self.runtime.load_playlist_items(
+                self.playlist.spotify_id,
+                limit=(
+                    SPOTIFY_PLAYLIST_DETAIL_LIMIT
+                ),
+                offset=checked_offset,
+            )
+
+        except Exception:
+            self._request_active = False
+            self._requested_offset = None
+
+            if checked_offset == 0:
+                self.status_label.setText(
+                    (
+                        "Playlist tracks could not "
+                        "be requested right now."
+                    )
+                )
+
+            else:
+                self.status_label.setText(
+                    (
+                        str(
+                            len(
+                                self.rows
+                            )
+                        )
+                        + " tracks loaded • "
+                        "remaining tracks could not "
+                        "be requested right now."
+                    )
+                )
+
+            return False
+
+        return True
+
+    def _append_resolved_page(
+        self,
+        page,
+        *,
+        local_snapshot_available=None,
+    ) -> bool:
+        items = tuple(
+            getattr(
+                page,
+                "items",
+                (),
+            )
+        )
+
+        page_offset = int(
+            getattr(
+                page,
+                "offset",
+                0,
+            )
+            or 0
+        )
+
+        page_limit = int(
+            getattr(
+                page,
+                "limit",
+                0,
+            )
+            or 0
+        )
+
+        page_total = int(
+            getattr(
+                page,
+                "total",
+                0,
+            )
+            or 0
+        )
+
+        omitted_items = int(
+            getattr(
+                page,
+                "omitted_items",
+                0,
+            )
+            or 0
+        )
+
+        if page_limit <= 0:
+            self._pending_next_page = False
+
+            self.status_label.setText(
+                (
+                    "Spotify returned invalid "
+                    "playlist pagination."
+                )
+            )
+
+            return True
+
+        if (
+            self._total is not None
+            and page_total
+            != self._total
+        ):
+            self._pending_next_page = False
+
+            self.status_label.setText(
+                (
+                    "Spotify changed the playlist "
+                    "while it was loading. "
+                    "Reopen it to refresh."
+                )
+            )
+
+            return True
+
+        self._total = page_total
+
+        stretch_index = (
+            self.track_layout.count()
+            - 1
+        )
+
+        for item in items:
+            row = (
+                SpotifyPlaylistTrackRow(
+                    item,
+                    number=(
+                        len(
+                            self.rows
+                        )
+                        + 1
+                    ),
+                    parent=(
+                        self.track_container
+                    ),
+                )
+            )
+
+            self.rows.append(
+                row
+            )
+
+            self.track_layout.insertWidget(
+                stretch_index,
+                row,
+            )
+
+            stretch_index += 1
+
+        self.empty_label.setVisible(
+            not bool(
+                self.rows
+            )
+        )
+
+        self._omitted_items += (
+            omitted_items
+        )
+
+        page_local_count = int(
+            getattr(
+                page,
+                "local_count",
+                0,
+            )
+            or 0
+        )
+
+        self._local_count += (
+            page_local_count
+        )
+
+        self._unavailable_local_count += int(
+            getattr(
+                page,
+                "unavailable_local_count",
+                0,
+            )
+            or 0
+        )
+
+        if (
+            page_local_count > 0
+            and local_snapshot_available
+            is False
+        ):
+            self._local_snapshot_missing = True
+
+        next_offset = (
+            page_offset
+            + page_limit
+        )
+
+        if next_offset <= page_offset:
+            self._pending_next_page = False
+
+            self.status_label.setText(
+                (
+                    "Spotify returned invalid "
+                    "playlist pagination."
+                )
+            )
+
+            return True
+
+        self._next_offset = min(
+            next_offset,
+            page_total,
+        )
+
+        complete = (
+            self._next_offset
+            >= page_total
+        )
+
+        self._update_pagination_status(
+            complete=complete
+        )
+
+        return complete
+
+    def _update_pagination_status(
+        self,
+        *,
+        complete: bool,
+    ) -> None:
+        total = (
+            self._total
+            if self._total is not None
+            else 0
+        )
+
+        shown = len(
+            self.rows
+        )
+
+        if complete:
+            if self._omitted_items:
+                summary = (
+                    str(
+                        shown
+                    )
+                    + " tracks loaded • "
+                    + str(
+                        self._omitted_items
+                    )
+                    + (
+                        " unsupported playlist item skipped"
+                        if self._omitted_items == 1
+                        else " unsupported playlist items skipped"
+                    )
+                )
+
+            else:
+                summary = (
+                    str(
+                        shown
+                    )
+                    + " / "
+                    + str(
+                        total
+                    )
+                    + " tracks loaded"
+                )
+
+        else:
+            summary = (
+                str(
+                    shown
+                )
+                + " / "
+                + str(
+                    total
+                )
+                + " tracks loaded • "
+                "loading more..."
+            )
+
+        if self._local_count:
+            summary += (
+                " • "
+                + str(
+                    self._local_count
+                )
+                + " local"
+            )
+
+        if self._unavailable_local_count:
+            summary += (
+                " • "
+                + str(
+                    self._unavailable_local_count
+                )
+                + " unavailable"
+            )
+
+        if self._local_snapshot_missing:
+            summary += (
+                " • Rescan Local Music in "
+                "Settings to resolve local tracks"
+            )
+
+        self.status_label.setText(
+            summary
+        )
+
+    def handle_operation_finished(
+        self,
+        operation: str,
+        target: str,
+    ) -> None:
+        if self.playlist is None:
+            return
+
+        if not self._pagination_enabled:
+            return
+
+        if self._request_active:
+            return
+
+        if self._pending_load:
+            if not bool(
+                getattr(
+                    self.runtime,
+                    "busy",
+                    False,
+                )
+            ):
+                self.load()
+
+            return
+
+        if (
+            operation
+            != OPERATION_PLAYLIST_ITEMS
+        ):
+            return
+
+        if (
+            str(
+                target
+            )
+            != self.playlist.spotify_id
+        ):
+            return
+
+        if not self._pending_next_page:
+            return
+
+        if self._total is None:
+            return
+
+        if self._next_offset >= self._total:
+            self._pending_next_page = False
+            return
+
+        self._request_page(
+            self._next_offset
+        )
 
     def apply_theme(
         self,
