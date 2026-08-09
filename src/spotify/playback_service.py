@@ -270,6 +270,40 @@ class SpotifyPlaybackService:
                 )
             )
 
+        start_playlist_playback = getattr(
+            api_client,
+            "start_playlist_playback",
+            None,
+        )
+
+        if not callable(
+            start_playlist_playback
+        ):
+            raise TypeError(
+                (
+                    "api_client must provide a "
+                    "callable start_playlist_playback "
+                    "method"
+                )
+            )
+
+        get_available_devices = getattr(
+            api_client,
+            "get_available_devices",
+            None,
+        )
+
+        if not callable(
+            get_available_devices
+        ):
+            raise TypeError(
+                (
+                    "api_client must provide a "
+                    "callable get_available_devices "
+                    "method"
+                )
+            )
+
         self._session_manager = (
             session_manager
         )
@@ -530,6 +564,126 @@ class SpotifyPlaybackService:
             refreshed=refreshed,
         )
 
+    @staticmethod
+    def _usable_device_id(
+        payload,
+    ) -> str | None:
+        if not isinstance(
+            payload,
+            dict,
+        ):
+            return None
+
+        devices = payload.get(
+            "devices",
+            (),
+        )
+
+        if not isinstance(
+            devices,
+            list,
+        ):
+            return None
+
+        usable = []
+
+        for device in devices:
+            if not isinstance(
+                device,
+                dict,
+            ):
+                continue
+
+            if bool(
+                device.get(
+                    "is_restricted",
+                    False,
+                )
+            ):
+                continue
+
+            device_id = device.get(
+                "id"
+            )
+
+            if not isinstance(
+                device_id,
+                str,
+            ):
+                continue
+
+            device_id = device_id.strip()
+
+            if not device_id:
+                continue
+
+            usable.append(
+                (
+                    device,
+                    device_id,
+                )
+            )
+
+        for (
+            device,
+            device_id,
+        ) in usable:
+            if bool(
+                device.get(
+                    "is_active",
+                    False,
+                )
+            ):
+                return device_id
+
+        for (
+            device,
+            device_id,
+        ) in usable:
+            device_type = str(
+                device.get(
+                    "type",
+                    "",
+                )
+                or ""
+            ).strip().lower()
+
+            if device_type == "computer":
+                return device_id
+
+        if usable:
+            return usable[0][1]
+
+        return None
+
+    @staticmethod
+    def _playlist_uri(
+        playlist_id,
+    ) -> str:
+        if not isinstance(
+            playlist_id,
+            str,
+        ):
+            raise TypeError(
+                "playlist_id must be a string"
+            )
+
+        checked = playlist_id.strip()
+
+        if (
+            not checked
+            or not checked.isascii()
+            or not checked.isalnum()
+        ):
+            raise ValueError(
+                "playlist_id is invalid"
+            )
+
+        return (
+            "spotify:playlist:"
+            + checked
+        )
+
     def play_track(
         self,
         spotify_uri,
@@ -603,6 +757,136 @@ class SpotifyPlaybackService:
             ),
             message=(
                 "Spotify playback started."
+            ),
+            refreshed=refreshed,
+        )
+
+    def play_playlist_track(
+        self,
+        playlist_id,
+        spotify_uri,
+    ) -> SpotifyPlaybackServiceResult:
+        try:
+            playlist_uri = (
+                self._playlist_uri(
+                    playlist_id
+                )
+            )
+
+            checked_uri = (
+                _validate_catalogue_track_uri(
+                    spotify_uri
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return self._error(
+                "invalid_playlist_playback",
+                (
+                    "This item could not be "
+                    "started from the playlist."
+                ),
+            )
+
+        (
+            access_token,
+            refreshed,
+            session_error,
+        ) = self._resolve_session()
+
+        if session_error is not None:
+            return session_error
+
+        device_id = None
+
+        try:
+            device_payload = (
+                self._api_client
+                .get_available_devices(
+                    access_token
+                )
+            )
+
+            device_id = (
+                self._usable_device_id(
+                    device_payload
+                )
+            )
+
+        except SpotifyWebApiError as error:
+            error_code = str(
+                getattr(
+                    error,
+                    "error_code",
+                    "",
+                )
+                or ""
+            )
+
+            if (
+                error_code
+                == "reauthorization_required"
+            ):
+                return self._api_error(
+                    error,
+                    refreshed=refreshed,
+                )
+
+            # Device discovery is helpful but not
+            # required. Spotify can still target an
+            # already-active device when no ID is sent.
+            device_id = None
+
+        except Exception:
+            device_id = None
+
+        try:
+            self._api_client.start_playlist_playback(
+                access_token,
+                playlist_uri,
+                checked_uri,
+                device_id=device_id,
+            )
+
+        except SpotifyWebApiError as error:
+            return self._api_error(
+                error,
+                refreshed=refreshed,
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return self._error(
+                "invalid_playback_request",
+                (
+                    "Spotify playback could not "
+                    "use this playlist item."
+                ),
+                refreshed=refreshed,
+            )
+
+        except Exception:
+            return self._error(
+                "playback_failed",
+                (
+                    "Spotify playback could not "
+                    "be started."
+                ),
+                refreshed=refreshed,
+            )
+
+        return SpotifyPlaybackServiceResult(
+            status=(
+                SpotifyPlaybackServiceStatus.READY
+            ),
+            message=(
+                "Spotify playlist playback "
+                "started."
             ),
             refreshed=refreshed,
         )

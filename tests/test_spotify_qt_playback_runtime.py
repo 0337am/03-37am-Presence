@@ -68,6 +68,7 @@ class ResultService:
     ):
         self.result = result
         self.thread_ids = thread_ids
+        self.playlist_calls = []
 
     def play_track(
         self,
@@ -77,6 +78,25 @@ class ResultService:
             self.thread_ids.append(
                 threading.get_ident()
             )
+
+        return self.result
+
+    def play_playlist_track(
+        self,
+        playlist_id,
+        spotify_uri,
+    ):
+        if self.thread_ids is not None:
+            self.thread_ids.append(
+                threading.get_ident()
+            )
+
+        self.playlist_calls.append(
+            (
+                playlist_id,
+                spotify_uri,
+            )
+        )
 
         return self.result
 
@@ -606,6 +626,46 @@ class SpotifyQtPlaybackRuntimeTests(
             runtime.shutdown()
         )
 
+
+    def test_playlist_context_request_runs_in_worker(
+        self,
+    ):
+        service = ResultService(
+            ready_result()
+        )
+
+        runtime = SpotifyQtPlaybackRuntime(
+            lambda: service
+        )
+
+        runtime.play_playlist_track(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            TRACK_URI,
+        )
+
+        self.assertTrue(
+            process_until(
+                lambda:
+                (
+                    service.playlist_calls
+                    and not runtime.busy
+                )
+            )
+        )
+
+        self.assertEqual(
+            service.playlist_calls,
+            [
+                (
+                    "37i9dQZF1DXcBWIGoYBM5M",
+                    TRACK_URI,
+                ),
+            ],
+        )
+
+        self.assertTrue(
+            runtime.shutdown()
+        )
 
 if __name__ == "__main__":
     unittest.main(

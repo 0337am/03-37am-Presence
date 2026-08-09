@@ -1,3 +1,10 @@
+from src.spotify.playback_service import (
+    SpotifyPlaybackService,
+)
+from src.spotify.qt_playback_runtime import (
+    SpotifyQtPlaybackRuntime,
+)
+
 from pathlib import Path
 
 from PyQt6.QtCore import (
@@ -1064,12 +1071,27 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.spotify_playback_runtime = (
+            SpotifyQtPlaybackRuntime(
+                (
+                    lambda manager=spotify_session_manager:
+                    SpotifyPlaybackService(
+                        manager
+                    )
+                ),
+                parent=self,
+            )
+        )
+
         self.spotify_page = SpotifyPage(
             search_runtime=(
                 self.spotify_search_runtime
             ),
             playlist_runtime=(
                 self.spotify_playlist_runtime
+            ),
+            playback_runtime=(
+                self.spotify_playback_runtime
             ),
             liked_songs_runtime=(
                 self.spotify_liked_songs_runtime
@@ -2219,6 +2241,7 @@ class MainWindow(QMainWindow):
                     pass
 
         for spotify_runtime_name in (
+            "spotify_playback_runtime",
             "spotify_playlist_runtime",
             "spotify_liked_songs_runtime",
             "spotify_search_runtime",

@@ -49,19 +49,64 @@ class ApiStub:
         self,
         *,
         error=None,
+        devices=None,
     ):
         self.error = error
+        self.devices = (
+            {
+                "devices": []
+            }
+            if devices is None
+            else {
+                "devices": devices
+            }
+        )
+
         self.calls = []
+        self.device_calls = []
+        self.playlist_calls = []
 
     def start_playback(
         self,
         access_token,
         spotify_uri,
+        *,
+        device_id=None,
     ):
         self.calls.append(
             (
                 access_token,
                 spotify_uri,
+            )
+        )
+
+        if self.error is not None:
+            raise self.error
+
+    def get_available_devices(
+        self,
+        access_token,
+    ):
+        self.device_calls.append(
+            access_token
+        )
+
+        return self.devices
+
+    def start_playlist_playback(
+        self,
+        access_token,
+        playlist_uri,
+        spotify_uri,
+        *,
+        device_id=None,
+    ):
+        self.playlist_calls.append(
+            (
+                access_token,
+                playlist_uri,
+                spotify_uri,
+                device_id,
             )
         )
 
@@ -492,6 +537,174 @@ class SpotifyPlaybackServiceTests(
                 retry_after_seconds=-1,
             )
 
+
+    def test_playlist_playback_prefers_active_device(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[
+                {
+                    "id": "desktop",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+                {
+                    "id": "phone",
+                    "type": "Smartphone",
+                    "is_active": True,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_track(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            TRACK_URI,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.playlist_calls,
+            [
+                (
+                    "secret-access-token",
+                    (
+                        "spotify:playlist:"
+                        "37i9dQZF1DXcBWIGoYBM5M"
+                    ),
+                    TRACK_URI,
+                    "phone",
+                ),
+            ],
+        )
+
+    def test_playlist_playback_falls_back_to_computer_when_paused(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[
+                {
+                    "id": "speaker",
+                    "type": "Speaker",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+                {
+                    "id": "desktop",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_track(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            TRACK_URI,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.playlist_calls[0][3],
+            "desktop",
+        )
+
+    def test_restricted_device_is_not_selected(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[
+                {
+                    "id": "restricted",
+                    "type": "Computer",
+                    "is_active": True,
+                    "is_restricted": True,
+                },
+                {
+                    "id": "usable",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_track(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            TRACK_URI,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.playlist_calls[0][3],
+            "usable",
+        )
+
+    def test_playlist_playback_without_devices_uses_active_device_fallback(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_track(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            TRACK_URI,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertIsNone(
+            api.playlist_calls[0][3]
+        )
 
 if __name__ == "__main__":
     unittest.main(

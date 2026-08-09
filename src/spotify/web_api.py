@@ -1220,6 +1220,80 @@ def _validate_spotify_track_uri(
     return spotify_uri
 
 
+def _validate_spotify_playlist_uri(
+    spotify_uri: str,
+) -> str:
+    if not isinstance(
+        spotify_uri,
+        str,
+    ):
+        raise TypeError(
+            "Spotify playlist URI must be a string."
+        )
+
+    checked = spotify_uri.strip()
+
+    prefix = "spotify:playlist:"
+
+    if (
+        not checked.startswith(prefix)
+        or checked != spotify_uri
+    ):
+        raise ValueError(
+            "Spotify playlist URI is invalid."
+        )
+
+    playlist_id = checked[
+        len(prefix):
+    ]
+
+    if (
+        not playlist_id
+        or not playlist_id.isascii()
+        or not playlist_id.isalnum()
+    ):
+        raise ValueError(
+            "Spotify playlist URI is invalid."
+        )
+
+    return checked
+
+
+def _validate_spotify_device_id(
+    device_id,
+) -> str:
+    if not isinstance(
+        device_id,
+        str,
+    ):
+        raise TypeError(
+            "Spotify device ID must be a string."
+        )
+
+    checked = device_id.strip()
+
+    if (
+        not checked
+        or checked != device_id
+        or len(checked) > 256
+    ):
+        raise ValueError(
+            "Spotify device ID is invalid."
+        )
+
+    if any(
+        character.isspace()
+        or ord(character) < 32
+        or ord(character) == 127
+        for character in checked
+    ):
+        raise ValueError(
+            "Spotify device ID is invalid."
+        )
+
+    return checked
+
+
 class SpotifyWebApiClient:
     def __init__(
         self,
@@ -1612,6 +1686,8 @@ class SpotifyWebApiClient:
         self,
         access_token: str,
         spotify_uri: str,
+        *,
+        device_id: str | None = None,
     ) -> None:
         uri = (
             _validate_spotify_track_uri(
@@ -1619,8 +1695,20 @@ class SpotifyWebApiClient:
             )
         )
 
+        query = None
+
+        if device_id is not None:
+            query = {
+                "device_id": (
+                    _validate_spotify_device_id(
+                        device_id
+                    )
+                ),
+            }
+
         url = _build_spotify_api_url(
-            START_PLAYBACK_PATH
+            START_PLAYBACK_PATH,
+            query,
         )
 
         self._put_json_no_content(
@@ -1631,6 +1719,62 @@ class SpotifyWebApiClient:
                     uri,
                 ],
             },
+        )
+
+    def start_playlist_playback(
+        self,
+        access_token: str,
+        playlist_uri: str,
+        spotify_uri: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        context_uri = (
+            _validate_spotify_playlist_uri(
+                playlist_uri
+            )
+        )
+
+        track_uri = (
+            _validate_spotify_track_uri(
+                spotify_uri
+            )
+        )
+
+        query = None
+
+        if device_id is not None:
+            query = {
+                "device_id": (
+                    _validate_spotify_device_id(
+                        device_id
+                    )
+                ),
+            }
+
+        url = _build_spotify_api_url(
+            START_PLAYBACK_PATH,
+            query,
+        )
+
+        self._put_json_no_content(
+            url,
+            access_token,
+            {
+                "context_uri": context_uri,
+                "offset": {
+                    "uri": track_uri,
+                },
+            },
+        )
+
+    def get_available_devices(
+        self,
+        access_token: str,
+    ) -> dict[str, Any]:
+        return self.get_json(
+            access_token,
+            "/me/player/devices",
         )
 
     def get_json(

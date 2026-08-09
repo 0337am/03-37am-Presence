@@ -481,6 +481,99 @@ class SpotifyPlaybackApiTests(
         )
 
 
+    def test_playlist_context_playback_contract(
+        self,
+    ):
+        response = FakeResponse(
+            url=(
+                PLAYBACK_URL
+                + "?device_id=desktop-device"
+            )
+        )
+
+        transport = RecordingUrlOpen(
+            response
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=transport
+        )
+
+        client.start_playlist_playback(
+            "token",
+            "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            TRACK_URI,
+            device_id="desktop-device",
+        )
+
+        request = transport.requests[0]
+
+        self.assertEqual(
+            request.get_method(),
+            "PUT",
+        )
+
+        self.assertEqual(
+            request.full_url,
+            (
+                PLAYBACK_URL
+                + "?device_id=desktop-device"
+            ),
+        )
+
+        self.assertEqual(
+            json.loads(
+                request.data.decode(
+                    "utf-8"
+                )
+            ),
+            {
+                "context_uri": (
+                    "spotify:playlist:"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
+                "offset": {
+                    "uri": TRACK_URI,
+                },
+            },
+        )
+
+    def test_available_devices_uses_player_devices_endpoint(
+        self,
+    ):
+        url = (
+            f"{SPOTIFY_API_BASE_URL}"
+            "/me/player/devices"
+        )
+
+        transport = RecordingUrlOpen(
+            FakeResponse(
+                status=200,
+                url=url,
+                body=b'{"devices":[]}',
+            )
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=transport
+        )
+
+        payload = client.get_available_devices(
+            "token"
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "devices": [],
+            },
+        )
+
+        self.assertEqual(
+            transport.requests[0].full_url,
+            url,
+        )
+
 if __name__ == "__main__":
     unittest.main(
         verbosity=2

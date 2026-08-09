@@ -103,6 +103,10 @@ def format_duration(
 class SpotifyPlaylistTrackRow(
     QFrame
 ):
+    activated = pyqtSignal(
+        object
+    )
+
     def __init__(
         self,
         resolved_item,
@@ -271,6 +275,36 @@ class SpotifyPlaylistTrackRow(
                 False
             )
 
+        spotify_uri = str(
+            getattr(
+                track,
+                "spotify_uri",
+                "",
+            )
+            or ""
+        ).strip()
+
+        track_playable = bool(
+            getattr(
+                track,
+                "playable",
+                False,
+            )
+        )
+
+        self.playback_available = bool(
+            not is_local
+            and track_playable
+            and spotify_uri.startswith(
+                "spotify:track:"
+            )
+        )
+
+        if self.playback_available:
+            self.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+
         self.duration_label = QLabel(
             format_duration(
                 getattr(
@@ -315,6 +349,33 @@ class SpotifyPlaylistTrackRow(
         )
 
 
+    def activate(
+        self,
+    ) -> bool:
+        if not self.playback_available:
+            return False
+
+        self.activated.emit(
+            self.resolved_item
+        )
+
+        return True
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            self.activate()
+
+        super().mouseReleaseEvent(
+            event
+        )
+
+
 class SpotifyPlaylistDetail(
     QWidget
 ):
@@ -324,6 +385,7 @@ class SpotifyPlaylistDetail(
         self,
         runtime,
         *,
+        playback_runtime=None,
         theme_manager=None,
         parent=None,
     ) -> None:
@@ -348,6 +410,30 @@ class SpotifyPlaylistDetail(
             )
 
         self.runtime = runtime
+
+        if playback_runtime is not None:
+            play_playlist_track = getattr(
+                playback_runtime,
+                "play_playlist_track",
+                None,
+            )
+
+            if not callable(
+                play_playlist_track
+            ):
+                raise TypeError(
+                    (
+                        "playback_runtime must "
+                        "provide a callable "
+                        "play_playlist_track method"
+                    )
+                )
+
+        self.playback_runtime = (
+            playback_runtime
+        )
+
+        self._active_playback_title = ""
 
         self.theme_manager = (
             theme_manager
@@ -626,6 +712,41 @@ class SpotifyPlaylistDetail(
                 connect(
                     handler
                 )
+
+        if self.playback_runtime is not None:
+            playback_signal_specs = (
+                (
+                    "result_ready",
+                    self.handle_playback_result,
+                ),
+                (
+                    "failed",
+                    self.handle_playback_failure,
+                ),
+            )
+
+            for (
+                signal_name,
+                handler,
+            ) in playback_signal_specs:
+                signal = getattr(
+                    self.playback_runtime,
+                    signal_name,
+                    None,
+                )
+
+                connect = getattr(
+                    signal,
+                    "connect",
+                    None,
+                )
+
+                if callable(
+                    connect
+                ):
+                    connect(
+                        handler
+                    )
 
     def set_playlist(
         self,
@@ -1019,6 +1140,244 @@ class SpotifyPlaylistDetail(
 
         self.load()
 
+    def _handle_track_activated(
+        self,
+        resolved_item,
+    ) -> bool:
+        track = getattr(
+            resolved_item,
+            "unified_track",
+            None,
+        )
+
+        if track is None:
+            return False
+
+        if bool(
+            getattr(
+                resolved_item,
+                "is_local",
+                False,
+            )
+        ):
+            return False
+
+        if not bool(
+            getattr(
+                track,
+                "playable",
+                False,
+            )
+        ):
+            return False
+
+        spotify_uri = str(
+            getattr(
+                track,
+                "spotify_uri",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not spotify_uri.startswith(
+            "spotify:track:"
+        ):
+            return False
+
+        if self.playback_runtime is None:
+            self.status_label.setText(
+                (
+                    "Spotify playback controls "
+                    "are unavailable."
+                )
+            )
+
+            return False
+
+        if bool(
+            getattr(
+                self.playback_runtime,
+                "busy",
+                False,
+            )
+        ):
+            self.status_label.setText(
+                (
+                    "A Spotify playback request "
+                    "is already running."
+                )
+            )
+
+            return False
+
+        title = str(
+            getattr(
+                track,
+                "title",
+                "",
+            )
+            or "track"
+        ).strip()
+
+        self._active_playback_title = (
+            title
+            or "track"
+        )
+
+        self.status_label.setText(
+            (
+                "Starting "
+                + self._active_playback_title
+                + "..."
+            )
+        )
+
+        try:
+            if self.playlist is None:
+                self._active_playback_title = ""
+
+                self.status_label.setText(
+                    (
+                        "Spotify playlist context "
+                        "is unavailable."
+                    )
+                )
+
+                return False
+
+            self.playback_runtime.play_playlist_track(
+                self.playlist.spotify_id,
+                spotify_uri,
+            )
+
+        except Exception as error:
+            error_code = str(
+                getattr(
+                    error,
+                    "error_code",
+                    "",
+                )
+                or ""
+            )
+
+            if error_code == "busy":
+                message = (
+                    "A Spotify playback request "
+                    "is already running."
+                )
+
+            elif error_code == "shutting_down":
+                message = (
+                    "Spotify playback is "
+                    "shutting down."
+                )
+
+            else:
+                message = (
+                    "Spotify playback could "
+                    "not start."
+                )
+
+            self._active_playback_title = ""
+
+            self.status_label.setText(
+                message
+            )
+
+            return False
+
+        return True
+
+    def handle_playback_result(
+        self,
+        result,
+    ) -> None:
+        title = (
+            self._active_playback_title
+            or "track"
+        )
+
+        self._active_playback_title = ""
+
+        if bool(
+            getattr(
+                result,
+                "ready",
+                False,
+            )
+        ):
+            self.status_label.setText(
+                (
+                    "Playing "
+                    + title
+                    + "."
+                )
+            )
+
+            return
+
+        message = str(
+            getattr(
+                result,
+                "message",
+                "",
+            )
+            or (
+                "Spotify playback could "
+                "not be started."
+            )
+        ).strip()
+
+        retry_after = getattr(
+            result,
+            "retry_after_seconds",
+            None,
+        )
+
+        if (
+            isinstance(
+                retry_after,
+                int,
+            )
+            and not isinstance(
+                retry_after,
+                bool,
+            )
+            and retry_after > 0
+        ):
+            message = (
+                message
+                + " Try again in "
+                + str(
+                    retry_after
+                )
+                + " seconds."
+            )
+
+        self.status_label.setText(
+            message
+        )
+
+    def handle_playback_failure(
+        self,
+        error_code: str,
+        message: str,
+    ) -> None:
+        self._active_playback_title = ""
+
+        safe_message = str(
+            message
+            or (
+                "Spotify playback could "
+                "not be started."
+            )
+        ).strip()
+
+        self.status_label.setText(
+            safe_message
+        )
+
     def _handle_back_clicked(
         self,
     ) -> None:
@@ -1240,6 +1599,10 @@ class SpotifyPlaylistDetail(
                         self.track_container
                     ),
                 )
+            )
+
+            row.activated.connect(
+                self._handle_track_activated
             )
 
             self.rows.append(

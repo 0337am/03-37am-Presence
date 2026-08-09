@@ -108,6 +108,8 @@ class _SpotifyPlaybackWorker(
         self,
         service_factory: Callable,
         spotify_uri: str,
+        *,
+        playlist_id: str | None = None,
     ) -> None:
         super().__init__()
 
@@ -117,6 +119,10 @@ class _SpotifyPlaybackWorker(
 
         self._spotify_uri = (
             spotify_uri
+        )
+
+        self._playlist_id = (
+            playlist_id
         )
 
     def _fail(
@@ -149,14 +155,20 @@ class _SpotifyPlaybackWorker(
                 )
                 return
 
-            play_track = getattr(
+            method_name = (
+                "play_playlist_track"
+                if self._playlist_id is not None
+                else "play_track"
+            )
+
+            play_method = getattr(
                 service,
-                "play_track",
+                method_name,
                 None,
             )
 
             if not callable(
-                play_track
+                play_method
             ):
                 self._fail(
                     "invalid_service",
@@ -168,9 +180,16 @@ class _SpotifyPlaybackWorker(
                 return
 
             try:
-                result = play_track(
-                    self._spotify_uri
-                )
+                if self._playlist_id is None:
+                    result = play_method(
+                        self._spotify_uri
+                    )
+
+                else:
+                    result = play_method(
+                        self._playlist_id,
+                        self._spotify_uri,
+                    )
 
             except Exception:
                 self._fail(
@@ -302,9 +321,48 @@ class SpotifyQtPlaybackRuntime(
             checked
         )
 
+    def play_playlist_track(
+        self,
+        playlist_id,
+        spotify_uri,
+    ) -> None:
+        if not isinstance(
+            playlist_id,
+            str,
+        ):
+            raise TypeError(
+                "playlist_id must be a string"
+            )
+
+        checked_playlist_id = (
+            playlist_id.strip()
+        )
+
+        if not checked_playlist_id:
+            raise ValueError(
+                "playlist_id cannot be empty"
+            )
+
+        self._start_playback(
+            spotify_uri,
+            playlist_id=(
+                checked_playlist_id
+            ),
+        )
+
     def play_track(
         self,
         spotify_uri,
+    ) -> None:
+        self._start_playback(
+            spotify_uri
+        )
+
+    def _start_playback(
+        self,
+        spotify_uri,
+        *,
+        playlist_id: str | None = None,
     ) -> None:
         checked_uri = (
             _validate_playback_uri(
@@ -335,6 +393,7 @@ class SpotifyQtPlaybackRuntime(
         worker = _SpotifyPlaybackWorker(
             self._service_factory,
             checked_uri,
+            playlist_id=playlist_id,
         )
 
         worker.moveToThread(
