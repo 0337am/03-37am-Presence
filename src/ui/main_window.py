@@ -45,6 +45,9 @@ from src.spotify.connection_controller import (
 from src.spotify.playlist_service import (
     SpotifyPlaylistService,
 )
+from src.spotify.liked_songs_service import (
+    SpotifyLikedSongsService,
+)
 from src.spotify.resolved_playlist_service import (
     SpotifyResolvedPlaylistService,
 )
@@ -59,6 +62,9 @@ from src.spotify.qt_connection_runtime import (
 )
 from src.spotify.qt_playlist_runtime import (
     SpotifyQtPlaylistRuntime,
+)
+from src.spotify.qt_liked_songs_runtime import (
+    SpotifyQtLikedSongsRuntime,
 )
 from src.spotify.qt_search_runtime import (
     SpotifyQtSearchRuntime,
@@ -929,6 +935,12 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.spotify_liked_songs_service = (
+            SpotifyLikedSongsService(
+                self.spotify_session_manager
+            )
+        )
+
         self.spotify_resolved_playlist_service = (
             SpotifyResolvedPlaylistService(
                 self.spotify_playlist_service,
@@ -944,6 +956,20 @@ class MainWindow(QMainWindow):
 
         spotify_resolved_playlist_service = (
             self.spotify_resolved_playlist_service
+        )
+
+        spotify_liked_songs_service = (
+            self.spotify_liked_songs_service
+        )
+
+        self.spotify_liked_songs_runtime = (
+            SpotifyQtLikedSongsRuntime(
+                (
+                    lambda service=spotify_liked_songs_service:
+                    service
+                ),
+                parent=self,
+            )
         )
 
         self.spotify_playlist_runtime = (
@@ -966,6 +992,9 @@ class MainWindow(QMainWindow):
             ),
             playlist_runtime=(
                 self.spotify_playlist_runtime
+            ),
+            liked_songs_runtime=(
+                self.spotify_liked_songs_runtime
             ),
             theme_manager=(
                 self.theme_manager
@@ -2113,6 +2142,7 @@ class MainWindow(QMainWindow):
 
         for spotify_runtime_name in (
             "spotify_playlist_runtime",
+            "spotify_liked_songs_runtime",
             "spotify_search_runtime",
         ):
             feature_runtime = getattr(

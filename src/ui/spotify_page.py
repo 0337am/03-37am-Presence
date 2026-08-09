@@ -48,6 +48,7 @@ class SpotifyPage(
         *,
         search_runtime,
         playlist_runtime,
+        liked_songs_runtime=None,
         theme_manager=None,
         parent=None,
     ) -> None:
@@ -93,6 +94,10 @@ class SpotifyPage(
 
         self.playlist_runtime = (
             playlist_runtime
+        )
+
+        self.liked_songs_runtime = (
+            liked_songs_runtime
         )
 
         self.theme_manager = (
@@ -468,6 +473,9 @@ class SpotifyPage(
         self.playlist_home = (
             SpotifyPlaylistHome(
                 self.playlist_runtime,
+                liked_songs_runtime=(
+                    self.liked_songs_runtime
+                ),
                 theme_manager=(
                     self.theme_manager
                 ),

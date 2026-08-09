@@ -356,6 +356,7 @@ class SpotifyPlaylistHome(
         self,
         runtime,
         *,
+        liked_songs_runtime=None,
         theme_manager=None,
         artwork_loader=None,
         parent=None,
@@ -382,6 +383,28 @@ class SpotifyPlaylistHome(
 
         self.runtime = runtime
 
+        if liked_songs_runtime is not None:
+            load_summary = getattr(
+                liked_songs_runtime,
+                "load_summary",
+                None,
+            )
+
+            if not callable(
+                load_summary
+            ):
+                raise TypeError(
+                    (
+                        "liked_songs_runtime must "
+                        "provide a callable "
+                        "load_summary method"
+                    )
+                )
+
+        self.liked_songs_runtime = (
+            liked_songs_runtime
+        )
+
         self.theme_manager = (
             theme_manager
             or ThemeManager(
@@ -405,19 +428,39 @@ class SpotifyPlaylistHome(
         self._loaded = False
         self._auto_load_attempted = False
 
+        self._playlist_busy = False
+        self._liked_songs_busy = False
+        self._liked_songs_loaded = False
+        self._liked_songs_auto_load_attempted = False
+        self._liked_songs_pending = False
+        self._liked_songs_force_pending = False
+        self._liked_songs_last_result = None
+
         self.setObjectName(
             "spotifyPlaylistHomeRoot"
         )
 
         self.build_ui()
+        self._install_liked_songs_card()
         self.connect_signals()
+        self._connect_liked_songs_signals()
 
         self.theme_manager.theme_changed.connect(
             self.apply_theme
         )
 
+        self.theme_manager.theme_changed.connect(
+            self._apply_liked_songs_theme
+        )
+
+        theme = self.theme_manager.theme()
+
         self.apply_theme(
-            self.theme_manager.theme()
+            theme
+        )
+
+        self._apply_liked_songs_theme(
+            theme
         )
 
     @property
@@ -681,23 +724,408 @@ class SpotifyPlaylistHome(
                 self.handle_busy_changed
             )
 
-    def ensure_loaded(
+    def _install_liked_songs_card(
+        self,
+    ) -> None:
+        self.liked_songs_card = QFrame()
+
+        self.liked_songs_card.setObjectName(
+            "spotifyLikedSongsCard"
+        )
+
+        self.liked_songs_card.setVisible(
+            self.liked_songs_runtime
+            is not None
+        )
+
+        layout = QHBoxLayout(
+            self.liked_songs_card
+        )
+
+        layout.setContentsMargins(
+            14,
+            12,
+            14,
+            12,
+        )
+
+        layout.setSpacing(
+            12
+        )
+
+        self.liked_songs_icon = QLabel(
+            "♥"
+        )
+
+        self.liked_songs_icon.setObjectName(
+            "spotifyLikedSongsIcon"
+        )
+
+        self.liked_songs_icon.setFixedSize(
+            58,
+            58,
+        )
+
+        self.liked_songs_icon.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        text_group = QVBoxLayout()
+
+        text_group.setSpacing(
+            2
+        )
+
+        self.liked_songs_title = QLabel(
+            "Liked Songs"
+        )
+
+        self.liked_songs_title.setObjectName(
+            "spotifyLikedSongsTitle"
+        )
+
+        self.liked_songs_status = QLabel(
+            "Your saved Spotify tracks."
+        )
+
+        self.liked_songs_status.setObjectName(
+            "spotifyLikedSongsStatus"
+        )
+
+        self.liked_songs_status.setWordWrap(
+            True
+        )
+
+        text_group.addWidget(
+            self.liked_songs_title
+        )
+
+        text_group.addWidget(
+            self.liked_songs_status
+        )
+
+        self.liked_songs_count = QLabel(
+            "Not loaded"
+        )
+
+        self.liked_songs_count.setObjectName(
+            "spotifyLikedSongsCount"
+        )
+
+        self.liked_songs_count.setAlignment(
+            (
+                Qt.AlignmentFlag.AlignRight
+                | Qt.AlignmentFlag.AlignVCenter
+            )
+        )
+
+        layout.addWidget(
+            self.liked_songs_icon
+        )
+
+        layout.addLayout(
+            text_group,
+            stretch=1,
+        )
+
+        layout.addWidget(
+            self.liked_songs_count
+        )
+
+        root = self.layout()
+
+        if root is None:
+            raise RuntimeError(
+                (
+                    "Spotify playlist Home layout "
+                    "is unavailable."
+                )
+            )
+
+        root.insertWidget(
+            0,
+            self.liked_songs_card,
+        )
+
+    def _apply_liked_songs_theme(
+        self,
+        theme,
+    ) -> None:
+        if not isinstance(
+            theme,
+            dict,
+        ):
+            return
+
+        card = str(
+            theme.get(
+                "card_alt",
+                theme.get(
+                    "card",
+                    "#18181f",
+                ),
+            )
+        )
+
+        inner = str(
+            theme.get(
+                "card",
+                "#18181f",
+            )
+        )
+
+        border = str(
+            theme.get(
+                "border",
+                "#34343e",
+            )
+        )
+
+        accent = str(
+            theme.get(
+                "accent",
+                "#ff4f91",
+            )
+        )
+
+        text = str(
+            theme.get(
+                "text",
+                "#f4f4f6",
+            )
+        )
+
+        muted = str(
+            theme.get(
+                "muted",
+                "#a6a6b1",
+            )
+        )
+
+        self.liked_songs_card.setStyleSheet(
+            (
+                "QFrame#spotifyLikedSongsCard {"
+                "background: "
+                + card
+                + "; border: 1px solid "
+                + border
+                + "; border-radius: 12px;"
+                "}"
+            )
+        )
+
+        self.liked_songs_icon.setStyleSheet(
+            (
+                "QLabel {"
+                "color: "
+                + accent
+                + "; background: "
+                + inner
+                + "; border: 1px solid "
+                + accent
+                + "; border-radius: 8px;"
+                "font-size: 24px;"
+                "font-weight: 900;"
+                "}"
+            )
+        )
+
+        self.liked_songs_title.setStyleSheet(
+            (
+                "color: "
+                + text
+                + "; font-size: 13px;"
+                "font-weight: 800;"
+            )
+        )
+
+        self.liked_songs_status.setStyleSheet(
+            (
+                "color: "
+                + muted
+                + "; font-size: 10px;"
+            )
+        )
+
+        self.liked_songs_count.setStyleSheet(
+            (
+                "color: "
+                + accent
+                + "; font-size: 11px;"
+                "font-weight: 800;"
+                "padding-left: 12px;"
+            )
+        )
+
+    def _connect_liked_songs_signals(
+        self,
+    ) -> None:
+        runtime = self.liked_songs_runtime
+
+        if runtime is None:
+            return
+
+        runtime.summary_ready.connect(
+            self.handle_liked_songs_ready
+        )
+
+        runtime.failed.connect(
+            self.handle_liked_songs_failure
+        )
+
+        runtime.busy_changed.connect(
+            self.handle_liked_songs_busy_changed
+        )
+
+    def _liked_songs_needs_load(
         self,
     ) -> bool:
-        if (
-            self._loaded
-            or self._auto_load_attempted
+        return (
+            self.liked_songs_runtime
+            is not None
+            and not self._liked_songs_loaded
+            and not self._liked_songs_auto_load_attempted
+        )
+
+    def _request_liked_songs(
+        self,
+    ) -> bool:
+        runtime = self.liked_songs_runtime
+
+        if runtime is None:
+            return False
+
+        if bool(
+            getattr(
+                runtime,
+                "busy",
+                False,
+            )
         ):
             return False
 
-        self._auto_load_attempted = True
+        self.liked_songs_count.setText(
+            "Loading..."
+        )
 
-        return self._request_playlists()
+        self.liked_songs_status.setText(
+            "Loading your saved Spotify tracks..."
+        )
+
+        try:
+            runtime.load_summary()
+
+        except Exception as error:
+            message = str(
+                getattr(
+                    error,
+                    "message",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            self.liked_songs_count.setText(
+                "Unavailable"
+            )
+
+            self.liked_songs_status.setText(
+                message
+                or (
+                    "Liked Songs could not "
+                    "be loaded."
+                )
+            )
+
+            return False
+
+        return True
+
+    def _ensure_liked_songs_loaded(
+        self,
+    ) -> bool:
+        if not self._liked_songs_needs_load():
+            return False
+
+        if self._playlist_busy:
+            self._liked_songs_pending = True
+            return False
+
+        self._liked_songs_auto_load_attempted = True
+        self._liked_songs_pending = False
+
+        return self._request_liked_songs()
+
+    def _drain_liked_songs_pending(
+        self,
+    ) -> bool:
+        if self._playlist_busy:
+            return False
+
+        if self._liked_songs_force_pending:
+            self._liked_songs_force_pending = False
+            self._liked_songs_pending = False
+
+            return self._request_liked_songs()
+
+        if self._liked_songs_pending:
+            self._liked_songs_pending = False
+
+            return self._ensure_liked_songs_loaded()
+
+        return False
+
+    def ensure_loaded(
+        self,
+    ) -> bool:
+        playlist_started = False
+
+        if (
+            not self._loaded
+            and not self._auto_load_attempted
+        ):
+            self._auto_load_attempted = True
+
+            if self._liked_songs_needs_load():
+                self._liked_songs_pending = True
+
+            playlist_started = (
+                self._request_playlists()
+            )
+
+        if playlist_started:
+            return True
+
+        liked_started = (
+            self._ensure_liked_songs_loaded()
+        )
+
+        return bool(
+            playlist_started
+            or liked_started
+        )
 
     def refresh(
         self,
     ) -> bool:
-        return self._request_playlists()
+        if self.liked_songs_runtime is not None:
+            self._liked_songs_force_pending = True
+
+        playlist_started = (
+            self._request_playlists()
+        )
+
+        if playlist_started:
+            return True
+
+        liked_started = (
+            self._drain_liked_songs_pending()
+        )
+
+        return bool(
+            playlist_started
+            or liked_started
+        )
 
     def _request_playlists(
         self,
@@ -991,12 +1419,12 @@ class SpotifyPlaylistHome(
             )
         )
 
-    def handle_busy_changed(
+    def _update_refresh_state(
         self,
-        busy,
     ) -> None:
         is_busy = bool(
-            busy
+            self._playlist_busy
+            or self._liked_songs_busy
         )
 
         self.refresh_button.setEnabled(
@@ -1010,6 +1438,133 @@ class SpotifyPlaylistHome(
                 else "Refresh"
             )
         )
+
+    def handle_busy_changed(
+        self,
+        busy,
+    ) -> None:
+        self._playlist_busy = bool(
+            busy
+        )
+
+        self._update_refresh_state()
+
+        if not self._playlist_busy:
+            self._drain_liked_songs_pending()
+
+    def handle_liked_songs_ready(
+        self,
+        result,
+    ) -> None:
+        self._liked_songs_last_result = (
+            result
+        )
+
+        ready = bool(
+            getattr(
+                result,
+                "ready",
+                False,
+            )
+        )
+
+        total = getattr(
+            result,
+            "total",
+            None,
+        )
+
+        if (
+            ready
+            and isinstance(
+                total,
+                int,
+            )
+            and not isinstance(
+                total,
+                bool,
+            )
+            and total >= 0
+        ):
+            self._liked_songs_loaded = True
+
+            word = (
+                "song"
+                if total == 1
+                else "songs"
+            )
+
+            self.liked_songs_count.setText(
+                str(total)
+                + " "
+                + word
+            )
+
+            self.liked_songs_status.setText(
+                "Your saved Spotify tracks."
+            )
+
+            return
+
+        self._liked_songs_loaded = False
+
+        message = getattr(
+            result,
+            "message",
+            "",
+        )
+
+        if not isinstance(
+            message,
+            str,
+        ):
+            message = ""
+
+        self.liked_songs_count.setText(
+            "Unavailable"
+        )
+
+        self.liked_songs_status.setText(
+            message.strip()
+            or (
+                "Liked Songs could not "
+                "be loaded."
+            )
+        )
+
+    def handle_liked_songs_failure(
+        self,
+        error_code,
+        message,
+    ) -> None:
+        self._liked_songs_loaded = False
+
+        safe_message = str(
+            message
+            or ""
+        ).strip()
+
+        self.liked_songs_count.setText(
+            "Unavailable"
+        )
+
+        self.liked_songs_status.setText(
+            safe_message
+            or (
+                "Liked Songs could not "
+                "be loaded."
+            )
+        )
+
+    def handle_liked_songs_busy_changed(
+        self,
+        busy,
+    ) -> None:
+        self._liked_songs_busy = bool(
+            busy
+        )
+
+        self._update_refresh_state()
 
     def apply_theme(
         self,
