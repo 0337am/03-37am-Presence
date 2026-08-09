@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from winsdk.windows.media.control import (
@@ -8,6 +9,9 @@ from winsdk.windows.media.control import (
 )
 
 from src.music.song import Song
+from src.music.artwork_cache_policy import (
+    should_upgrade_artwork,
+)
 from src.music.source_preferences import (
     SourcePreferences,
     SourcePreferencesStore,
@@ -15,6 +19,8 @@ from src.music.source_preferences import (
 
 
 class WindowsMedia:
+    ARTWORK_RECHECK_SECONDS = 5.0
+
     SPOTIFY_SOURCE_MARKERS = (
         "spotify",
     )
@@ -38,6 +44,11 @@ class WindowsMedia:
         self._artwork_cache: dict[
             str,
             bytes,
+        ] = {}
+
+        self._artwork_cache_checked_at: dict[
+            str,
+            float,
         ] = {}
 
         self._last_artwork_key = ""
@@ -448,17 +459,33 @@ class WindowsMedia:
             ]
         )
 
+        cached_artwork = (
+            self._artwork_cache.get(
+                artwork_key
+            )
+        )
+
+        checked_at = (
+            self._artwork_cache_checked_at.get(
+                artwork_key,
+                0.0,
+            )
+        )
+
+        now = time.monotonic()
+
         if (
-            artwork_key
-            in self._artwork_cache
+            cached_artwork
+            and (
+                now - checked_at
+                < self.ARTWORK_RECHECK_SECONDS
+            )
         ):
             self._last_artwork_key = (
                 artwork_key
             )
 
-            return self._artwork_cache[
-                artwork_key
-            ]
+            return cached_artwork
 
         thumbnail = getattr(
             media,
@@ -467,6 +494,17 @@ class WindowsMedia:
         )
 
         if thumbnail is None:
+            self._artwork_cache_checked_at[
+                artwork_key
+            ] = now
+
+            if cached_artwork:
+                self._last_artwork_key = (
+                    artwork_key
+                )
+
+                return cached_artwork
+
             return None
 
         artwork_bytes = None
@@ -497,12 +535,44 @@ class WindowsMedia:
                     0.05
                 )
 
+        self._artwork_cache_checked_at[
+            artwork_key
+        ] = now
+
         if not artwork_bytes:
+            if cached_artwork:
+                self._last_artwork_key = (
+                    artwork_key
+                )
+
+                return cached_artwork
+
             return None
+
+        candidate_artwork = bytes(
+            artwork_bytes
+        )
+
+        if (
+            cached_artwork
+            and not should_upgrade_artwork(
+                len(
+                    cached_artwork
+                ),
+                len(
+                    candidate_artwork
+                ),
+            )
+        ):
+            self._last_artwork_key = (
+                artwork_key
+            )
+
+            return cached_artwork
 
         self._artwork_cache[
             artwork_key
-        ] = artwork_bytes
+        ] = candidate_artwork
 
         self._last_artwork_key = (
             artwork_key
@@ -510,7 +580,7 @@ class WindowsMedia:
 
         self._trim_artwork_cache()
 
-        return artwork_bytes
+        return candidate_artwork
 
     @staticmethod
     async def _read_stream_bytes(
@@ -616,6 +686,11 @@ class WindowsMedia:
                 oldest_key = keys[1]
 
             self._artwork_cache.pop(
+                oldest_key,
+                None,
+            )
+
+            self._artwork_cache_checked_at.pop(
                 oldest_key,
                 None,
             )

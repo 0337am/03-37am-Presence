@@ -51,6 +51,9 @@ from src.library.history_store import (
     HistoryTrack,
 )
 from src.music.manager import MusicManager
+from src.music.artwork_cache_policy import (
+    should_upgrade_artwork,
+)
 from src.music.song import Song
 from src.ui.playback_presentation_clock import (
     PlaybackPresentationClock,
@@ -10508,6 +10511,10 @@ class DashboardPage(QWidget):
         if not artwork_bytes:
             return
 
+        candidate_artwork = bytes(
+            artwork_bytes
+        )
+
         cache_key = self._artwork_identity(
             getattr(song, "title", ""),
             getattr(song, "artist", ""),
@@ -10521,11 +10528,25 @@ class DashboardPage(QWidget):
         )
 
         if cache_path.exists():
-            return
+            try:
+                existing_size = int(
+                    cache_path.stat().st_size
+                )
+
+            except OSError:
+                existing_size = 0
+
+            if not should_upgrade_artwork(
+                existing_size,
+                len(
+                    candidate_artwork
+                ),
+            ):
+                return
 
         try:
             cache_path.write_bytes(
-                bytes(artwork_bytes)
+                candidate_artwork
             )
 
         except OSError:
