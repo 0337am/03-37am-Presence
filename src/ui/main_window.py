@@ -505,6 +505,59 @@ class MainWindow(QMainWindow):
         self.apply_saved_settings()
         self.restore_last_page()
 
+        self._schedule_local_music_startup_scan()
+
+    def _schedule_local_music_startup_scan(
+        self,
+    ) -> None:
+        QTimer.singleShot(
+            0,
+            self._start_local_music_startup_scan,
+        )
+
+    def _start_local_music_startup_scan(
+        self,
+    ) -> bool:
+        if self._shutting_down:
+            return False
+
+        settings_page = getattr(
+            self,
+            "settings_page",
+            None,
+        )
+
+        if settings_page is None:
+            return False
+
+        local_music_card = getattr(
+            settings_page,
+            "local_music_card",
+            None,
+        )
+
+        if local_music_card is None:
+            return False
+
+        startup_scan = getattr(
+            local_music_card,
+            "scan_on_startup",
+            None,
+        )
+
+        if not callable(
+            startup_scan
+        ):
+            return False
+
+        try:
+            return bool(
+                startup_scan()
+            )
+
+        except Exception:
+            return False
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_atmosphere_geometry()

@@ -777,6 +777,30 @@ class LocalMusicSettingsCard(
         except OSError:
             return False
 
+    def scan_on_startup(
+        self,
+    ) -> bool:
+        if self._busy:
+            return False
+
+        if (
+            getattr(
+                self.scan_runtime,
+                "latest_result",
+                None,
+            )
+            is not None
+        ):
+            return False
+
+        if not self.refresh_from_store():
+            return False
+
+        if not self._preferences.folders:
+            return False
+
+        return self.rescan()
+
     def rescan(
         self,
     ) -> bool:
