@@ -35,6 +35,10 @@ CURRENT_USER_PROFILE_URL = (
     f"{SPOTIFY_API_BASE_URL}/me"
 )
 
+START_PLAYBACK_PATH = (
+    "/me/player/play"
+)
+
 
 class SpotifyWebApiError(
     RuntimeError
@@ -1156,6 +1160,66 @@ def _validate_spotify_api_request_url(
     return url
 
 
+def _validate_spotify_track_uri(
+    spotify_uri: str,
+) -> str:
+    if not isinstance(
+        spotify_uri,
+        str,
+    ):
+        raise TypeError(
+            "Spotify track URI must be a string."
+        )
+
+    if (
+        not spotify_uri
+        or spotify_uri
+        != spotify_uri.strip()
+    ):
+        raise ValueError(
+            "Spotify track URI is invalid."
+        )
+
+    if any(
+        character.isspace()
+        or ord(character) < 32
+        or ord(character) == 127
+        for character in spotify_uri
+    ):
+        raise ValueError(
+            "Spotify track URI is invalid."
+        )
+
+    prefix = (
+        "spotify:track:"
+    )
+
+    if not spotify_uri.startswith(
+        prefix
+    ):
+        raise ValueError(
+            (
+                "Playback requires a Spotify "
+                "catalogue track URI."
+            )
+        )
+
+    track_id = spotify_uri[
+        len(prefix):
+    ]
+
+    if (
+        not track_id
+        or not track_id.isascii()
+        or not track_id.isalnum()
+    ):
+        raise ValueError(
+            "Spotify track URI is invalid."
+        )
+
+    return spotify_uri
+
+
 class SpotifyWebApiClient:
     def __init__(
         self,
@@ -1342,6 +1406,231 @@ class SpotifyWebApiClient:
 
         return _decode_json_object(
             body
+        )
+
+    def _put_json_no_content(
+        self,
+        url: str,
+        access_token: str,
+        payload,
+    ) -> None:
+        url = (
+            _validate_spotify_api_request_url(
+                url
+            )
+        )
+
+        token = _validate_access_token(
+            access_token
+        )
+
+        try:
+            body = json.dumps(
+                payload,
+                ensure_ascii=True,
+                separators=(
+                    ",",
+                    ":",
+                ),
+            ).encode(
+                "utf-8"
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise ValueError(
+                (
+                    "Spotify request payload "
+                    "could not be encoded."
+                )
+            ) from error
+
+        request = Request(
+            url,
+            data=body,
+            method="PUT",
+            headers={
+                "Accept": "application/json",
+                "Authorization": (
+                    f"Bearer {token}"
+                ),
+                "Content-Type": (
+                    "application/json"
+                ),
+                "User-Agent": (
+                    SPOTIFY_API_USER_AGENT
+                ),
+            },
+        )
+
+        try:
+            response = self._urlopen(
+                request,
+                timeout=self._timeout_seconds,
+            )
+
+            with response:
+                if (
+                    _response_url(
+                        response,
+                        url,
+                    )
+                    != url
+                ):
+                    raise SpotifyWebApiError(
+                        "untrusted_response",
+                        (
+                            "Spotify API response came "
+                            "from an unexpected URL."
+                        ),
+                    )
+
+                status = _response_status(
+                    response
+                )
+
+                if 200 <= status <= 299:
+                    return
+
+                response_body = (
+                    _read_limited_body(
+                        response
+                    )
+                )
+
+                _raise_http_error(
+                    status,
+                    headers=(
+                        _response_headers(
+                            response
+                        )
+                    ),
+                    payload=(
+                        _safe_error_payload(
+                            response_body
+                        )
+                    ),
+                )
+
+        except HTTPError as error:
+            try:
+                try:
+                    response_body = (
+                        error.read(
+                            MAX_SPOTIFY_API_RESPONSE_BYTES
+                            + 1
+                        )
+                    )
+
+                except Exception:
+                    response_body = b""
+
+                if (
+                    len(
+                        response_body
+                    )
+                    > MAX_SPOTIFY_API_RESPONSE_BYTES
+                ):
+                    response_body = b""
+
+                status = int(
+                    getattr(
+                        error,
+                        "code",
+                        0,
+                    )
+                    or 0
+                )
+
+                headers = getattr(
+                    error,
+                    "headers",
+                    None,
+                )
+
+                payload = (
+                    _safe_error_payload(
+                        response_body
+                    )
+                )
+
+            finally:
+                try:
+                    error.close()
+
+                except Exception:
+                    pass
+
+            _raise_http_error(
+                status,
+                headers=headers,
+                payload=payload,
+            )
+
+        except (
+            socket.timeout,
+            TimeoutError,
+        ) as error:
+            raise SpotifyWebApiError(
+                "timeout",
+                (
+                    "Spotify API request "
+                    "timed out."
+                ),
+            ) from error
+
+        except URLError as error:
+            reason = getattr(
+                error,
+                "reason",
+                None,
+            )
+
+            if isinstance(
+                reason,
+                (
+                    socket.timeout,
+                    TimeoutError,
+                ),
+            ):
+                raise SpotifyWebApiError(
+                    "timeout",
+                    (
+                        "Spotify API request "
+                        "timed out."
+                    ),
+                ) from error
+
+            raise SpotifyWebApiError(
+                "network_error",
+                "Could not reach Spotify.",
+            ) from error
+
+    def start_playback(
+        self,
+        access_token: str,
+        spotify_uri: str,
+    ) -> None:
+        uri = (
+            _validate_spotify_track_uri(
+                spotify_uri
+            )
+        )
+
+        url = _build_spotify_api_url(
+            START_PLAYBACK_PATH
+        )
+
+        self._put_json_no_content(
+            url,
+            access_token,
+            {
+                "uris": [
+                    uri,
+                ],
+            },
         )
 
     def get_json(
