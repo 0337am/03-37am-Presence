@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+LEGACY_SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 FILE_NAME = (
     "local_music_preferences.json"
@@ -228,6 +229,8 @@ class LocalMusicPreferences:
         ...,
     ] = ()
 
+    scan_on_startup: bool = True
+
     def __post_init__(
         self,
     ) -> None:
@@ -238,6 +241,17 @@ class LocalMusicPreferences:
                 self.folders
             ),
         )
+
+        if not isinstance(
+            self.scan_on_startup,
+            bool,
+        ):
+            raise TypeError(
+                (
+                    "scan_on_startup must "
+                    "be a boolean"
+                )
+            )
 
 
 def local_music_preferences_to_payload(
@@ -260,6 +274,9 @@ def local_music_preferences_to_payload(
         ),
         "folders": list(
             preferences.folders
+        ),
+        "scan_on_startup": (
+            preferences.scan_on_startup
         ),
     }
 
@@ -288,7 +305,10 @@ def local_music_preferences_from_payload(
             bool,
         )
         or schema_version
-        != SCHEMA_VERSION
+        not in (
+            LEGACY_SCHEMA_VERSION,
+            SCHEMA_VERSION,
+        )
     ):
         raise ValueError(
             (
@@ -312,10 +332,35 @@ def local_music_preferences_from_payload(
             )
         )
 
+    if (
+        schema_version
+        == LEGACY_SCHEMA_VERSION
+    ):
+        scan_on_startup = True
+
+    else:
+        scan_on_startup = payload.get(
+            "scan_on_startup"
+        )
+
+        if not isinstance(
+            scan_on_startup,
+            bool,
+        ):
+            raise TypeError(
+                (
+                    "Local music startup scan "
+                    "preference must be a boolean."
+                )
+            )
+
     return LocalMusicPreferences(
         folders=tuple(
             folders
-        )
+        ),
+        scan_on_startup=(
+            scan_on_startup
+        ),
     )
 
 
@@ -415,7 +460,7 @@ class LocalMusicPreferencesStore:
                 raw_text
             )
 
-            return (
+            preferences = (
                 local_music_preferences_from_payload(
                     payload
                 )
@@ -458,6 +503,33 @@ class LocalMusicPreferencesStore:
             )
 
             return preferences
+
+        if (
+            payload.get(
+                "schema_version"
+            )
+            == LEGACY_SCHEMA_VERSION
+        ):
+            try:
+                self.save(
+                    preferences
+                )
+
+            except (
+                OSError,
+                UnicodeError,
+                TypeError,
+                ValueError,
+            ) as error:
+                print(
+                    (
+                        "Local music preferences "
+                        "migration error:"
+                    ),
+                    error,
+                )
+
+        return preferences
 
     def save(
         self,
@@ -554,6 +626,40 @@ class LocalMusicPreferencesStore:
 
         return preferences
 
+    def set_scan_on_startup(
+        self,
+        enabled: bool,
+    ) -> LocalMusicPreferences:
+        if not isinstance(
+            enabled,
+            bool,
+        ):
+            raise TypeError(
+                (
+                    "enabled must be "
+                    "a boolean"
+                )
+            )
+
+        current = self.load()
+
+        if (
+            current.scan_on_startup
+            == enabled
+        ):
+            return current
+
+        return self.save(
+            LocalMusicPreferences(
+                folders=(
+                    current.folders
+                ),
+                scan_on_startup=(
+                    enabled
+                ),
+            )
+        )
+
     def add_folder(
         self,
         folder,
@@ -572,7 +678,10 @@ class LocalMusicPreferencesStore:
                 + (
                     checked,
                 )
-            )
+            ),
+            scan_on_startup=(
+                current.scan_on_startup
+            ),
         )
 
         if updated == current:
@@ -615,7 +724,10 @@ class LocalMusicPreferencesStore:
 
         return self.save(
             LocalMusicPreferences(
-                folders=remaining
+                folders=remaining,
+                scan_on_startup=(
+                    current.scan_on_startup
+                ),
             )
         )
 

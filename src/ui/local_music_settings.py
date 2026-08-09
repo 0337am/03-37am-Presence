@@ -8,6 +8,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -48,6 +49,7 @@ class LocalMusicSettingsCard(
             "load",
             "add_folder",
             "remove_folder",
+            "set_scan_on_startup",
         ):
             method = getattr(
                 preference_store,
@@ -181,6 +183,22 @@ class LocalMusicSettingsCard(
             True
         )
 
+        self.startup_scan_box = QCheckBox(
+            "Scan Local Music on startup"
+        )
+
+        self.startup_scan_box.setObjectName(
+            "localMusicStartupScanCheck"
+        )
+
+        self.startup_scan_box.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.startup_scan_box.toggled.connect(
+            self._save_scan_on_startup_preference
+        )
+
         self.folder_summary = QLabel()
 
         self.folder_summary.setObjectName(
@@ -302,6 +320,10 @@ class LocalMusicSettingsCard(
 
         layout.addWidget(
             privacy
+        )
+
+        layout.addWidget(
+            self.startup_scan_box
         )
 
         layout.addWidget(
@@ -550,6 +572,18 @@ class LocalMusicSettingsCard(
             preferences
         )
 
+        self.startup_scan_box.blockSignals(
+            True
+        )
+
+        self.startup_scan_box.setChecked(
+            preferences.scan_on_startup
+        )
+
+        self.startup_scan_box.blockSignals(
+            False
+        )
+
         selected_path = ""
 
         selected = (
@@ -645,6 +679,10 @@ class LocalMusicSettingsCard(
         )
 
         self.folder_list.setEnabled(
+            not self._busy
+        )
+
+        self.startup_scan_box.setEnabled(
             not self._busy
         )
 
@@ -777,6 +815,68 @@ class LocalMusicSettingsCard(
         except OSError:
             return False
 
+    def _save_scan_on_startup_preference(
+        self,
+        enabled: bool,
+    ) -> None:
+        try:
+            preferences = (
+                self.preference_store
+                .set_scan_on_startup(
+                    bool(
+                        enabled
+                    )
+                )
+            )
+
+        except Exception:
+            self.startup_scan_box.blockSignals(
+                True
+            )
+
+            self.startup_scan_box.setChecked(
+                self._preferences.scan_on_startup
+            )
+
+            self.startup_scan_box.blockSignals(
+                False
+            )
+
+            self._set_status(
+                (
+                    "Startup scan preference "
+                    "could not be saved."
+                )
+            )
+
+            return
+
+        if isinstance(
+            preferences,
+            LocalMusicPreferences,
+        ):
+            self._preferences = (
+                preferences
+            )
+
+        else:
+            self.refresh_from_store()
+
+        self._sync_controls()
+
+        self._set_status(
+            (
+                "Automatic Local Music scanning "
+                + (
+                    "enabled."
+                    if bool(
+                        enabled
+                    )
+                    else "disabled."
+                )
+            )
+        )
+
     def scan_on_startup(
         self,
     ) -> bool:
@@ -794,6 +894,9 @@ class LocalMusicSettingsCard(
             return False
 
         if not self.refresh_from_store():
+            return False
+
+        if not self._preferences.scan_on_startup:
             return False
 
         if not self._preferences.folders:
