@@ -4,6 +4,7 @@ import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass
 from enum import Enum
+import time
 
 
 UIA_BUTTON_CONTROL_TYPE_ID = 50000
@@ -54,6 +55,51 @@ class SpotifyDesktopDiscoveryResult:
             self.status
             is SpotifyDesktopDiscoveryStatus.READY
         )
+
+
+class SpotifyDesktopPlaybackStatus(
+    str,
+    Enum,
+):
+    PLAYED = "played"
+    ALREADY_PLAYING = "already_playing"
+    SPOTIFY_NOT_FOUND = "spotify_not_found"
+    PLAYLIST_NOT_FOUND = "playlist_not_found"
+    PLAY_CONTROL_NOT_FOUND = (
+        "play_control_not_found"
+    )
+    PLAY_CONTROL_UNAVAILABLE = (
+        "play_control_unavailable"
+    )
+    PLAYBACK_NOT_CONFIRMED = (
+        "playback_not_confirmed"
+    )
+    AUTOMATION_UNAVAILABLE = (
+        "automation_unavailable"
+    )
+    ERROR = "error"
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class SpotifyDesktopPlaybackResult:
+    status: SpotifyDesktopPlaybackStatus
+    playlist_name: str
+    title: str
+    artist: str
+    message: str = ""
+    now_playing_confirmed: bool = False
+
+    @property
+    def success(
+        self,
+    ) -> bool:
+        return self.status in {
+            SpotifyDesktopPlaybackStatus.PLAYED,
+            SpotifyDesktopPlaybackStatus.ALREADY_PLAYING,
+        }
 
 
 class SpotifyDesktopAutomationUnavailable(
@@ -519,17 +565,118 @@ class WindowsSpotifyUiAutomationBackend:
 
         return pattern is not None
 
+    def invoke(
+        self,
+        element,
+    ) -> None:
+        self._ensure_runtime()
+
+        pattern_id = getattr(
+            self._client,
+            "UIA_InvokePatternId",
+            10000,
+        )
+
+        try:
+            pattern = (
+                element.GetCurrentPattern(
+                    pattern_id
+                )
+            )
+
+            if pattern is None:
+                raise RuntimeError(
+                    "InvokePattern unavailable."
+                )
+
+            invoke_pattern = (
+                pattern.QueryInterface(
+                    self._client
+                    .IUIAutomationInvokePattern
+                )
+            )
+
+            invoke_pattern.Invoke()
+
+        except Exception as error:
+            raise RuntimeError(
+                (
+                    "Spotify's Play control "
+                    "could not be invoked."
+                )
+            ) from error
+
 
 class SpotifyDesktopPlaybackBridge:
     def __init__(
         self,
         backend=None,
+        *,
+        verification_attempts: int = 20,
+        verification_interval: float = 0.10,
+        sleep_fn=None,
     ) -> None:
         self._backend = (
             WindowsSpotifyUiAutomationBackend()
             if backend is None
             else backend
         )
+
+        if (
+            isinstance(
+                verification_attempts,
+                bool,
+            )
+            or not isinstance(
+                verification_attempts,
+                int,
+            )
+            or verification_attempts < 1
+        ):
+            raise ValueError(
+                (
+                    "verification_attempts must "
+                    "be a positive integer"
+                )
+            )
+
+        if (
+            isinstance(
+                verification_interval,
+                bool,
+            )
+            or not isinstance(
+                verification_interval,
+                (int, float),
+            )
+            or verification_interval < 0
+        ):
+            raise ValueError(
+                (
+                    "verification_interval must "
+                    "be zero or greater"
+                )
+            )
+
+        if sleep_fn is None:
+            sleep_fn = time.sleep
+
+        if not callable(
+            sleep_fn
+        ):
+            raise TypeError(
+                "sleep_fn must be callable"
+            )
+
+        self._verification_attempts = (
+            verification_attempts
+        )
+
+        self._verification_interval = float(
+            verification_interval
+        )
+
+        self._sleep = sleep_fn
 
         required = (
             "find_spotify_window",
@@ -538,6 +685,7 @@ class SpotifyDesktopPlaybackBridge:
             "name",
             "control_type",
             "supports_invoke",
+            "invoke",
         )
 
         missing = [
@@ -594,6 +742,527 @@ class SpotifyDesktopPlaybackBridge:
                 return True
 
         return False
+
+    def _find_playlist_grid(
+        self,
+        root,
+        playlist_name: str,
+    ):
+        expected_playlist = (
+            _semantic_text(
+                playlist_name
+            )
+        )
+
+        for element in (
+            self._backend
+            .iter_descendants(
+                root
+            )
+        ):
+            if (
+                self._backend
+                .control_type(
+                    element
+                )
+                != UIA_DATA_GRID_CONTROL_TYPE_ID
+            ):
+                continue
+
+            if (
+                _semantic_text(
+                    self._backend.name(
+                        element
+                    )
+                )
+                == expected_playlist
+            ):
+                return element
+
+        return None
+
+    def _find_track_button(
+        self,
+        playlist_grid,
+        *,
+        title: str,
+        artist: str,
+        action: str,
+    ):
+        expected = _semantic_text(
+            (
+                action
+                + " "
+                + title
+                + " by "
+                + artist
+            )
+        )
+
+        for element in (
+            self._backend
+            .iter_descendants(
+                playlist_grid
+            )
+        ):
+            if (
+                self._backend
+                .control_type(
+                    element
+                )
+                != UIA_BUTTON_CONTROL_TYPE_ID
+            ):
+                continue
+
+            if (
+                _semantic_text(
+                    self._backend.name(
+                        element
+                    )
+                )
+                == expected
+            ):
+                return element
+
+        return None
+
+    def _verified_playing_state(
+        self,
+        *,
+        hwnd,
+        playlist_name: str,
+        title: str,
+        artist: str,
+    ) -> tuple[bool, bool]:
+        root = (
+            self._backend
+            .root_from_handle(
+                hwnd
+            )
+        )
+
+        if root is None:
+            return (
+                False,
+                False,
+            )
+
+        now_playing = (
+            self._now_playing_confirmed(
+                root,
+                title,
+                artist,
+            )
+        )
+
+        if now_playing:
+            return (
+                True,
+                True,
+            )
+
+        playlist_grid = (
+            self._find_playlist_grid(
+                root,
+                playlist_name,
+            )
+        )
+
+        if playlist_grid is None:
+            return (
+                False,
+                False,
+            )
+
+        pause_control = (
+            self._find_track_button(
+                playlist_grid,
+                title=title,
+                artist=artist,
+                action="Pause",
+            )
+        )
+
+        if pause_control is not None:
+            return (
+                True,
+                False,
+            )
+
+        return (
+            False,
+            False,
+        )
+
+    @staticmethod
+    def _playback_status_from_discovery(
+        status,
+    ) -> SpotifyDesktopPlaybackStatus:
+        mapping = {
+            (
+                SpotifyDesktopDiscoveryStatus
+                .SPOTIFY_NOT_FOUND
+            ): (
+                SpotifyDesktopPlaybackStatus
+                .SPOTIFY_NOT_FOUND
+            ),
+            (
+                SpotifyDesktopDiscoveryStatus
+                .PLAYLIST_NOT_FOUND
+            ): (
+                SpotifyDesktopPlaybackStatus
+                .PLAYLIST_NOT_FOUND
+            ),
+            (
+                SpotifyDesktopDiscoveryStatus
+                .PLAY_CONTROL_NOT_FOUND
+            ): (
+                SpotifyDesktopPlaybackStatus
+                .PLAY_CONTROL_NOT_FOUND
+            ),
+            (
+                SpotifyDesktopDiscoveryStatus
+                .PLAY_CONTROL_UNAVAILABLE
+            ): (
+                SpotifyDesktopPlaybackStatus
+                .PLAY_CONTROL_UNAVAILABLE
+            ),
+            (
+                SpotifyDesktopDiscoveryStatus
+                .AUTOMATION_UNAVAILABLE
+            ): (
+                SpotifyDesktopPlaybackStatus
+                .AUTOMATION_UNAVAILABLE
+            ),
+        }
+
+        return mapping.get(
+            status,
+            SpotifyDesktopPlaybackStatus.ERROR,
+        )
+
+    def play_local_track(
+        self,
+        *,
+        playlist_name,
+        title,
+        artist,
+    ) -> SpotifyDesktopPlaybackResult:
+        playlist = _validated_text(
+            playlist_name,
+            "playlist_name",
+        )
+
+        track_title = _validated_text(
+            title,
+            "title",
+        )
+
+        track_artist = _validated_text(
+            artist,
+            "artist",
+        )
+
+        discovery = (
+            self.discover_local_track(
+                playlist_name=playlist,
+                title=track_title,
+                artist=track_artist,
+            )
+        )
+
+        if not discovery.ready:
+            return (
+                SpotifyDesktopPlaybackResult(
+                    status=(
+                        self
+                        ._playback_status_from_discovery(
+                            discovery.status
+                        )
+                    ),
+                    playlist_name=playlist,
+                    title=track_title,
+                    artist=track_artist,
+                    message=discovery.message,
+                    now_playing_confirmed=(
+                        discovery
+                        .now_playing_confirmed
+                    ),
+                )
+            )
+
+        if discovery.already_playing:
+            return (
+                SpotifyDesktopPlaybackResult(
+                    status=(
+                        SpotifyDesktopPlaybackStatus
+                        .ALREADY_PLAYING
+                    ),
+                    playlist_name=playlist,
+                    title=track_title,
+                    artist=track_artist,
+                    message=(
+                        "Spotify is already playing "
+                        "this local track."
+                    ),
+                    now_playing_confirmed=(
+                        discovery
+                        .now_playing_confirmed
+                    ),
+                )
+            )
+
+        try:
+            hwnd = (
+                self._backend
+                .find_spotify_window()
+            )
+
+            if not hwnd:
+                return (
+                    SpotifyDesktopPlaybackResult(
+                        status=(
+                            SpotifyDesktopPlaybackStatus
+                            .SPOTIFY_NOT_FOUND
+                        ),
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                        message=(
+                            "Spotify desktop is not open."
+                        ),
+                    )
+                )
+
+            root = (
+                self._backend
+                .root_from_handle(
+                    hwnd
+                )
+            )
+
+            if root is None:
+                return (
+                    SpotifyDesktopPlaybackResult(
+                        status=(
+                            SpotifyDesktopPlaybackStatus
+                            .AUTOMATION_UNAVAILABLE
+                        ),
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                        message=(
+                            "Spotify desktop could not "
+                            "be inspected."
+                        ),
+                    )
+                )
+
+            playlist_grid = (
+                self._find_playlist_grid(
+                    root,
+                    playlist,
+                )
+            )
+
+            if playlist_grid is None:
+                return (
+                    SpotifyDesktopPlaybackResult(
+                        status=(
+                            SpotifyDesktopPlaybackStatus
+                            .PLAYLIST_NOT_FOUND
+                        ),
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                        message=(
+                            "Open this playlist in "
+                            "Spotify desktop first."
+                        ),
+                    )
+                )
+
+            play_control = (
+                self._find_track_button(
+                    playlist_grid,
+                    title=track_title,
+                    artist=track_artist,
+                    action="Play",
+                )
+            )
+
+            if play_control is None:
+                pause_control = (
+                    self._find_track_button(
+                        playlist_grid,
+                        title=track_title,
+                        artist=track_artist,
+                        action="Pause",
+                    )
+                )
+
+                if pause_control is not None:
+                    return (
+                        SpotifyDesktopPlaybackResult(
+                            status=(
+                                SpotifyDesktopPlaybackStatus
+                                .ALREADY_PLAYING
+                            ),
+                            playlist_name=playlist,
+                            title=track_title,
+                            artist=track_artist,
+                            message=(
+                                "Spotify is already "
+                                "playing this local track."
+                            ),
+                            now_playing_confirmed=(
+                                self
+                                ._now_playing_confirmed(
+                                    root,
+                                    track_title,
+                                    track_artist,
+                                )
+                            ),
+                        )
+                    )
+
+                return (
+                    SpotifyDesktopPlaybackResult(
+                        status=(
+                            SpotifyDesktopPlaybackStatus
+                            .PLAY_CONTROL_NOT_FOUND
+                        ),
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                        message=(
+                            "Spotify's local-track play "
+                            "control could not be found."
+                        ),
+                    )
+                )
+
+            if not self._backend.supports_invoke(
+                play_control
+            ):
+                return (
+                    SpotifyDesktopPlaybackResult(
+                        status=(
+                            SpotifyDesktopPlaybackStatus
+                            .PLAY_CONTROL_UNAVAILABLE
+                        ),
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                        message=(
+                            "Spotify's local-track play "
+                            "control is unavailable."
+                        ),
+                    )
+                )
+
+            self._backend.invoke(
+                play_control
+            )
+
+            now_playing_confirmed = False
+
+            for attempt in range(
+                self._verification_attempts
+            ):
+                (
+                    playing_confirmed,
+                    now_playing_confirmed,
+                ) = (
+                    self._verified_playing_state(
+                        hwnd=hwnd,
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                    )
+                )
+
+                if playing_confirmed:
+                    return (
+                        SpotifyDesktopPlaybackResult(
+                            status=(
+                                SpotifyDesktopPlaybackStatus
+                                .PLAYED
+                            ),
+                            playlist_name=playlist,
+                            title=track_title,
+                            artist=track_artist,
+                            message=(
+                                "Spotify started the "
+                                "local track."
+                            ),
+                            now_playing_confirmed=(
+                                now_playing_confirmed
+                            ),
+                        )
+                    )
+
+                if (
+                    attempt
+                    < self._verification_attempts - 1
+                    and self._verification_interval > 0
+                ):
+                    self._sleep(
+                        self._verification_interval
+                    )
+
+            return (
+                SpotifyDesktopPlaybackResult(
+                    status=(
+                        SpotifyDesktopPlaybackStatus
+                        .PLAYBACK_NOT_CONFIRMED
+                    ),
+                    playlist_name=playlist,
+                    title=track_title,
+                    artist=track_artist,
+                    message=(
+                        "Spotify did not confirm that "
+                        "the local track started."
+                    ),
+                    now_playing_confirmed=(
+                        now_playing_confirmed
+                    ),
+                )
+            )
+
+        except SpotifyDesktopAutomationUnavailable:
+            return (
+                SpotifyDesktopPlaybackResult(
+                    status=(
+                        SpotifyDesktopPlaybackStatus
+                        .AUTOMATION_UNAVAILABLE
+                    ),
+                    playlist_name=playlist,
+                    title=track_title,
+                    artist=track_artist,
+                    message=(
+                        "Windows UI Automation "
+                        "is unavailable."
+                    ),
+                )
+            )
+
+        except Exception:
+            return (
+                SpotifyDesktopPlaybackResult(
+                    status=(
+                        SpotifyDesktopPlaybackStatus
+                        .ERROR
+                    ),
+                    playlist_name=playlist,
+                    title=track_title,
+                    artist=track_artist,
+                    message=(
+                        "Spotify local-track playback "
+                        "could not be started."
+                    ),
+                )
+            )
 
     def discover_local_track(
         self,
@@ -779,6 +1448,37 @@ class SpotifyDesktopPlaybackBridge:
                     play_control = element
                     button_name = name
 
+            now_playing = (
+                self._now_playing_confirmed(
+                    root,
+                    track_title,
+                    track_artist,
+                )
+            )
+
+            if (
+                play_control is None
+                and now_playing
+            ):
+                return (
+                    SpotifyDesktopDiscoveryResult(
+                        status=(
+                            SpotifyDesktopDiscoveryStatus
+                            .READY
+                        ),
+                        playlist_name=playlist,
+                        title=track_title,
+                        artist=track_artist,
+                        button_name="",
+                        already_playing=True,
+                        now_playing_confirmed=True,
+                        message=(
+                            "Spotify is already playing "
+                            "this local track."
+                        ),
+                    )
+                )
+
             if play_control is None:
                 return (
                     SpotifyDesktopDiscoveryResult(
@@ -795,14 +1495,6 @@ class SpotifyDesktopPlaybackBridge:
                         ),
                     )
                 )
-
-            now_playing = (
-                self._now_playing_confirmed(
-                    root,
-                    track_title,
-                    track_artist,
-                )
-            )
 
             if (
                 not already_playing

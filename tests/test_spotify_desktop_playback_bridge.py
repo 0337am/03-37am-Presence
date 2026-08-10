@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from src.spotify.desktop_playback_bridge import (
     SpotifyDesktopDiscoveryStatus,
     SpotifyDesktopPlaybackBridge,
+    SpotifyDesktopPlaybackStatus,
 )
 
 
@@ -32,10 +33,18 @@ class FakeBackend:
         *,
         hwnd=123,
         fail=False,
+        after_invoke_root=None,
+        invoke_error=False,
     ):
         self.root = root
         self.hwnd = hwnd
         self.fail = fail
+        self.after_invoke_root = (
+            after_invoke_root
+        )
+        self.invoke_error = invoke_error
+        self.invoked = False
+        self.invoke_calls = []
 
     def find_spotify_window(
         self,
@@ -51,6 +60,13 @@ class FakeBackend:
         self,
         hwnd,
     ):
+        if (
+            self.invoked
+            and self.after_invoke_root
+            is not None
+        ):
+            return self.after_invoke_root
+
         return self.root
 
     def iter_descendants(
@@ -91,6 +107,21 @@ class FakeBackend:
         element,
     ):
         return element.invoke
+
+    def invoke(
+        self,
+        element,
+    ):
+        self.invoke_calls.append(
+            element.name
+        )
+
+        if self.invoke_error:
+            raise RuntimeError(
+                "simulated invoke failure"
+            )
+
+        self.invoked = True
 
 
 def tree(
@@ -169,7 +200,10 @@ class SpotifyDesktopPlaybackBridgeTests(
             FakeBackend(
                 root,
                 **backend_options,
-            )
+            ),
+            verification_attempts=2,
+            verification_interval=0,
+            sleep_fn=lambda seconds: None,
         )
 
     def discover(
@@ -390,6 +424,281 @@ class SpotifyDesktopPlaybackBridgeTests(
         self.assertTrue(
             result.ready
         )
+
+    def test_play_local_track_invokes_and_confirms(
+        self,
+    ):
+        before = tree()
+
+        after = tree(
+            button_name=(
+                "Pause CELLOPHANE by WesGhost"
+            ),
+            invoke=False,
+            now_playing=True,
+        )
+
+        bridge = self.bridge(
+            before,
+            after_invoke_root=after,
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertTrue(
+            result.success
+        )
+
+        self.assertEqual(
+            result.status,
+            SpotifyDesktopPlaybackStatus.PLAYED,
+        )
+
+        self.assertTrue(
+            result.now_playing_confirmed
+        )
+
+        self.assertEqual(
+            bridge._backend.invoke_calls,
+            [
+                "Play CELLOPHANE by WesGhost",
+            ],
+        )
+
+    def test_already_playing_does_not_invoke(
+        self,
+    ):
+        bridge = self.bridge(
+            tree(
+                button_name=(
+                    "Pause CELLOPHANE by WesGhost"
+                ),
+                invoke=False,
+                now_playing=True,
+            )
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertTrue(
+            result.success
+        )
+
+        self.assertEqual(
+            result.status,
+            (
+                SpotifyDesktopPlaybackStatus
+                .ALREADY_PLAYING
+            ),
+        )
+
+        self.assertEqual(
+            bridge._backend.invoke_calls,
+            [],
+        )
+
+    def test_now_playing_marker_confirms_playback_without_pause_button(
+        self,
+    ):
+        before = tree()
+
+        after = tree(
+            include_button=False,
+            now_playing=True,
+        )
+
+        bridge = self.bridge(
+            before,
+            after_invoke_root=after,
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertTrue(
+            result.success
+        )
+
+        self.assertEqual(
+            result.status,
+            SpotifyDesktopPlaybackStatus.PLAYED,
+        )
+
+        self.assertTrue(
+            result.now_playing_confirmed
+        )
+
+        self.assertEqual(
+            bridge._backend.invoke_calls,
+            [
+                "Play CELLOPHANE by WesGhost",
+            ],
+        )
+
+    def test_discovery_recognizes_now_playing_without_pause_button(
+        self,
+    ):
+        bridge = self.bridge(
+            tree(
+                include_button=False,
+                now_playing=True,
+            )
+        )
+
+        result = self.discover(
+            bridge
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertTrue(
+            result.already_playing
+        )
+
+        self.assertTrue(
+            result.now_playing_confirmed
+        )
+
+    def test_invoke_failure_is_safe(
+        self,
+    ):
+        bridge = self.bridge(
+            tree(),
+            invoke_error=True,
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertFalse(
+            result.success
+        )
+
+        self.assertEqual(
+            result.status,
+            SpotifyDesktopPlaybackStatus.ERROR,
+        )
+
+    def test_unconfirmed_playback_is_not_success(
+        self,
+    ):
+        bridge = self.bridge(
+            tree(),
+            after_invoke_root=tree(),
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertFalse(
+            result.success
+        )
+
+        self.assertEqual(
+            result.status,
+            (
+                SpotifyDesktopPlaybackStatus
+                .PLAYBACK_NOT_CONFIRMED
+            ),
+        )
+
+        self.assertEqual(
+            bridge._backend.invoke_calls,
+            [
+                "Play CELLOPHANE by WesGhost",
+            ],
+        )
+
+    def test_missing_playlist_maps_to_playback_status(
+        self,
+    ):
+        bridge = self.bridge(
+            tree(
+                include_playlist=False
+            )
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertEqual(
+            result.status,
+            (
+                SpotifyDesktopPlaybackStatus
+                .PLAYLIST_NOT_FOUND
+            ),
+        )
+
+    def test_non_invokable_control_maps_to_playback_status(
+        self,
+    ):
+        bridge = self.bridge(
+            tree(
+                invoke=False
+            )
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertEqual(
+            result.status,
+            (
+                SpotifyDesktopPlaybackStatus
+                .PLAY_CONTROL_UNAVAILABLE
+            ),
+        )
+
+    def test_playback_constructor_validates_verification_attempts(
+        self,
+    ):
+        with self.assertRaises(
+            ValueError
+        ):
+            SpotifyDesktopPlaybackBridge(
+                FakeBackend(
+                    tree()
+                ),
+                verification_attempts=0,
+            )
+
+    def test_playback_constructor_validates_interval(
+        self,
+    ):
+        with self.assertRaises(
+            ValueError
+        ):
+            SpotifyDesktopPlaybackBridge(
+                FakeBackend(
+                    tree()
+                ),
+                verification_interval=-1,
+            )
 
     def test_playlist_name_must_be_nonempty(
         self,
