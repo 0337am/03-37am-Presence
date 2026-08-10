@@ -122,8 +122,19 @@ class SpotifyPlaylistTrackRow(
             resolved_item
         )
 
+        self._number_text = str(
+            number
+        )
+
+        self.playing = False
+
         self.setObjectName(
             "spotifyPlaylistTrackRow"
+        )
+
+        self.setProperty(
+            "playing",
+            False,
         )
 
         layout = QHBoxLayout(
@@ -142,14 +153,17 @@ class SpotifyPlaylistTrackRow(
         )
 
         self.number_label = QLabel(
-            str(
-                number
-            ),
+            self._number_text,
             self,
         )
 
         self.number_label.setObjectName(
             "spotifyPlaylistTrackNumber"
+        )
+
+        self.number_label.setProperty(
+            "playing",
+            False,
         )
 
         self.number_label.setFixedWidth(
@@ -197,6 +211,11 @@ class SpotifyPlaylistTrackRow(
 
         self.title_label.setObjectName(
             "spotifyPlaylistTrackTitle"
+        )
+
+        self.title_label.setProperty(
+            "playing",
+            False,
         )
 
         self.title_label.setWordWrap(
@@ -375,6 +394,57 @@ class SpotifyPlaylistTrackRow(
         )
 
 
+    def set_playing(
+        self,
+        playing: bool,
+    ) -> bool:
+        state = bool(
+            playing
+        )
+
+        if state == self.playing:
+            return False
+
+        self.playing = state
+
+        self.setProperty(
+            "playing",
+            state,
+        )
+
+        self.number_label.setProperty(
+            "playing",
+            state,
+        )
+
+        self.title_label.setProperty(
+            "playing",
+            state,
+        )
+
+        self.number_label.setText(
+            self._number_text
+        )
+
+        for widget in (
+            self,
+            self.number_label,
+            self.title_label,
+        ):
+            style = widget.style()
+
+            style.unpolish(
+                widget
+            )
+
+            style.polish(
+                widget
+            )
+
+            widget.update()
+
+        return True
+
     def activate(
         self,
     ) -> bool:
@@ -465,6 +535,7 @@ class SpotifyPlaylistDetail(
         )
 
         self._active_playback_title = ""
+        self._current_song = None
 
         self.theme_manager = (
             theme_manager
@@ -778,6 +849,218 @@ class SpotifyPlaylistDetail(
                     connect(
                         handler
                     )
+
+    @staticmethod
+    def _identity_text(
+        value,
+    ) -> str:
+        return " ".join(
+            str(
+                value
+                or ""
+            ).split()
+        ).casefold()
+
+    @classmethod
+    def _spotify_song_is_playing(
+        cls,
+        song,
+    ) -> bool:
+        if song is None:
+            return False
+
+        if not bool(
+            getattr(
+                song,
+                "playing",
+                False,
+            )
+        ):
+            return False
+
+        title = cls._identity_text(
+            getattr(
+                song,
+                "title",
+                "",
+            )
+        )
+
+        if not title:
+            return False
+
+        source_app = cls._identity_text(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+        )
+
+        return (
+            "spotify"
+            in source_app
+        )
+
+    @classmethod
+    def _row_matches_song(
+        cls,
+        row,
+        song,
+    ) -> bool:
+        track = getattr(
+            getattr(
+                row,
+                "resolved_item",
+                None,
+            ),
+            "unified_track",
+            None,
+        )
+
+        if track is None:
+            return False
+
+        return (
+            cls._identity_text(
+                getattr(
+                    track,
+                    "title",
+                    "",
+                )
+            )
+            == cls._identity_text(
+                getattr(
+                    song,
+                    "title",
+                    "",
+                )
+            )
+            and cls._identity_text(
+                getattr(
+                    track,
+                    "artist",
+                    "",
+                )
+            )
+            == cls._identity_text(
+                getattr(
+                    song,
+                    "artist",
+                    "",
+                )
+            )
+        )
+
+    def _matching_current_row(
+        self,
+    ):
+        song = self._current_song
+
+        if not self._spotify_song_is_playing(
+            song
+        ):
+            return None
+
+        candidates = [
+            row
+            for row in self.rows
+            if self._row_matches_song(
+                row,
+                song,
+            )
+        ]
+
+        if len(
+            candidates
+        ) == 1:
+            return candidates[0]
+
+        if len(
+            candidates
+        ) <= 1:
+            return None
+
+        song_album = self._identity_text(
+            getattr(
+                song,
+                "album",
+                "",
+            )
+        )
+
+        if not song_album:
+            return None
+
+        album_matches = []
+
+        for row in candidates:
+            track = getattr(
+                getattr(
+                    row,
+                    "resolved_item",
+                    None,
+                ),
+                "unified_track",
+                None,
+            )
+
+            if track is None:
+                continue
+
+            track_album = (
+                self._identity_text(
+                    getattr(
+                        track,
+                        "album",
+                        "",
+                    )
+                )
+            )
+
+            if (
+                track_album
+                == song_album
+            ):
+                album_matches.append(
+                    row
+                )
+
+        if len(
+            album_matches
+        ) == 1:
+            return album_matches[0]
+
+        return None
+
+    def _refresh_playing_rows(
+        self,
+    ) -> None:
+        matching_row = (
+            self._matching_current_row()
+        )
+
+        for row in self.rows:
+            setter = getattr(
+                row,
+                "set_playing",
+                None,
+            )
+
+            if callable(
+                setter
+            ):
+                setter(
+                    row is matching_row
+                )
+
+    def set_current_song(
+        self,
+        song,
+    ) -> None:
+        self._current_song = song
+
+        self._refresh_playing_rows()
 
     def set_playlist(
         self,
@@ -1694,6 +1977,8 @@ class SpotifyPlaylistDetail(
 
             stretch_index += 1
 
+        self._refresh_playing_rows()
+
         self.empty_label.setVisible(
             not bool(
                 self.rows
@@ -2007,9 +2292,20 @@ class SpotifyPlaylistDetail(
                 border-radius: 10px;
             }}
 
+            QFrame#spotifyPlaylistTrackRow[playing="true"] {{
+                background: {card_alt};
+                border: 1px solid {accent};
+            }}
+
             QLabel#spotifyPlaylistTrackTitle {{
                 color: {text};
                 font-weight: 650;
+            }}
+
+            QLabel#spotifyPlaylistTrackTitle[playing="true"],
+            QLabel#spotifyPlaylistTrackNumber[playing="true"] {{
+                color: {accent};
+                font-weight: 750;
             }}
 
             QLabel#spotifyPlaylistLocalBadge {{

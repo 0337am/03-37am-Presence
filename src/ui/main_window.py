@@ -2117,6 +2117,25 @@ class MainWindow(QMainWindow):
             song
         )
 
+        spotify_page = getattr(
+            self,
+            "spotify_page",
+            None,
+        )
+
+        set_current_song = getattr(
+            spotify_page,
+            "set_current_song",
+            None,
+        )
+
+        if callable(
+            set_current_song
+        ):
+            set_current_song(
+                song
+            )
+
         self.presence_controller.handle_song(
             song
         )

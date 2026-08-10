@@ -117,6 +117,7 @@ class SpotifyPage(
         )
 
         self._activated = False
+        self._current_song = None
 
         self.setObjectName(
             "spotifyRoot"
@@ -557,6 +558,25 @@ class SpotifyPage(
 
         if previous_home is not None:
             previous_home.deleteLater()
+
+    def set_current_song(
+        self,
+        song,
+    ) -> None:
+        self._current_song = song
+
+        setter = getattr(
+            self.playlist_detail,
+            "set_current_song",
+            None,
+        )
+
+        if callable(
+            setter
+        ):
+            setter(
+                song
+            )
 
     def activate(
         self,
