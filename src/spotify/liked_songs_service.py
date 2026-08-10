@@ -19,6 +19,11 @@ from src.spotify.playlist_models import (
 )
 
 
+SPOTIFY_LIKED_SONGS_CONTEXT_COMPATIBILITY_ID = (
+    "37i9dQZF1F5p3rmiWPIYgZ"
+)
+
+
 class SpotifyLikedSongsServiceStatus(
     str,
     Enum,
@@ -36,6 +41,7 @@ class SpotifyLikedSongsServiceResult:
     status: SpotifyLikedSongsServiceStatus
     total: int | None = None
     page: SpotifyPlaylistItemsPage | None = None
+    context_playlist_id: str | None = None
     message: str = ""
     error_code: str = ""
     retry_after_seconds: int | None = None
@@ -93,6 +99,26 @@ class SpotifyLikedSongsServiceResult:
                     "or None"
                 )
             )
+
+        if self.context_playlist_id is not None:
+            if not isinstance(
+                self.context_playlist_id,
+                str,
+            ):
+                raise TypeError(
+                    (
+                        "context_playlist_id must "
+                        "be a string or None"
+                    )
+                )
+
+            if not self.context_playlist_id.strip():
+                raise ValueError(
+                    (
+                        "context_playlist_id cannot "
+                        "be empty"
+                    )
+                )
 
         if (
             self.retry_after_seconds
@@ -167,6 +193,8 @@ class SpotifyLikedSongsServiceResult:
         elif (
             self.total is not None
             or self.page is not None
+            or self.context_playlist_id
+            is not None
         ):
             raise ValueError(
                 (
@@ -561,12 +589,231 @@ class SpotifyLikedSongsService:
         )
 
 
+    @staticmethod
+    def _playlist_id_from_context(
+        payload,
+    ) -> str | None:
+        if not isinstance(
+            payload,
+            dict,
+        ):
+            return None
+
+        context = payload.get(
+            "context"
+        )
+
+        if not isinstance(
+            context,
+            dict,
+        ):
+            return None
+
+        if str(
+            context.get(
+                "type"
+            )
+            or ""
+        ).strip().casefold() != "playlist":
+            return None
+
+        uri = str(
+            context.get(
+                "uri"
+            )
+            or ""
+        ).strip()
+
+        prefix = "spotify:playlist:"
+
+        if not uri.startswith(
+            prefix
+        ):
+            return None
+
+        playlist_id = uri[
+            len(
+                prefix
+            ):
+        ].strip()
+
+        return (
+            playlist_id
+            or None
+        )
+
+    def _validate_liked_context(
+        self,
+        access_token: str,
+        playlist_id: str,
+        user_id: str,
+    ) -> str | None:
+        try:
+            payload = (
+                self._api_client
+                .get_json(
+                    access_token,
+                    (
+                        "/playlists/"
+                        + playlist_id
+                    ),
+                )
+            )
+
+        except Exception:
+            return None
+
+        if not isinstance(
+            payload,
+            dict,
+        ):
+            return None
+
+        returned_id = str(
+            payload.get(
+                "id"
+            )
+            or ""
+        ).strip()
+
+        name = str(
+            payload.get(
+                "name"
+            )
+            or ""
+        ).strip()
+
+        owner = payload.get(
+            "owner"
+        )
+
+        if not isinstance(
+            owner,
+            dict,
+        ):
+            return None
+
+        owner_id = str(
+            owner.get(
+                "id"
+            )
+            or ""
+        ).strip()
+
+        if (
+            returned_id != playlist_id
+            or name.casefold()
+            != "liked songs"
+            or owner_id != user_id
+        ):
+            return None
+
+        return playlist_id
+
+    def _discover_liked_context(
+        self,
+        access_token: str,
+    ) -> str | None:
+        try:
+            profile = (
+                self._api_client
+                .get_json(
+                    access_token,
+                    "/me",
+                )
+            )
+
+        except Exception:
+            return None
+
+        if not isinstance(
+            profile,
+            dict,
+        ):
+            return None
+
+        user_id = str(
+            profile.get(
+                "id"
+            )
+            or ""
+        ).strip()
+
+        if not user_id:
+            return None
+
+        candidates = []
+
+        try:
+            playback = (
+                self._api_client
+                .get_json(
+                    access_token,
+                    (
+                        "/me/player/"
+                        "currently-playing"
+                    ),
+                )
+            )
+
+        except Exception:
+            playback = None
+
+        live_candidate = (
+            self._playlist_id_from_context(
+                playback
+            )
+        )
+
+        if live_candidate:
+            candidates.append(
+                live_candidate
+            )
+
+        compatibility_candidate = (
+            SPOTIFY_LIKED_SONGS_CONTEXT_COMPATIBILITY_ID
+        )
+
+        if (
+            compatibility_candidate
+            not in candidates
+        ):
+            candidates.append(
+                compatibility_candidate
+            )
+
+        for playlist_id in candidates:
+            validated = (
+                self._validate_liked_context(
+                    access_token,
+                    playlist_id,
+                    user_id,
+                )
+            )
+
+            if validated is not None:
+                return validated
+
+        return None
+
     def get_tracks_page(
         self,
         *,
         limit: int = 50,
         offset: int = 0,
+        include_context: bool = False,
     ) -> SpotifyLikedSongsServiceResult:
+        if not isinstance(
+            include_context,
+            bool,
+        ):
+            raise TypeError(
+                (
+                    "include_context must be "
+                    "a boolean"
+                )
+            )
+
         if (
             isinstance(
                 limit,
@@ -670,12 +917,27 @@ class SpotifyLikedSongsService:
                 refreshed=refreshed,
             )
 
+        context_playlist_id = None
+
+        if (
+            include_context
+            and offset == 0
+        ):
+            context_playlist_id = (
+                self._discover_liked_context(
+                    access_token
+                )
+            )
+
         return SpotifyLikedSongsServiceResult(
             status=(
                 SpotifyLikedSongsServiceStatus.READY
             ),
             total=page.total,
             page=page,
+            context_playlist_id=(
+                context_playlist_id
+            ),
             message=(
                 "Liked Songs loaded."
             ),

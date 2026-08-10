@@ -381,10 +381,50 @@ class SpotifyPlaylistRow(
         )
 
 
+class SpotifyLikedSongsCard(
+    QFrame
+):
+    activated = pyqtSignal()
+
+    def __init__(
+        self,
+        parent=None,
+    ) -> None:
+        super().__init__(
+            parent
+        )
+
+        self.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+    def activate(
+        self,
+    ) -> bool:
+        self.activated.emit()
+
+        return True
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            self.activate()
+
+        super().mouseReleaseEvent(
+            event
+        )
+
+
 class SpotifyPlaylistHome(
     QWidget
 ):
     playlist_activated = pyqtSignal(object)
+    liked_songs_activated = pyqtSignal()
     def __init__(
         self,
         runtime,
@@ -760,10 +800,14 @@ class SpotifyPlaylistHome(
     def _install_liked_songs_card(
         self,
     ) -> None:
-        self.liked_songs_card = QFrame()
+        self.liked_songs_card = SpotifyLikedSongsCard()
 
         self.liked_songs_card.setObjectName(
             "spotifyLikedSongsCard"
+        )
+
+        self.liked_songs_card.activated.connect(
+            self.liked_songs_activated.emit
         )
 
         self.liked_songs_card.setVisible(

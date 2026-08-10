@@ -638,5 +638,214 @@ class SpotifyLikedSongsTracksTests(
         )
 
 
+    def test_context_discovery_validates_current_account(
+        self,
+    ):
+        class RoutingApi:
+            def __init__(
+                self,
+            ):
+                self.calls = []
+
+            def get_json(
+                self,
+                token,
+                path,
+                *,
+                query=None,
+            ):
+                self.calls.append(
+                    (
+                        path,
+                        query,
+                    )
+                )
+
+                if path == "/me/tracks":
+                    return page_payload()
+
+                if path == "/me":
+                    return {
+                        "id": "current-user",
+                    }
+
+                if (
+                    path
+                    == "/me/player/currently-playing"
+                ):
+                    return {
+                        "context": None,
+                    }
+
+                if (
+                    path
+                    == (
+                        "/playlists/"
+                        "37i9dQZF1F5p3rmiWPIYgZ"
+                    )
+                ):
+                    return {
+                        "id": (
+                            "37i9dQZF1F5p3rmiWPIYgZ"
+                        ),
+                        "name": "Liked Songs",
+                        "owner": {
+                            "id": "current-user",
+                        },
+                    }
+
+                raise AssertionError(
+                    (
+                        "Unexpected path: "
+                        + path
+                    )
+                )
+
+        service = SpotifyLikedSongsService(
+            FakeSessionManager(),
+            api_client=RoutingApi(),
+        )
+
+        result = service.get_tracks_page(
+            include_context=True
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            result.context_playlist_id,
+            "37i9dQZF1F5p3rmiWPIYgZ",
+        )
+
+    def test_context_discovery_rejects_wrong_owner(
+        self,
+    ):
+        class RoutingApi:
+            def get_json(
+                self,
+                token,
+                path,
+                *,
+                query=None,
+            ):
+                if path == "/me/tracks":
+                    return page_payload()
+
+                if path == "/me":
+                    return {
+                        "id": "current-user",
+                    }
+
+                if (
+                    path
+                    == "/me/player/currently-playing"
+                ):
+                    return {
+                        "context": None,
+                    }
+
+                if path.startswith(
+                    "/playlists/"
+                ):
+                    return {
+                        "id": (
+                            "37i9dQZF1F5p3rmiWPIYgZ"
+                        ),
+                        "name": "Liked Songs",
+                        "owner": {
+                            "id": "someone-else",
+                        },
+                    }
+
+                raise AssertionError(
+                    (
+                        "Unexpected path: "
+                        + path
+                    )
+                )
+
+        service = SpotifyLikedSongsService(
+            FakeSessionManager(),
+            api_client=RoutingApi(),
+        )
+
+        result = service.get_tracks_page(
+            include_context=True
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertIsNone(
+            result.context_playlist_id
+        )
+
+    def test_context_discovery_failure_does_not_break_tracks(
+        self,
+    ):
+        class RoutingApi:
+            def get_json(
+                self,
+                token,
+                path,
+                *,
+                query=None,
+            ):
+                if path == "/me/tracks":
+                    return page_payload()
+
+                raise RuntimeError(
+                    "simulated context failure"
+                )
+
+        service = SpotifyLikedSongsService(
+            FakeSessionManager(),
+            api_client=RoutingApi(),
+        )
+
+        result = service.get_tracks_page(
+            include_context=True
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertIsNotNone(
+            result.page
+        )
+
+        self.assertIsNone(
+            result.context_playlist_id
+        )
+
+    def test_include_context_requires_boolean(
+        self,
+    ):
+        session = FakeSessionManager()
+
+        service = SpotifyLikedSongsService(
+            session,
+            api_client=FakeApi(
+                page_payload()
+            ),
+        )
+
+        with self.assertRaises(
+            TypeError
+        ):
+            service.get_tracks_page(
+                include_context=1
+            )
+
+        self.assertEqual(
+            session.calls,
+            0,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

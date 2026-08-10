@@ -21,6 +21,9 @@ from src.ui.theme import ThemeManager
 from src.ui.spotify_playlist_detail import (
     SpotifyPlaylistDetail,
 )
+from src.ui.spotify_liked_songs_detail import (
+    SpotifyLikedSongsDetail,
+)
 
 
 SPOTIFY_HOME_INDEX = 0
@@ -44,6 +47,7 @@ def _theme_value(
 
 
 SPOTIFY_PLAYLIST_DETAIL_INDEX = 2
+SPOTIFY_LIKED_SONGS_INDEX = 3
 class SpotifyPage(
     QWidget
 ):
@@ -127,6 +131,7 @@ class SpotifyPage(
 
         self._install_playlist_home()
         self._install_playlist_detail()
+        self._install_liked_songs_detail()
         self.connect_signals()
 
         self.theme_manager.theme_changed.connect(
@@ -143,6 +148,12 @@ class SpotifyPage(
     def current_section(
         self,
     ) -> str:
+        if (
+            self.content_stack.currentIndex()
+            == SPOTIFY_LIKED_SONGS_INDEX
+        ):
+            return "liked_songs"
+
         if (
             self.content_stack.currentIndex()
             == SPOTIFY_PLAYLIST_DETAIL_INDEX
@@ -437,7 +448,15 @@ class SpotifyPage(
             self.show_playlist_detail
         )
 
+        self.playlist_home.liked_songs_activated.connect(
+            self.show_liked_songs
+        )
+
         self.playlist_detail.back_requested.connect(
+            self.show_home
+        )
+
+        self.liked_songs_detail.back_requested.connect(
             self.show_home
         )
 
@@ -445,12 +464,12 @@ class SpotifyPage(
         self,
         index: int,
     ) -> None:
-        if (
-            index
-            == SPOTIFY_PLAYLIST_DETAIL_INDEX
+        if index in (
+            SPOTIFY_PLAYLIST_DETAIL_INDEX,
+            SPOTIFY_LIKED_SONGS_INDEX,
         ):
             self.content_stack.setCurrentIndex(
-                SPOTIFY_PLAYLIST_DETAIL_INDEX
+                index
             )
 
             self.home_button.setChecked(
@@ -775,6 +794,41 @@ class SpotifyPage(
                 )
             )
 
+
+    def _install_liked_songs_detail(
+        self,
+    ) -> None:
+        self.liked_songs_detail = (
+            SpotifyLikedSongsDetail(
+                self.liked_songs_runtime,
+                playback_runtime=(
+                    self.playback_runtime
+                ),
+                theme_manager=(
+                    self.theme_manager
+                ),
+                parent=(
+                    self.content_stack
+                ),
+            )
+        )
+
+        index = self.content_stack.addWidget(
+            self.liked_songs_detail
+        )
+
+        if (
+            index
+            != SPOTIFY_LIKED_SONGS_INDEX
+        ):
+            raise RuntimeError(
+                (
+                    "Spotify Liked Songs detail "
+                    "was inserted at an "
+                    "unexpected stack index."
+                )
+            )
+
     def show_playlist_detail(
         self,
         playlist,
@@ -789,4 +843,16 @@ class SpotifyPage(
 
         return bool(
             self.playlist_detail.load()
+        )
+
+
+    def show_liked_songs(
+        self,
+    ) -> bool:
+        self._set_section(
+            SPOTIFY_LIKED_SONGS_INDEX
+        )
+
+        return bool(
+            self.liked_songs_detail.load()
         )

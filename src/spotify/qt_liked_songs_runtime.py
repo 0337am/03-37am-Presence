@@ -195,6 +195,7 @@ class _SpotifyLikedSongsTracksWorker(
         *,
         limit: int,
         offset: int,
+        include_context: bool,
     ) -> None:
         super().__init__()
 
@@ -204,6 +205,9 @@ class _SpotifyLikedSongsTracksWorker(
 
         self._limit = limit
         self._offset = offset
+        self._include_context = (
+            include_context
+        )
 
     def _fail(
         self,
@@ -254,10 +258,18 @@ class _SpotifyLikedSongsTracksWorker(
                 return
 
             try:
-                result = operation(
-                    limit=self._limit,
-                    offset=self._offset,
-                )
+                if self._include_context:
+                    result = operation(
+                        limit=self._limit,
+                        offset=self._offset,
+                        include_context=True,
+                    )
+
+                else:
+                    result = operation(
+                        limit=self._limit,
+                        offset=self._offset,
+                    )
 
             except Exception:
                 self._fail(
@@ -469,7 +481,19 @@ class SpotifyQtLikedSongsRuntime(
         *,
         limit: int = 50,
         offset: int = 0,
+        include_context: bool = False,
     ) -> None:
+        if not isinstance(
+            include_context,
+            bool,
+        ):
+            raise TypeError(
+                (
+                    "include_context must be "
+                    "a boolean"
+                )
+            )
+
         if (
             isinstance(
                 limit,
@@ -538,6 +562,9 @@ class SpotifyQtLikedSongsRuntime(
             self._service_factory,
             limit=limit,
             offset=offset,
+            include_context=(
+                include_context
+            ),
         )
 
         worker.moveToThread(
