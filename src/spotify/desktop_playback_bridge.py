@@ -4,6 +4,7 @@ import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass
 from enum import Enum
+import ntpath
 import time
 
 
@@ -279,6 +280,87 @@ class WindowsSpotifyUiAutomationBackend:
             buffer.value.strip()
         )
 
+    @staticmethod
+    def _process_image_path(
+        kernel32,
+        pid: int,
+    ) -> str:
+        process_query_limited_information = (
+            0x1000
+        )
+
+        handle = kernel32.OpenProcess(
+            process_query_limited_information,
+            False,
+            pid,
+        )
+
+        if not handle:
+            return ""
+
+        try:
+            size = wintypes.DWORD(
+                32768
+            )
+
+            buffer = (
+                ctypes.create_unicode_buffer(
+                    size.value
+                )
+            )
+
+            success = (
+                kernel32
+                .QueryFullProcessImageNameW(
+                    handle,
+                    0,
+                    buffer,
+                    ctypes.byref(
+                        size
+                    ),
+                )
+            )
+
+            if not success:
+                return ""
+
+            return (
+                buffer.value.strip()
+            )
+
+        finally:
+            kernel32.CloseHandle(
+                handle
+            )
+
+    @staticmethod
+    def _is_spotify_window_candidate(
+        *,
+        title: str,
+        process_path: str,
+    ) -> bool:
+        executable = (
+            ntpath.basename(
+                str(
+                    process_path
+                    or ""
+                )
+            )
+            .strip()
+            .casefold()
+        )
+
+        if executable == "spotify.exe":
+            return True
+
+        return (
+            "spotify"
+            in str(
+                title
+                or ""
+            ).casefold()
+        )
+
     def find_spotify_window(
         self,
     ):
@@ -299,6 +381,11 @@ class WindowsSpotifyUiAutomationBackend:
 
         user32 = ctypes.WinDLL(
             "user32",
+            use_last_error=True,
+        )
+
+        kernel32 = ctypes.WinDLL(
+            "kernel32",
             use_last_error=True,
         )
 
@@ -343,6 +430,48 @@ class WindowsSpotifyUiAutomationBackend:
             ctypes.c_int
         )
 
+        user32.GetWindowThreadProcessId.argtypes = (
+            wintypes.HWND,
+            ctypes.POINTER(
+                wintypes.DWORD
+            ),
+        )
+
+        user32.GetWindowThreadProcessId.restype = (
+            wintypes.DWORD
+        )
+
+        kernel32.OpenProcess.argtypes = (
+            wintypes.DWORD,
+            wintypes.BOOL,
+            wintypes.DWORD,
+        )
+
+        kernel32.OpenProcess.restype = (
+            wintypes.HANDLE
+        )
+
+        kernel32.QueryFullProcessImageNameW.argtypes = (
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.LPWSTR,
+            ctypes.POINTER(
+                wintypes.DWORD
+            ),
+        )
+
+        kernel32.QueryFullProcessImageNameW.restype = (
+            wintypes.BOOL
+        )
+
+        kernel32.CloseHandle.argtypes = (
+            wintypes.HANDLE,
+        )
+
+        kernel32.CloseHandle.restype = (
+            wintypes.BOOL
+        )
+
         candidates = []
 
         @callback_type
@@ -360,19 +489,60 @@ class WindowsSpotifyUiAutomationBackend:
                 hwnd,
             )
 
-            if (
-                title
-                and "spotify"
-                in title.casefold()
-            ):
-                candidates.append(
-                    (
-                        int(
-                            hwnd
-                        ),
-                        title,
+            pid = wintypes.DWORD()
+
+            user32.GetWindowThreadProcessId(
+                hwnd,
+                ctypes.byref(
+                    pid
+                ),
+            )
+
+            process_path = ""
+
+            if pid.value:
+                try:
+                    process_path = (
+                        self._process_image_path(
+                            kernel32,
+                            pid.value,
+                        )
                     )
+
+                except Exception:
+                    process_path = ""
+
+            if not (
+                self
+                ._is_spotify_window_candidate(
+                    title=title,
+                    process_path=process_path,
                 )
+            ):
+                return True
+
+            executable = (
+                ntpath.basename(
+                    process_path
+                ).casefold()
+                if process_path
+                else ""
+            )
+
+            process_match = (
+                executable
+                == "spotify.exe"
+            )
+
+            candidates.append(
+                (
+                    process_match,
+                    int(
+                        hwnd
+                    ),
+                    title,
+                )
+            )
 
             return True
 
@@ -387,20 +557,14 @@ class WindowsSpotifyUiAutomationBackend:
         if not candidates:
             return None
 
-        preferred_titles = (
-            "spotify premium",
-            "spotify",
+        # Process identity outranks title text.
+        candidates.sort(
+            key=lambda item: (
+                not item[0],
+            )
         )
 
-        for preferred in preferred_titles:
-            for hwnd, title in candidates:
-                if (
-                    title.casefold()
-                    == preferred
-                ):
-                    return hwnd
-
-        return candidates[0][0]
+        return candidates[0][1]
 
     def root_from_handle(
         self,

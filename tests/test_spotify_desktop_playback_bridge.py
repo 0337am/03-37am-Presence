@@ -7,6 +7,7 @@ from src.spotify.desktop_playback_bridge import (
     SpotifyDesktopDiscoveryStatus,
     SpotifyDesktopPlaybackBridge,
     SpotifyDesktopPlaybackStatus,
+    WindowsSpotifyUiAutomationBackend,
 )
 
 
@@ -183,6 +184,48 @@ def tree(
         50032,
         children=children,
     )
+
+
+class SpotifyDesktopWindowIdentityTests(
+    unittest.TestCase
+):
+    def test_spotify_executable_is_accepted_with_track_title(
+        self,
+    ):
+        self.assertTrue(
+            WindowsSpotifyUiAutomationBackend
+            ._is_spotify_window_candidate(
+                title="WesGhost - MIGRAINE",
+                process_path=(
+                    r"C:\Users\Gtafe\AppData"
+                    r"\Roaming\Spotify\Spotify.exe"
+                ),
+            )
+        )
+
+    def test_spotify_title_remains_fallback_when_process_path_unavailable(
+        self,
+    ):
+        self.assertTrue(
+            WindowsSpotifyUiAutomationBackend
+            ._is_spotify_window_candidate(
+                title="Spotify Premium",
+                process_path="",
+            )
+        )
+
+    def test_unrelated_process_and_title_are_rejected(
+        self,
+    ):
+        self.assertFalse(
+            WindowsSpotifyUiAutomationBackend
+            ._is_spotify_window_candidate(
+                title="WesGhost - MIGRAINE",
+                process_path=(
+                    r"C:\Program Files\Browser\browser.exe"
+                ),
+            )
+        )
 
 
 class SpotifyDesktopPlaybackBridgeTests(
