@@ -6,6 +6,7 @@ from src.ui.spotify_artwork import SpotifyArtworkLoader
 
 from PyQt6.QtCore import (
     Qt,
+    pyqtSignal,
     pyqtSlot,
 )
 from PyQt6.QtWidgets import (
@@ -89,6 +90,8 @@ SPOTIFY_LIVE_SEARCH_MINIMUM_CHARACTERS = 2
 class SpotifySearchResultRow(
     QFrame
 ):
+    activated = pyqtSignal(object)
+
     def __init__(
         self,
         item: SpotifySearchItem,
@@ -114,6 +117,16 @@ class SpotifySearchResultRow(
         self.artwork_loader = (
             artwork_loader
         )
+
+        self._activatable = (
+            item.item_type
+            is SpotifySearchItemType.TRACK
+        )
+
+        if self._activatable:
+            self.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
 
         self.setObjectName(
             "spotifySearchResultRow"
@@ -241,7 +254,43 @@ class SpotifySearchResultRow(
             ),
         )
 
+        if self._activatable:
+            for child in (
+                self.icon_label,
+                self.name_label,
+                self.subtitle_label,
+                self.type_badge,
+            ):
+                child.setAttribute(
+                    (
+                        Qt.WidgetAttribute
+                        .WA_TransparentForMouseEvents
+                    ),
+                    True,
+                )
+
         self._request_artwork()
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            self._activatable
+            and event.button()
+            is Qt.MouseButton.LeftButton
+        ):
+            self.activated.emit(
+                self.item
+            )
+
+            event.accept()
+
+            return
+
+        super().mouseReleaseEvent(
+            event
+        )
 
     def _request_artwork(
         self,
@@ -374,6 +423,8 @@ class SpotifySearchResultRow(
 class SpotifySearchSection(
     QFrame
 ):
+    item_activated = pyqtSignal(object)
+
     def __init__(
         self,
         item_type: SpotifySearchItemType,
@@ -557,6 +608,10 @@ class SpotifySearchSection(
                 ),
             )
 
+            row.activated.connect(
+                self.item_activated.emit
+            )
+
             self._rows.append(
                 row
             )
@@ -583,6 +638,8 @@ class SpotifySearchSection(
 class SpotifySearchPage(
     QWidget
 ):
+    track_activated = pyqtSignal(object)
+
     def __init__(
         self,
         runtime,
@@ -963,6 +1020,10 @@ class SpotifySearchPage(
                 ),
             )
 
+            section.item_activated.connect(
+                self._handle_item_activated
+            )
+
             self.sections[
                 item_type
             ] = section
@@ -1049,6 +1110,26 @@ class SpotifySearchPage(
             finished_signal.connect(
                 self.handle_search_finished
             )
+
+    def _handle_item_activated(
+        self,
+        item,
+    ) -> None:
+        if not isinstance(
+            item,
+            SpotifySearchItem,
+        ):
+            return
+
+        if (
+            item.item_type
+            is not SpotifySearchItemType.TRACK
+        ):
+            return
+
+        self.track_activated.emit(
+            item
+        )
 
     def _sync_search_controls(
         self,

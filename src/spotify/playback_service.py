@@ -765,10 +765,54 @@ class SpotifyPlaybackService:
         if session_error is not None:
             return session_error
 
+        device_id = None
+
+        try:
+            device_payload = (
+                self._api_client
+                .get_available_devices(
+                    access_token
+                )
+            )
+
+            device_id = (
+                self._usable_device_id(
+                    device_payload
+                )
+            )
+
+        except SpotifyWebApiError as error:
+            error_code = str(
+                getattr(
+                    error,
+                    "error_code",
+                    "",
+                )
+                or ""
+            )
+
+            if (
+                error_code
+                == "reauthorization_required"
+            ):
+                return self._api_error(
+                    error,
+                    refreshed=refreshed,
+                )
+
+            # Device discovery is helpful but not
+            # required. Spotify can still target an
+            # already-active device when no ID is sent.
+            device_id = None
+
+        except Exception:
+            device_id = None
+
         try:
             self._api_client.start_playback(
                 access_token,
                 checked_uri,
+                device_id=device_id,
             )
 
         except SpotifyWebApiError as error:

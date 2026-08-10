@@ -154,6 +154,36 @@ def session(
     )
 
 
+class TrackDeviceApiStub(
+    ApiStub
+):
+    def __init__(
+        self,
+        *,
+        devices=None,
+    ):
+        super().__init__(
+            devices=devices
+        )
+
+        self.track_device_calls = []
+
+    def start_playback(
+        self,
+        access_token,
+        spotify_uri,
+        *,
+        device_id=None,
+    ):
+        self.track_device_calls.append(
+            (
+                access_token,
+                spotify_uri,
+                device_id,
+            )
+        )
+
+
 class SpotifyPlaybackServiceTests(
     unittest.TestCase
 ):
@@ -558,6 +588,145 @@ class SpotifyPlaybackServiceTests(
                 retry_after_seconds=-1,
             )
 
+
+\
+    def test_track_playback_prefers_active_device(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = TrackDeviceApiStub(
+            devices=[
+                {
+                    "id": "desktop",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+                {
+                    "id": "phone",
+                    "type": "Smartphone",
+                    "is_active": True,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_track(
+            TRACK_URI
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.device_calls,
+            [
+                "secret-access-token"
+            ],
+        )
+
+        self.assertEqual(
+            api.track_device_calls,
+            [
+                (
+                    "secret-access-token",
+                    TRACK_URI,
+                    "phone",
+                )
+            ],
+        )
+
+    def test_track_playback_prefers_computer_when_none_active(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = TrackDeviceApiStub(
+            devices=[
+                {
+                    "id": "speaker",
+                    "type": "Speaker",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+                {
+                    "id": "desktop",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_track(
+            TRACK_URI
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.track_device_calls,
+            [
+                (
+                    "secret-access-token",
+                    TRACK_URI,
+                    "desktop",
+                )
+            ],
+        )
+
+    def test_track_playback_without_devices_uses_active_device_fallback(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = TrackDeviceApiStub(
+            devices=[]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_track(
+            TRACK_URI
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.track_device_calls,
+            [
+                (
+                    "secret-access-token",
+                    TRACK_URI,
+                    None,
+                )
+            ],
+        )
 
     def test_playlist_position_playback_prefers_active_device(
         self,

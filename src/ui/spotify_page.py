@@ -17,6 +17,10 @@ from PyQt6.QtWidgets import (
 )
 
 from src.ui.spotify_search import SpotifySearchPage
+from src.spotify.search_models import (
+    SpotifySearchItem,
+    SpotifySearchItemType,
+)
 from src.ui.theme import ThemeManager
 from src.ui.spotify_playlist_detail import (
     SpotifyPlaylistDetail,
@@ -444,6 +448,11 @@ class SpotifyPage(
         self.search_button.clicked.connect(
             self.show_search
         )
+
+        self.search_page.track_activated.connect(
+            self._handle_search_track_activated
+        )
+
         self.playlist_home.playlist_activated.connect(
             self.show_playlist_detail
         )
@@ -459,6 +468,56 @@ class SpotifyPage(
         self.liked_songs_detail.back_requested.connect(
             self.show_home
         )
+
+    def _handle_search_track_activated(
+        self,
+        item,
+    ) -> bool:
+        if not isinstance(
+            item,
+            SpotifySearchItem,
+        ):
+            return False
+
+        if (
+            item.item_type
+            is not SpotifySearchItemType.TRACK
+        ):
+            return False
+
+        spotify_uri = (
+            item.uri.strip()
+            if isinstance(
+                item.uri,
+                str,
+            )
+            else ""
+        )
+
+        expected_uri = (
+            "spotify:track:"
+            + item.spotify_id
+        )
+
+        if spotify_uri != expected_uri:
+            return False
+
+        play_track = getattr(
+            self.playback_runtime,
+            "play_track",
+            None,
+        )
+
+        if not callable(
+            play_track
+        ):
+            return False
+
+        play_track(
+            spotify_uri
+        )
+
+        return True
 
     def _set_section(
         self,
