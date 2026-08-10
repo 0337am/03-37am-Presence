@@ -151,14 +151,41 @@ class SpotifyArtistPageIntegrationTests(
             block,
         )
 
-    def test_search_artist_activation_remains_unwired(
+    def test_search_artist_activation_is_wired(
         self,
     ):
-        text = source()
+        source = (
+            (
+                Path(
+                    __file__
+                )
+                .resolve()
+                .parents[
+                    1
+                ]
+                / "src"
+                / "ui"
+                / "spotify_page.py"
+            )
+            .read_text(
+                encoding="utf-8-sig"
+            )
+        )
 
-        self.assertNotIn(
-            "artist_activated.connect(",
-            text,
+        self.assertIn(
+            (
+                "self.search_page."
+                "artist_activated.connect("
+            ),
+            source,
+        )
+
+        self.assertIn(
+            (
+                "self."
+                "_handle_search_artist_activated"
+            ),
+            source,
         )
 
 

@@ -192,16 +192,16 @@ class SpotifySearchTrackPlaybackTests(
             ],
         )
 
-    def test_artist_row_remains_non_interactive(
+    def test_artist_row_is_interactive(
         self,
     ):
-        album = item(
+        artist = item(
             SpotifySearchItemType.ARTIST,
             "artist-1",
         )
 
         row = SpotifySearchResultRow(
-            album,
+            artist,
             artwork_loader=(
                 FakeArtworkLoader()
             ),
@@ -224,7 +224,9 @@ class SpotifySearchTrackPlaybackTests(
 
         self.assertEqual(
             captured,
-            [],
+            [
+                artist
+            ],
         )
 
     def test_section_forwards_track_activation(

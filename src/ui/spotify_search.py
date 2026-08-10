@@ -124,6 +124,7 @@ class SpotifySearchResultRow(
                 SpotifySearchItemType.TRACK,
                 SpotifySearchItemType.PLAYLIST,
                 SpotifySearchItemType.ALBUM,
+                SpotifySearchItemType.ARTIST,
             }
         )
 
@@ -646,6 +647,10 @@ class SpotifySearchPage(
     playlist_activated = pyqtSignal(object)
     album_activated = pyqtSignal(object)
 
+    artist_activated = pyqtSignal(
+        object
+    )
+
     def __init__(
         self,
         runtime,
@@ -1134,7 +1139,6 @@ class SpotifySearchPage(
             self.track_activated.emit(
                 item
             )
-
             return
 
         if (
@@ -1144,7 +1148,6 @@ class SpotifySearchPage(
             self.playlist_activated.emit(
                 item
             )
-
             return
 
         if (
@@ -1152,6 +1155,15 @@ class SpotifySearchPage(
             is SpotifySearchItemType.ALBUM
         ):
             self.album_activated.emit(
+                item
+            )
+            return
+
+        if (
+            item.item_type
+            is SpotifySearchItemType.ARTIST
+        ):
+            self.artist_activated.emit(
                 item
             )
 

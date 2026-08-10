@@ -513,6 +513,10 @@ class SpotifyPage(
             self._handle_search_album_activated
         )
 
+        self.search_page.artist_activated.connect(
+            self._handle_search_artist_activated
+        )
+
         self.playlist_home.playlist_activated.connect(
             self.show_playlist_detail
         )
@@ -550,6 +554,55 @@ class SpotifyPage(
             artist_detail.back_requested.connect(
                 self._show_artist_detail_return_section
             )
+
+    def _handle_search_artist_activated(
+        self,
+        item,
+    ) -> bool:
+        if not isinstance(
+            item,
+            SpotifySearchItem,
+        ):
+            return False
+
+        if (
+            item.item_type
+            is not SpotifySearchItemType.ARTIST
+        ):
+            return False
+
+        if not hasattr(
+            self,
+            "artist_detail",
+        ):
+            return False
+
+        artist_uri = (
+            item.uri.strip()
+            if isinstance(
+                item.uri,
+                str,
+            )
+            else ""
+        )
+
+        expected_uri = (
+            "spotify:artist:"
+            + item.spotify_id
+        )
+
+        if artist_uri != expected_uri:
+            return False
+
+        return bool(
+            self.show_artist_detail(
+                item.spotify_id,
+                seed_name=item.name,
+                seed_image_url=(
+                    item.image_url
+                ),
+            )
+        )
 
     def _handle_search_album_activated(
         self,

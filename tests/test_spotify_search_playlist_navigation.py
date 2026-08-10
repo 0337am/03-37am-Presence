@@ -232,7 +232,7 @@ class SpotifySearchPlaylistNavigationTests(
         )
 
 
-    def test_artist_row_remains_non_interactive(
+    def test_artist_row_is_interactive(
         self,
     ):
         artist = search_item(
@@ -264,7 +264,9 @@ class SpotifySearchPlaylistNavigationTests(
 
         self.assertEqual(
             captured,
-            [],
+            [
+                artist
+            ],
         )
 
     def test_search_page_emits_playlist_activation(
