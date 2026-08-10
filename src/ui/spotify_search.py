@@ -123,6 +123,7 @@ class SpotifySearchResultRow(
             in {
                 SpotifySearchItemType.TRACK,
                 SpotifySearchItemType.PLAYLIST,
+                SpotifySearchItemType.ALBUM,
             }
         )
 
@@ -643,6 +644,7 @@ class SpotifySearchPage(
 ):
     track_activated = pyqtSignal(object)
     playlist_activated = pyqtSignal(object)
+    album_activated = pyqtSignal(object)
 
     def __init__(
         self,
@@ -1142,6 +1144,17 @@ class SpotifySearchPage(
             self.playlist_activated.emit(
                 item
             )
+
+            return
+
+        if (
+            item.item_type
+            is SpotifySearchItemType.ALBUM
+        ):
+            self.album_activated.emit(
+                item
+            )
+
 
     def _sync_search_controls(
         self,

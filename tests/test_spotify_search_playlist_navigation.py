@@ -231,40 +231,6 @@ class SpotifySearchPlaylistNavigationTests(
             ],
         )
 
-    def test_album_row_remains_non_interactive(
-        self,
-    ):
-        album = search_item(
-            SpotifySearchItemType.ALBUM,
-            "album-1",
-        )
-
-        row = SpotifySearchResultRow(
-            album,
-            artwork_loader=(
-                FakeArtworkLoader()
-            ),
-        )
-
-        self.addCleanup(
-            row.deleteLater
-        )
-
-        captured = []
-
-        row.activated.connect(
-            captured.append
-        )
-
-        QTest.mouseClick(
-            row,
-            Qt.MouseButton.LeftButton,
-        )
-
-        self.assertEqual(
-            captured,
-            [],
-        )
 
     def test_artist_row_remains_non_interactive(
         self,

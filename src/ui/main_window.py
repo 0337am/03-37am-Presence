@@ -58,6 +58,9 @@ from src.spotify.playlist_service import (
 from src.spotify.liked_songs_service import (
     SpotifyLikedSongsService,
 )
+from src.spotify.album_service import (
+    SpotifyAlbumService,
+)
 from src.spotify.resolved_playlist_service import (
     SpotifyResolvedPlaylistService,
 )
@@ -75,6 +78,9 @@ from src.spotify.qt_playlist_runtime import (
 )
 from src.spotify.qt_liked_songs_runtime import (
     SpotifyQtLikedSongsRuntime,
+)
+from src.spotify.qt_album_runtime import (
+    SpotifyQtAlbumRuntime,
 )
 from src.spotify.qt_search_runtime import (
     SpotifyQtSearchRuntime,
@@ -1026,6 +1032,12 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.spotify_album_service = (
+            SpotifyAlbumService(
+                self.spotify_session_manager
+            )
+        )
+
         self.spotify_resolved_playlist_service = (
             SpotifyResolvedPlaylistService(
                 self.spotify_playlist_service,
@@ -1047,10 +1059,24 @@ class MainWindow(QMainWindow):
             self.spotify_liked_songs_service
         )
 
+        spotify_album_service = (
+            self.spotify_album_service
+        )
+
         self.spotify_liked_songs_runtime = (
             SpotifyQtLikedSongsRuntime(
                 (
                     lambda service=spotify_liked_songs_service:
+                    service
+                ),
+                parent=self,
+            )
+        )
+
+        self.spotify_album_runtime = (
+            SpotifyQtAlbumRuntime(
+                (
+                    lambda service=spotify_album_service:
                     service
                 ),
                 parent=self,
@@ -1089,6 +1115,9 @@ class MainWindow(QMainWindow):
             ),
             playlist_runtime=(
                 self.spotify_playlist_runtime
+            ),
+            album_runtime=(
+                self.spotify_album_runtime
             ),
             playback_runtime=(
                 self.spotify_playback_runtime
@@ -2261,6 +2290,7 @@ class MainWindow(QMainWindow):
 
         for spotify_runtime_name in (
             "spotify_playback_runtime",
+            "spotify_album_runtime",
             "spotify_playlist_runtime",
             "spotify_liked_songs_runtime",
             "spotify_search_runtime",

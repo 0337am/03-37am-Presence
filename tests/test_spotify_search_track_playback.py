@@ -192,12 +192,12 @@ class SpotifySearchTrackPlaybackTests(
             ],
         )
 
-    def test_non_track_row_remains_non_interactive(
+    def test_artist_row_remains_non_interactive(
         self,
     ):
         album = item(
-            SpotifySearchItemType.ALBUM,
-            "album-1",
+            SpotifySearchItemType.ARTIST,
+            "artist-1",
         )
 
         row = SpotifySearchResultRow(

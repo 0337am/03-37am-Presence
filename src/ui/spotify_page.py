@@ -31,6 +31,9 @@ from src.ui.spotify_playlist_detail import (
 from src.ui.spotify_liked_songs_detail import (
     SpotifyLikedSongsDetail,
 )
+from src.ui.spotify_album_detail import (
+    SpotifyAlbumDetail,
+)
 
 
 SPOTIFY_HOME_INDEX = 0
@@ -55,6 +58,7 @@ def _theme_value(
 
 SPOTIFY_PLAYLIST_DETAIL_INDEX = 2
 SPOTIFY_LIKED_SONGS_INDEX = 3
+SPOTIFY_ALBUM_DETAIL_INDEX = 4
 class SpotifyPage(
     QWidget
 ):
@@ -63,6 +67,7 @@ class SpotifyPage(
         *,
         search_runtime,
         playlist_runtime,
+        album_runtime=None,
         playback_runtime=None,
         liked_songs_runtime=None,
         theme_manager=None,
@@ -112,6 +117,10 @@ class SpotifyPage(
             playlist_runtime
         )
 
+        self.album_runtime = (
+            album_runtime
+        )
+
         self.playback_runtime = (
             playback_runtime
         )
@@ -134,6 +143,10 @@ class SpotifyPage(
             SPOTIFY_HOME_INDEX
         )
 
+        self._album_detail_return_index = (
+            SPOTIFY_SEARCH_INDEX
+        )
+
         self.setObjectName(
             "spotifyRoot"
         )
@@ -143,6 +156,10 @@ class SpotifyPage(
         self._install_playlist_home()
         self._install_playlist_detail()
         self._install_liked_songs_detail()
+
+        if self.album_runtime is not None:
+            self._install_album_detail()
+
         self.connect_signals()
 
         self.theme_manager.theme_changed.connect(
@@ -159,6 +176,12 @@ class SpotifyPage(
     def current_section(
         self,
     ) -> str:
+        if (
+            self.content_stack.currentIndex()
+            == SPOTIFY_ALBUM_DETAIL_INDEX
+        ):
+            return "album_detail"
+
         if (
             self.content_stack.currentIndex()
             == SPOTIFY_LIKED_SONGS_INDEX
@@ -464,6 +487,10 @@ class SpotifyPage(
             self._handle_search_playlist_activated
         )
 
+        self.search_page.album_activated.connect(
+            self._handle_search_album_activated
+        )
+
         self.playlist_home.playlist_activated.connect(
             self.show_playlist_detail
         )
@@ -478,6 +505,62 @@ class SpotifyPage(
 
         self.liked_songs_detail.back_requested.connect(
             self.show_home
+        )
+
+        album_detail = getattr(
+            self,
+            "album_detail",
+            None,
+        )
+
+        if album_detail is not None:
+            album_detail.back_requested.connect(
+                self._show_album_detail_return_section
+            )
+
+    def _handle_search_album_activated(
+        self,
+        item,
+    ) -> bool:
+        if not isinstance(
+            item,
+            SpotifySearchItem,
+        ):
+            return False
+
+        if (
+            item.item_type
+            is not SpotifySearchItemType.ALBUM
+        ):
+            return False
+
+        if not hasattr(
+            self,
+            "album_detail",
+        ):
+            return False
+
+        album_uri = (
+            item.uri.strip()
+            if isinstance(
+                item.uri,
+                str,
+            )
+            else ""
+        )
+
+        expected_uri = (
+            "spotify:album:"
+            + item.spotify_id
+        )
+
+        if album_uri != expected_uri:
+            return False
+
+        return bool(
+            self.show_album_detail(
+                item
+            )
         )
 
     def _handle_search_playlist_activated(
@@ -615,6 +698,7 @@ class SpotifyPage(
         if index in (
             SPOTIFY_PLAYLIST_DETAIL_INDEX,
             SPOTIFY_LIKED_SONGS_INDEX,
+            SPOTIFY_ALBUM_DETAIL_INDEX,
         ):
             self.content_stack.setCurrentIndex(
                 index
@@ -987,6 +1071,88 @@ class SpotifyPage(
                     "unexpected stack index."
                 )
             )
+
+    def _install_album_detail(
+        self,
+    ) -> None:
+        self.album_detail = (
+            SpotifyAlbumDetail(
+                self.album_runtime,
+                theme_manager=(
+                    self.theme_manager
+                ),
+                parent=(
+                    self.content_stack
+                ),
+            )
+        )
+
+        index = self.content_stack.addWidget(
+            self.album_detail
+        )
+
+        if (
+            index
+            != SPOTIFY_ALBUM_DETAIL_INDEX
+        ):
+            raise RuntimeError(
+                (
+                    "Spotify album detail page "
+                    "was inserted at an unexpected "
+                    "stack index."
+                )
+            )
+
+    def _show_album_detail_return_section(
+        self,
+    ) -> None:
+        if (
+            self._album_detail_return_index
+            == SPOTIFY_SEARCH_INDEX
+        ):
+            self.show_search()
+
+            return
+
+        self.show_home()
+
+    def show_album_detail(
+        self,
+        item,
+    ) -> bool:
+        album_detail = getattr(
+            self,
+            "album_detail",
+            None,
+        )
+
+        if album_detail is None:
+            return False
+
+        current_index = (
+            self.content_stack.currentIndex()
+        )
+
+        if current_index in {
+            SPOTIFY_HOME_INDEX,
+            SPOTIFY_SEARCH_INDEX,
+        }:
+            self._album_detail_return_index = (
+                current_index
+            )
+
+        if not album_detail.set_search_item(
+            item
+        ):
+            return False
+
+        self._set_section(
+            SPOTIFY_ALBUM_DETAIL_INDEX
+        )
+
+        return bool(
+            album_detail.load()
+        )
 
     def _show_playlist_detail_return_section(
         self,
