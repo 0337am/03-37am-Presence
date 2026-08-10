@@ -132,9 +132,11 @@ class ReleaseBuildScriptTests(unittest.TestCase):
             'app_version = "2.6.0"',
             'app_version = "2.7.0"',
             'app_version = "2.8.0"',
+            'app_version = "2.9.0"',
             "library & insights update",
             "updates & distribution",
             "first-run polish",
+            "spotify integration",
             "v2.6-final-release-artifacts",
         )
 

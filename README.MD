@@ -2,18 +2,18 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.8.0 highlights
+## v2.9.0 highlights
 
-- Use optional global media controls for play/pause, previous, next, shuffle, repeat, and seeking.
-- Configure global media hotkeys from Settings, with hotkeys disabled by default until explicitly enabled.
-- Back up and restore global media-hotkey preferences with the rest of the supported portable settings.
-- Guide genuinely new installations through a compact first-launch Welcome experience.
-- Jump directly from Welcome to Media Sources, Discord Presence, or Global Media Controls.
-- Leave Welcome incomplete with **Not now** or the window close button and resume it on a later launch.
-- Keep existing installations out of onboarding through silent migration to completed first-run state.
-- Honor `--minimized` for completed installations while still keeping pending first-run onboarding visible.
-- Keep first-run state local and separate from portable settings backups.
-- No automatic enabling of hotkeys, Windows startup, browser media sources, or Spotify OAuth.
+- Connect a Spotify account from the app through the optional Spotify integration.
+- Browse Spotify playlists and open full Playlist Detail views without driving the Spotify desktop interface.
+- Browse Liked Songs with pagination, playback, and current-track highlighting.
+- Use Spotify Search for tracks, albums, artists, and playlists, including **Load more results** pagination.
+- Open Album Detail pages with album metadata, track playback, album-context playback, and current-playing state.
+- Open Artist Detail pages, browse paginated releases, and move directly from an artist release into Album Detail.
+- Start catalogue tracks and supported local Spotify playlist entries through native Spotify playback control without Spotify UI automation.
+- Preserve keyboard, mouse, and foreground focus when starting playback from 03:37am Presence.
+- Optionally scan local music at startup to improve matching for local-file entries found in Spotify playlists.
+- Keep Spotify authentication opt-in, with Spotify credentials excluded from portable settings backups.
 
 ## Core features
 

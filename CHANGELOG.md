@@ -1,5 +1,43 @@
 # Changelog
 
+## v2.9.0 - Spotify Integration
+
+Released 10 August 2026.
+
+### Added
+
+- Added an opt-in Spotify account connection backed by OAuth session handling and the app's credential-storage boundary.
+- Added Spotify playlist browsing with pagination, playlist detail views, catalogue-track playback, and support for local Spotify playlist entries resolved by their playlist position.
+- Added a dedicated Liked Songs experience with pagination, native playback, and current-track highlighting.
+- Added Spotify Search across tracks, albums, artists, and playlists with live search, artwork, result navigation, playback, and Load more results pagination.
+- Added Spotify Album Detail with album metadata, track listings, current-playing state, individual-track playback, and album-context playback.
+- Added Spotify Artist Detail with artist metadata, paginated releases, and direct navigation from artist releases into Album Detail.
+- Added local-music indexing and an optional startup scan to improve resolution of Spotify local-file playlist entries.
+
+### Improved
+
+- Spotify playback now uses the Spotify Web API and existing Spotify desktop session instead of foreground-driving UI automation.
+- Search, Playlist Detail, Liked Songs, and Album Detail use Windows media playback state as the source of truth for current-track presentation instead of assuming the most recently clicked row is playing.
+- Playlist playback preserves Spotify playlist position where required so local-file entries can be started without opening or controlling the Spotify user interface.
+- Album playback can preserve album context while starting the selected catalogue track.
+- Search results can now be expanded incrementally without replacing already-visible rows, and failed pagination requests preserve the existing result set.
+- Artwork cache recovery can repair stale fallback artwork when a better current image becomes available.
+
+### Privacy and playback safety
+
+- Spotify authentication remains optional and is never enabled automatically by onboarding or an upgrade.
+- Spotify playback does not use Spotify UI automation, `QMediaPlayer`, or foreground-window activation as a playback fallback.
+- Starting Spotify playback from 03:37am Presence is designed not to steal keyboard, mouse, or foreground focus from the user's current application.
+- Spotify token and credential data is not included in portable settings backups.
+- Local music scanning and indexing remain local to the device and do not upload the user's local music library.
+
+### Upgrade notes
+
+- Existing v2.8 settings, Dashboard layouts, Layout Profiles, Link Cards, Launcher Cards, Presence Presets, Library history, first-run state, media-source preferences, and global media-hotkey preferences continue to load normally.
+- Spotify connection remains opt-in. Existing users can continue using the app without connecting a Spotify account.
+- Local-music startup scanning is configurable and does not require changing existing media-source preferences.
+- Playlist artwork enrichment beyond the current Spotify integration is deferred to a later major UI overhaul.
+
 ## v2.8.0 - First-Run Polish
 
 Released 8 August 2026.

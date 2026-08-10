@@ -1,5 +1,5 @@
-APP_VERSION = "2.8.0"
-RELEASE_NAME = "First-Run Polish"
+APP_VERSION = "2.9.0"
+RELEASE_NAME = "Spotify Integration"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )
