@@ -99,6 +99,8 @@ def format_album_duration(
 class SpotifyAlbumTrackRow(
     QFrame
 ):
+    activated = pyqtSignal(object)
+
     def __init__(
         self,
         track: SpotifyAlbumTrack,
@@ -122,6 +124,15 @@ class SpotifyAlbumTrackRow(
         )
 
         self.track = track
+
+        if getattr(
+            track,
+            "is_playable",
+            None,
+        ) is not False:
+            self.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
 
         self.setObjectName(
             "spotifyAlbumTrackRow"
@@ -255,6 +266,64 @@ class SpotifyAlbumTrackRow(
             self.duration_label
         )
 
+    def activate(
+        self,
+    ) -> bool:
+        if getattr(
+            self.track,
+            "is_playable",
+            None,
+        ) is False:
+            return False
+
+        spotify_id = str(
+            getattr(
+                self.track,
+                "spotify_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        spotify_uri = str(
+            getattr(
+                self.track,
+                "uri",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            not spotify_id
+            or spotify_uri
+            != "spotify:track:" + spotify_id
+        ):
+            return False
+
+        self.activated.emit(
+            self.track
+        )
+
+        return True
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+            and self.rect().contains(
+                event.position().toPoint()
+            )
+        ):
+            self.activate()
+
+        super().mouseReleaseEvent(
+            event
+        )
+
 
 class SpotifyAlbumDetail(
     QWidget
@@ -265,12 +334,34 @@ class SpotifyAlbumDetail(
         self,
         album_runtime,
         *,
+        playback_runtime=None,
         artwork_loader=None,
         theme_manager=None,
         parent=None,
     ) -> None:
         super().__init__(
             parent
+        )
+
+        if playback_runtime is not None:
+            play_track = getattr(
+                playback_runtime,
+                "play_track",
+                None,
+            )
+
+            if not callable(
+                play_track
+            ):
+                raise TypeError(
+                    (
+                        "playback_runtime must provide "
+                        "a callable play_track method"
+                    )
+                )
+
+        self.playback_runtime = (
+            playback_runtime
         )
 
         load_album = getattr(
@@ -1177,6 +1268,69 @@ class SpotifyAlbumDetail(
             self._loaded_count
         )
 
+    def _handle_track_activated(
+        self,
+        track,
+    ) -> bool:
+        if not isinstance(
+            track,
+            SpotifyAlbumTrack,
+        ):
+            return False
+
+        if getattr(
+            track,
+            "is_playable",
+            None,
+        ) is False:
+            return False
+
+        spotify_id = str(
+            getattr(
+                track,
+                "spotify_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        spotify_uri = str(
+            getattr(
+                track,
+                "uri",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            not spotify_id
+            or spotify_uri
+            != "spotify:track:" + spotify_id
+        ):
+            return False
+
+        play_track = getattr(
+            self.playback_runtime,
+            "play_track",
+            None,
+        )
+
+        if not callable(
+            play_track
+        ):
+            return False
+
+        try:
+            play_track(
+                spotify_uri
+            )
+
+        except Exception:
+            return False
+
+        return True
+
     def _append_track(
         self,
         track,
@@ -1200,6 +1354,10 @@ class SpotifyAlbumDetail(
             parent=(
                 self.track_container
             ),
+        )
+
+        row.activated.connect(
+            self._handle_track_activated
         )
 
         insert_index = max(
@@ -1435,6 +1593,10 @@ class SpotifyAlbumDetail(
                 background: {card};
                 border: 1px solid {border};
                 border-radius: 9px;
+            }}
+
+            QFrame#spotifyAlbumTrackRow:hover {{
+                border-color: {accent};
             }}
 
             QLabel#spotifyAlbumTrackNumber,

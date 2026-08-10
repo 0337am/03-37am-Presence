@@ -1078,6 +1078,9 @@ class SpotifyPage(
         self.album_detail = (
             SpotifyAlbumDetail(
                 self.album_runtime,
+                playback_runtime=(
+                    self.playback_runtime
+                ),
                 theme_manager=(
                     self.theme_manager
                 ),
