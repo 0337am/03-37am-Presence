@@ -675,6 +675,34 @@ class SpotifyPlaybackService:
         return None
 
     @staticmethod
+    def _album_uri(
+        album_id,
+    ) -> str:
+        if not isinstance(
+            album_id,
+            str,
+        ):
+            raise TypeError(
+                "album_id must be a string"
+            )
+
+        checked = album_id.strip()
+
+        if (
+            not checked
+            or not checked.isascii()
+            or not checked.isalnum()
+        ):
+            raise ValueError(
+                "album_id is invalid"
+            )
+
+        return (
+            "spotify:album:"
+            + checked
+        )
+
+    @staticmethod
     def _playlist_uri(
         playlist_id,
     ) -> str:
@@ -982,6 +1010,133 @@ class SpotifyPlaybackService:
             ),
             message=(
                 "Spotify playlist playback "
+                "started."
+            ),
+            refreshed=refreshed,
+        )
+
+    def play_album_track(
+        self,
+        album_id,
+        spotify_uri,
+    ) -> SpotifyPlaybackServiceResult:
+        try:
+            album_uri = (
+                self._album_uri(
+                    album_id
+                )
+            )
+
+            checked_uri = (
+                _validate_catalogue_track_uri(
+                    spotify_uri
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return self._error(
+                "invalid_album_playback",
+                (
+                    "This item could not be "
+                    "started from the album."
+                ),
+            )
+
+        (
+            access_token,
+            refreshed,
+            session_error,
+        ) = self._resolve_session()
+
+        if session_error is not None:
+            return session_error
+
+        device_id = None
+
+        try:
+            device_payload = (
+                self._api_client
+                .get_available_devices(
+                    access_token
+                )
+            )
+
+            device_id = (
+                self._usable_device_id(
+                    device_payload
+                )
+            )
+
+        except SpotifyWebApiError as error:
+            error_code = str(
+                getattr(
+                    error,
+                    "error_code",
+                    "",
+                )
+                or ""
+            )
+
+            if (
+                error_code
+                == "reauthorization_required"
+            ):
+                return self._api_error(
+                    error,
+                    refreshed=refreshed,
+                )
+
+            device_id = None
+
+        except Exception:
+            device_id = None
+
+        try:
+            self._api_client.start_album_playback(
+                access_token,
+                album_uri,
+                checked_uri,
+                device_id=device_id,
+            )
+
+        except SpotifyWebApiError as error:
+            return self._api_error(
+                error,
+                refreshed=refreshed,
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return self._error(
+                "invalid_playback_request",
+                (
+                    "Spotify playback could not "
+                    "use this album item."
+                ),
+                refreshed=refreshed,
+            )
+
+        except Exception:
+            return self._error(
+                "playback_failed",
+                (
+                    "Spotify playback could not "
+                    "be started."
+                ),
+                refreshed=refreshed,
+            )
+
+        return SpotifyPlaybackServiceResult(
+            status=(
+                SpotifyPlaybackServiceStatus.READY
+            ),
+            message=(
+                "Spotify album playback "
                 "started."
             ),
             refreshed=refreshed,

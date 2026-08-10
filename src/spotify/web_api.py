@@ -1220,6 +1220,44 @@ def _validate_spotify_track_uri(
     return spotify_uri
 
 
+def _validate_spotify_album_uri(
+    spotify_uri: str,
+) -> str:
+    if not isinstance(
+        spotify_uri,
+        str,
+    ):
+        raise TypeError(
+            "Spotify album URI must be a string."
+        )
+
+    checked = spotify_uri.strip()
+    prefix = "spotify:album:"
+
+    if (
+        not checked.startswith(prefix)
+        or checked != spotify_uri
+    ):
+        raise ValueError(
+            "Spotify album URI is invalid."
+        )
+
+    album_id = checked[
+        len(prefix):
+    ]
+
+    if (
+        not album_id
+        or not album_id.isascii()
+        or not album_id.isalnum()
+    ):
+        raise ValueError(
+            "Spotify album URI is invalid."
+        )
+
+    return checked
+
+
 def _validate_spotify_playlist_uri(
     spotify_uri: str,
 ) -> str:
@@ -1749,6 +1787,53 @@ class SpotifyWebApiClient:
                 "uris": [
                     uri,
                 ],
+            },
+        )
+
+    def start_album_playback(
+        self,
+        access_token: str,
+        album_uri: str,
+        spotify_uri: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        context_uri = (
+            _validate_spotify_album_uri(
+                album_uri
+            )
+        )
+
+        track_uri = (
+            _validate_spotify_track_uri(
+                spotify_uri
+            )
+        )
+
+        query = None
+
+        if device_id is not None:
+            query = {
+                "device_id": (
+                    _validate_spotify_device_id(
+                        device_id
+                    )
+                ),
+            }
+
+        url = _build_spotify_api_url(
+            START_PLAYBACK_PATH,
+            query,
+        )
+
+        self._put_json_no_content(
+            url,
+            access_token,
+            {
+                "context_uri": context_uri,
+                "offset": {
+                    "uri": track_uri,
+                },
             },
         )
 

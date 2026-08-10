@@ -1623,21 +1623,48 @@ class SpotifyAlbumDetail(
         ):
             return False
 
-        play_track = getattr(
+        album_id = str(
+            getattr(
+                self,
+                "_album_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        play_album_track = getattr(
             self.playback_runtime,
-            "play_track",
+            "play_album_track",
             None,
         )
 
-        if not callable(
-            play_track
-        ):
-            return False
-
         try:
-            play_track(
-                spotify_uri
-            )
+            if (
+                album_id
+                and callable(
+                    play_album_track
+                )
+            ):
+                play_album_track(
+                    album_id,
+                    spotify_uri,
+                )
+
+            else:
+                play_track = getattr(
+                    self.playback_runtime,
+                    "play_track",
+                    None,
+                )
+
+                if not callable(
+                    play_track
+                ):
+                    return False
+
+                play_track(
+                    spotify_uri
+                )
 
         except Exception:
             return False

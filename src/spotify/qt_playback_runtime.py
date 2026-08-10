@@ -109,6 +109,7 @@ class _SpotifyPlaybackWorker(
         service_factory: Callable,
         spotify_uri: str,
         *,
+        album_id: str | None = None,
         playlist_id: str | None = None,
         playlist_position: int | None = None,
     ) -> None:
@@ -120,6 +121,10 @@ class _SpotifyPlaybackWorker(
 
         self._spotify_uri = (
             spotify_uri
+        )
+
+        self._album_id = (
+            album_id
         )
 
         self._playlist_id = (
@@ -165,6 +170,11 @@ class _SpotifyPlaybackWorker(
                     "play_playlist_position"
                 )
 
+            elif self._album_id is not None:
+                method_name = (
+                    "play_album_track"
+                )
+
             elif self._playlist_id is not None:
                 method_name = (
                     "play_playlist_track"
@@ -198,6 +208,12 @@ class _SpotifyPlaybackWorker(
                     result = play_method(
                         self._playlist_id,
                         self._playlist_position,
+                    )
+
+                elif self._album_id is not None:
+                    result = play_method(
+                        self._album_id,
+                        self._spotify_uri,
                     )
 
                 elif self._playlist_id is not None:
@@ -431,6 +447,37 @@ class SpotifyQtPlaybackRuntime(
             ),
         )
 
+    def play_album_track(
+        self,
+        album_id,
+        spotify_uri,
+    ) -> None:
+        if not isinstance(
+            album_id,
+            str,
+        ):
+            raise TypeError(
+                "album_id must be a string"
+            )
+
+        checked_album_id = (
+            album_id.strip()
+        )
+
+        if (
+            not checked_album_id
+            or not checked_album_id.isascii()
+            or not checked_album_id.isalnum()
+        ):
+            raise ValueError(
+                "album_id is invalid"
+            )
+
+        self._start_playback(
+            spotify_uri,
+            album_id=checked_album_id,
+        )
+
     def play_track(
         self,
         spotify_uri,
@@ -443,6 +490,7 @@ class SpotifyQtPlaybackRuntime(
         self,
         spotify_uri,
         *,
+        album_id: str | None = None,
         playlist_id: str | None = None,
         playlist_position: int | None = None,
     ) -> None:
@@ -487,6 +535,7 @@ class SpotifyQtPlaybackRuntime(
         worker = _SpotifyPlaybackWorker(
             self._service_factory,
             checked_uri,
+            album_id=album_id,
             playlist_id=playlist_id,
             playlist_position=(
                 playlist_position
