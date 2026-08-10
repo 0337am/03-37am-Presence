@@ -83,27 +83,18 @@ class SpotifyArtistProductionWiringTests(
             text,
         )
 
-    def test_artist_runtime_is_not_passed_to_spotify_page_yet(
+    def test_spotify_page_receives_artist_runtime(
         self,
     ):
         text = source()
 
-        start = text.index(
-            "self.spotify_page = SpotifyPage("
-        )
-
-        end = text.index(
-            "\n        )",
-            start,
-        )
-
-        block = text[
-            start:end
-        ]
-
-        self.assertNotIn(
-            "artist_runtime=",
-            block,
+        self.assertIn(
+            (
+                "artist_runtime=(\n"
+                "                self.spotify_artist_runtime\n"
+                "            ),"
+            ),
+            text,
         )
 
     def test_shutdown_includes_artist_runtime(

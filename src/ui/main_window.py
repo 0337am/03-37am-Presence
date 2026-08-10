@@ -1145,6 +1145,9 @@ class MainWindow(QMainWindow):
             album_runtime=(
                 self.spotify_album_runtime
             ),
+            artist_runtime=(
+                self.spotify_artist_runtime
+            ),
             playback_runtime=(
                 self.spotify_playback_runtime
             ),

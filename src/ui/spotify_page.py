@@ -34,6 +34,9 @@ from src.ui.spotify_liked_songs_detail import (
 from src.ui.spotify_album_detail import (
     SpotifyAlbumDetail,
 )
+from src.ui.spotify_artist_detail import (
+    SpotifyArtistDetail,
+)
 
 
 SPOTIFY_HOME_INDEX = 0
@@ -59,6 +62,7 @@ def _theme_value(
 SPOTIFY_PLAYLIST_DETAIL_INDEX = 2
 SPOTIFY_LIKED_SONGS_INDEX = 3
 SPOTIFY_ALBUM_DETAIL_INDEX = 4
+SPOTIFY_ARTIST_DETAIL_INDEX = 5
 class SpotifyPage(
     QWidget
 ):
@@ -68,6 +72,7 @@ class SpotifyPage(
         search_runtime,
         playlist_runtime,
         album_runtime=None,
+        artist_runtime=None,
         playback_runtime=None,
         liked_songs_runtime=None,
         theme_manager=None,
@@ -121,6 +126,10 @@ class SpotifyPage(
             album_runtime
         )
 
+        self.artist_runtime = (
+            artist_runtime
+        )
+
         self.playback_runtime = (
             playback_runtime
         )
@@ -147,6 +156,10 @@ class SpotifyPage(
             SPOTIFY_SEARCH_INDEX
         )
 
+        self._artist_detail_return_index = (
+            SPOTIFY_HOME_INDEX
+        )
+
         self.setObjectName(
             "spotifyRoot"
         )
@@ -159,6 +172,9 @@ class SpotifyPage(
 
         if self.album_runtime is not None:
             self._install_album_detail()
+
+        if self.artist_runtime is not None:
+            self._install_artist_detail()
 
         self.connect_signals()
 
@@ -176,6 +192,12 @@ class SpotifyPage(
     def current_section(
         self,
     ) -> str:
+        if (
+            self.content_stack.currentIndex()
+            == SPOTIFY_ARTIST_DETAIL_INDEX
+        ):
+            return "artist_detail"
+
         if (
             self.content_stack.currentIndex()
             == SPOTIFY_ALBUM_DETAIL_INDEX
@@ -518,6 +540,17 @@ class SpotifyPage(
                 self._show_album_detail_return_section
             )
 
+        artist_detail = getattr(
+            self,
+            "artist_detail",
+            None,
+        )
+
+        if artist_detail is not None:
+            artist_detail.back_requested.connect(
+                self._show_artist_detail_return_section
+            )
+
     def _handle_search_album_activated(
         self,
         item,
@@ -699,6 +732,7 @@ class SpotifyPage(
             SPOTIFY_PLAYLIST_DETAIL_INDEX,
             SPOTIFY_LIKED_SONGS_INDEX,
             SPOTIFY_ALBUM_DETAIL_INDEX,
+            SPOTIFY_ARTIST_DETAIL_INDEX,
         ):
             self.content_stack.setCurrentIndex(
                 index
@@ -1107,6 +1141,38 @@ class SpotifyPage(
                 )
             )
 
+    def _install_artist_detail(
+        self,
+    ) -> None:
+        self.artist_detail = (
+            SpotifyArtistDetail(
+                self.artist_runtime,
+                theme_manager=(
+                    self.theme_manager
+                ),
+                parent=(
+                    self.content_stack
+                ),
+            )
+        )
+
+        index = self.content_stack.addWidget(
+            self.artist_detail
+        )
+
+        if (
+            index
+            != SPOTIFY_ARTIST_DETAIL_INDEX
+        ):
+            raise RuntimeError(
+                (
+                    "Spotify artist detail page "
+                    "was inserted at an unexpected "
+                    "stack index."
+                )
+            )
+
+
     def _show_album_detail_return_section(
         self,
     ) -> None:
@@ -1156,6 +1222,75 @@ class SpotifyPage(
 
         return bool(
             album_detail.load()
+        )
+
+    def _show_artist_detail_return_section(
+        self,
+    ) -> None:
+        if (
+            self._artist_detail_return_index
+            == SPOTIFY_SEARCH_INDEX
+        ):
+            self.show_search()
+
+            return
+
+        self.show_home()
+
+    def show_artist_detail(
+        self,
+        artist_id,
+        *,
+        seed_name: str = "",
+        seed_image_url: str = "",
+    ) -> bool:
+        artist_detail = getattr(
+            self,
+            "artist_detail",
+            None,
+        )
+
+        if artist_detail is None:
+            return False
+
+        current_index = (
+            self.content_stack.currentIndex()
+        )
+
+        if current_index in {
+            SPOTIFY_HOME_INDEX,
+            SPOTIFY_SEARCH_INDEX,
+        }:
+            self._artist_detail_return_index = (
+                current_index
+            )
+
+        try:
+            accepted = (
+                artist_detail.set_artist_id(
+                    artist_id,
+                    seed_name=seed_name,
+                    seed_image_url=(
+                        seed_image_url
+                    ),
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        if not accepted:
+            return False
+
+        self._set_section(
+            SPOTIFY_ARTIST_DETAIL_INDEX
+        )
+
+        return bool(
+            artist_detail.load()
         )
 
     def _show_playlist_detail_return_section(
