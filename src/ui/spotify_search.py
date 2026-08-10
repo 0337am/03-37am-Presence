@@ -85,6 +85,7 @@ def _theme_value(
 
 SPOTIFY_LIVE_SEARCH_DEBOUNCE_MS = 350
 SPOTIFY_LIVE_SEARCH_MINIMUM_CHARACTERS = 2
+SPOTIFY_SEARCH_PAGE_LIMIT = 5
 
 
 class SpotifySearchResultRow(
@@ -578,6 +579,14 @@ class SpotifySearchSection(
     ) -> None:
         self.clear_results()
 
+        self.append_items(
+            items
+        )
+
+    def append_items(
+        self,
+        items,
+    ) -> None:
         checked_items = tuple(
             items
         )
@@ -639,6 +648,14 @@ class SpotifySearchSection(
             )
         )
 
+    @property
+    def item_count(
+        self,
+    ) -> int:
+        return len(
+            self._rows
+        )
+
 
 class SpotifySearchPage(
     QWidget
@@ -696,8 +713,11 @@ class SpotifySearchPage(
         )
 
         self._last_results = None
+        self._next_search_offset = None
 
         self._active_search_query = ""
+        self._active_search_offset = 0
+        self._active_search_append = False
         self._pending_search_query = None
         self._last_submitted_query = ""
 
@@ -1043,6 +1063,33 @@ class SpotifySearchPage(
                 section
             )
 
+        self.load_more_button = QPushButton(
+            "Load more results"
+        )
+
+        self.load_more_button.setObjectName(
+            "spotifySearchLoadMoreButton"
+        )
+
+        self.load_more_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.load_more_button.setVisible(
+            False
+        )
+
+        self.load_more_button.clicked.connect(
+            self.load_more_results
+        )
+
+        self.results_layout.addWidget(
+            self.load_more_button,
+            alignment=(
+                Qt.AlignmentFlag.AlignHCenter
+            ),
+        )
+
         self.results_layout.addStretch()
 
         self.results_scroll.setWidget(
@@ -1168,6 +1215,104 @@ class SpotifySearchPage(
             )
 
 
+    def _visible_result_count(
+        self,
+    ) -> int:
+        return sum(
+            self.sections[
+                item_type
+            ].item_count
+            for item_type
+            in SEARCH_SECTION_ORDER
+        )
+
+    def _next_offset_from_results(
+        self,
+        results: SpotifySearchResults,
+    ) -> int | None:
+        if not isinstance(
+            results,
+            SpotifySearchResults,
+        ):
+            raise TypeError(
+                (
+                    "results must be "
+                    "SpotifySearchResults"
+                )
+            )
+
+        candidates = []
+
+        for item_type in SEARCH_SECTION_ORDER:
+            page = results.page_for(
+                item_type
+            )
+
+            if (
+                page is None
+                or not page.has_more
+            ):
+                continue
+
+            candidate = (
+                page.offset
+                + page.limit
+            )
+
+            if candidate <= 1000:
+                candidates.append(
+                    candidate
+                )
+
+        if not candidates:
+            return None
+
+        return min(
+            candidates
+        )
+
+    def load_more_results(
+        self,
+    ) -> bool:
+        if (
+            self._last_results is None
+            or self._next_search_offset
+            is None
+        ):
+            return False
+
+        query = (
+            self.search_input
+            .text()
+            .strip()
+        )
+
+        if (
+            not query
+            or query
+            != self._last_results.query
+        ):
+            self._sync_search_controls()
+
+            return False
+
+        return self._submit_search(
+            query,
+            allow_repeat=True,
+            offset=self._next_search_offset,
+            append=True,
+        )
+
+    def _clear_results_for_failed_request(
+        self,
+    ) -> None:
+        if self._active_search_append:
+            self._sync_search_controls()
+
+            return
+
+        self.clear_results()
+
     def _sync_search_controls(
         self,
     ) -> None:
@@ -1175,13 +1320,17 @@ class SpotifySearchPage(
             True
         )
 
+        current_query = (
+            self.search_input
+            .text()
+            .strip()
+        )
+
         self.search_button.setEnabled(
             (
                 not self._busy
                 and bool(
-                    self.search_input
-                    .text()
-                    .strip()
+                    current_query
                 )
             )
         )
@@ -1190,7 +1339,44 @@ class SpotifySearchPage(
             (
                 "Searching..."
                 if self._busy
+                and not self._active_search_append
                 else "Search"
+            )
+        )
+
+        matching_results = (
+            self._last_results
+            is not None
+            and current_query
+            == self._last_results.query
+        )
+
+        pagination_available = (
+            matching_results
+            and self._next_search_offset
+            is not None
+        )
+
+        self.load_more_button.setVisible(
+            pagination_available
+        )
+
+        self.load_more_button.setEnabled(
+            (
+                pagination_available
+                and not self._busy
+            )
+        )
+
+        self.load_more_button.setText(
+            (
+                "Loading..."
+                if (
+                    self._busy
+                    and self._active_search_append
+                    and pagination_available
+                )
+                else "Load more results"
             )
         )
 
@@ -1209,9 +1395,12 @@ class SpotifySearchPage(
         self,
     ) -> None:
         self._last_results = None
+        self._next_search_offset = None
 
         for section in self.sections.values():
             section.clear_results()
+
+        self._sync_search_controls()
 
     @pyqtSlot()
     def start_search(
@@ -1327,6 +1516,8 @@ class SpotifySearchPage(
         query: str,
         *,
         allow_repeat: bool,
+        offset: int = 0,
+        append: bool = False,
     ) -> bool:
         checked_query = str(
             query
@@ -1335,6 +1526,24 @@ class SpotifySearchPage(
 
         if not checked_query:
             return False
+
+        if (
+            not isinstance(
+                offset,
+                int,
+            )
+            or isinstance(
+                offset,
+                bool,
+            )
+            or offset < 0
+            or offset > 1000
+        ):
+            return False
+
+        checked_append = bool(
+            append
+        )
 
         runtime_busy = bool(
             getattr(
@@ -1367,7 +1576,18 @@ class SpotifySearchPage(
             return False
 
         if (
-            not allow_repeat
+            checked_append
+            and (
+                self._last_results is None
+                or checked_query
+                != self._last_results.query
+            )
+        ):
+            return False
+
+        if (
+            not checked_append
+            and not allow_repeat
             and checked_query
             == self._last_submitted_query
             and self._last_results
@@ -1377,11 +1597,16 @@ class SpotifySearchPage(
 
         self._pending_search_query = None
 
-        self.clear_results()
+        if not checked_append:
+            self.clear_results()
 
         self._set_status(
             (
-                'Searching Spotify for "'
+                (
+                    'Loading more Spotify results for "'
+                    if checked_append
+                    else 'Searching Spotify for "'
+                )
                 + checked_query
                 + '"...'
             )
@@ -1391,15 +1616,27 @@ class SpotifySearchPage(
             checked_query
         )
 
+        self._active_search_offset = (
+            offset
+        )
+
+        self._active_search_append = (
+            checked_append
+        )
+
         try:
             self.runtime.search(
                 checked_query,
-                limit=5,
-                offset=0,
+                limit=(
+                    SPOTIFY_SEARCH_PAGE_LIMIT
+                ),
+                offset=offset,
             )
 
         except SpotifyQtSearchRuntimeError as error:
             self._active_search_query = ""
+            self._active_search_offset = 0
+            self._active_search_append = False
 
             if (
                 error.error_code
@@ -1426,6 +1663,8 @@ class SpotifySearchPage(
             ValueError,
         ):
             self._active_search_query = ""
+            self._active_search_offset = 0
+            self._active_search_append = False
 
             self._set_status(
                 (
@@ -1440,6 +1679,8 @@ class SpotifySearchPage(
 
         except Exception:
             self._active_search_query = ""
+            self._active_search_offset = 0
+            self._active_search_append = False
 
             self._set_status(
                 (
@@ -1505,11 +1746,16 @@ class SpotifySearchPage(
         ):
             self._active_search_query = ""
 
+        self._active_search_offset = 0
+        self._active_search_append = False
+
         pending_query = (
             self._pending_search_query
         )
 
         self._pending_search_query = None
+
+        self._sync_search_controls()
 
         if not pending_query:
             return
@@ -1573,7 +1819,7 @@ class SpotifySearchPage(
             result,
             SpotifySearchServiceResult,
         ):
-            self.clear_results()
+            self._clear_results_for_failed_request()
 
             self._set_status(
                 (
@@ -1589,7 +1835,7 @@ class SpotifySearchPage(
             is SpotifySearchServiceStatus
             .DISCONNECTED
         ):
-            self.clear_results()
+            self._clear_results_for_failed_request()
 
             self.connection_badge.setText(
                 "OFFLINE"
@@ -1612,7 +1858,7 @@ class SpotifySearchPage(
             is SpotifySearchServiceStatus
             .REAUTHORIZATION_REQUIRED
         ):
-            self.clear_results()
+            self._clear_results_for_failed_request()
 
             self.connection_badge.setText(
                 "RECONNECT"
@@ -1634,7 +1880,7 @@ class SpotifySearchPage(
             result.status
             is SpotifySearchServiceStatus.ERROR
         ):
-            self.clear_results()
+            self._clear_results_for_failed_request()
 
             self.connection_badge.setText(
                 "ERROR"
@@ -1672,7 +1918,7 @@ class SpotifySearchPage(
             is not SpotifySearchServiceStatus.READY
             or result.results is None
         ):
-            self.clear_results()
+            self._clear_results_for_failed_request()
 
             self.connection_badge.setText(
                 "ERROR"
@@ -1687,9 +1933,23 @@ class SpotifySearchPage(
 
             return
 
-        self.show_results(
-            result.results
-        )
+        if self._active_search_append:
+            if not self.append_results(
+                result.results
+            ):
+                self._set_status(
+                    (
+                        "Spotify returned an unexpected "
+                        "Search pagination state."
+                    )
+                )
+
+                return
+
+        else:
+            self.show_results(
+                result.results
+            )
 
         self.connection_badge.setText(
             (
@@ -1699,14 +1959,8 @@ class SpotifySearchPage(
             )
         )
 
-        total_visible = sum(
-            len(
-                result.results.items_for(
-                    item_type
-                )
-            )
-            for item_type
-            in SEARCH_SECTION_ORDER
+        total_visible = (
+            self._visible_result_count()
         )
 
         self._set_status(
@@ -1751,6 +2005,77 @@ class SpotifySearchPage(
                 )
             )
 
+        self._next_search_offset = (
+            self._next_offset_from_results(
+                results
+            )
+        )
+
+        self._sync_search_controls()
+
+    def append_results(
+        self,
+        results: SpotifySearchResults,
+    ) -> bool:
+        if not isinstance(
+            results,
+            SpotifySearchResults,
+        ):
+            raise TypeError(
+                (
+                    "results must be "
+                    "SpotifySearchResults"
+                )
+            )
+
+        if (
+            not self._active_search_append
+            or self._last_results is None
+            or results.query
+            != self._last_results.query
+        ):
+            return False
+
+        expected_offset = (
+            self._active_search_offset
+        )
+
+        if expected_offset <= 0:
+            return False
+
+        for item_type in SEARCH_SECTION_ORDER:
+            page = results.page_for(
+                item_type
+            )
+
+            if (
+                page is None
+                or page.offset
+                != expected_offset
+            ):
+                return False
+
+        for item_type in SEARCH_SECTION_ORDER:
+            self.sections[
+                item_type
+            ].append_items(
+                results.items_for(
+                    item_type
+                )
+            )
+
+        self._last_results = results
+
+        self._next_search_offset = (
+            self._next_offset_from_results(
+                results
+            )
+        )
+
+        self._sync_search_controls()
+
+        return True
+
     @pyqtSlot(
         str,
         str,
@@ -1762,7 +2087,8 @@ class SpotifySearchPage(
     ) -> None:
         if self._should_ignore_search_completion():
             return
-        self.clear_results()
+
+        self._clear_results_for_failed_request()
 
         self.connection_badge.setText(
             "ERROR"
