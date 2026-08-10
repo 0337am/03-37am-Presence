@@ -24,6 +24,9 @@ from src.spotify.search_models import (
 from src.spotify.playlist_models import (
     SpotifyPlaylistSummary,
 )
+from src.spotify.album_models import (
+    SpotifyAlbumSummary,
+)
 from src.ui.theme import ThemeManager
 from src.ui.spotify_playlist_detail import (
     SpotifyPlaylistDetail,
@@ -554,6 +557,74 @@ class SpotifyPage(
             artist_detail.back_requested.connect(
                 self._show_artist_detail_return_section
             )
+
+            artist_detail.album_activated.connect(
+                self._handle_artist_album_activated
+            )
+
+    def _handle_artist_album_activated(
+        self,
+        album,
+    ) -> bool:
+        if not isinstance(
+            album,
+            SpotifyAlbumSummary,
+        ):
+            return False
+
+        if not hasattr(
+            self,
+            "album_detail",
+        ):
+            return False
+
+        album_id = str(
+            album.spotify_id
+            or ""
+        ).strip()
+
+        album_uri = str(
+            album.uri
+            or ""
+        ).strip()
+
+        if (
+            not album_id
+            or album_uri
+            != "spotify:album:" + album_id
+        ):
+            return False
+
+        try:
+            item = SpotifySearchItem(
+                item_type=(
+                    SpotifySearchItemType.ALBUM
+                ),
+                spotify_id=album_id,
+                name=album.name,
+                uri=album_uri,
+                spotify_url=(
+                    album.spotify_url
+                ),
+                image_url=(
+                    album.image_url
+                ),
+                subtitle=(
+                    album.artist_text
+                ),
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        return bool(
+            self.show_album_detail(
+                item
+            )
+        )
 
     def _handle_search_artist_activated(
         self,
@@ -1231,6 +1302,16 @@ class SpotifyPage(
     ) -> None:
         if (
             self._album_detail_return_index
+            == SPOTIFY_ARTIST_DETAIL_INDEX
+        ):
+            self._set_section(
+                SPOTIFY_ARTIST_DETAIL_INDEX
+            )
+
+            return
+
+        if (
+            self._album_detail_return_index
             == SPOTIFY_SEARCH_INDEX
         ):
             self.show_search()
@@ -1259,6 +1340,7 @@ class SpotifyPage(
         if current_index in {
             SPOTIFY_HOME_INDEX,
             SPOTIFY_SEARCH_INDEX,
+            SPOTIFY_ARTIST_DETAIL_INDEX,
         }:
             self._album_detail_return_index = (
                 current_index

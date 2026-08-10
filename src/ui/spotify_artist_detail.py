@@ -100,6 +100,10 @@ def _album_metadata(
 class SpotifyArtistAlbumRow(
     QFrame
 ):
+    activated = pyqtSignal(
+        object
+    )
+
     def __init__(
         self,
         album: SpotifyAlbumSummary,
@@ -196,10 +200,51 @@ class SpotifyArtistAlbumRow(
             self.metadata_label
         )
 
+        self.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        for label in (
+            self.title_label,
+            self.artist_label,
+            self.metadata_label,
+        ):
+            label.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+                True,
+            )
+
+    def activate(
+        self,
+    ) -> bool:
+        self.activated.emit(
+            self.album
+        )
+
+        return True
+
+    def mousePressEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            self.activate()
+
+        super().mousePressEvent(
+            event
+        )
+
 
 class SpotifyArtistDetail(
     QWidget
 ):
+    album_activated = pyqtSignal(
+        object
+    )
+
     back_requested = pyqtSignal()
 
     def __init__(
@@ -1116,6 +1161,10 @@ class SpotifyArtistDetail(
         row = SpotifyArtistAlbumRow(
             album,
             parent=self.album_container,
+        )
+
+        row.activated.connect(
+            self.album_activated.emit
         )
 
         insert_index = max(

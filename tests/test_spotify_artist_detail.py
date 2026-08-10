@@ -280,15 +280,23 @@ class SpotifyArtistDetailTests(
             artwork,
         )
 
-    def test_album_row_is_display_only(
+    def test_album_row_activation_emits_album(
         self,
     ):
+        album = album_summary()
+
         row = SpotifyArtistAlbumRow(
-            album_summary()
+            album
         )
 
         self.addCleanup(
             row.deleteLater
+        )
+
+        captured = []
+
+        row.activated.connect(
+            captured.append
         )
 
         self.assertEqual(
@@ -296,11 +304,15 @@ class SpotifyArtistDetailTests(
             "Album One",
         )
 
-        self.assertFalse(
-            hasattr(
-                row,
-                "activated",
-            )
+        self.assertTrue(
+            row.activate()
+        )
+
+        self.assertEqual(
+            captured,
+            [
+                album
+            ],
         )
 
     def test_album_row_shows_release_metadata(
@@ -450,6 +462,45 @@ class SpotifyArtistDetailTests(
                     0,
                     None,
                 ),
+            ],
+        )
+
+    def test_album_row_activation_is_forwarded_by_detail(
+        self,
+    ):
+        (
+            detail,
+            runtime,
+            artwork,
+        ) = self.make_detail()
+
+        detail.set_artist_id(
+            "artist123"
+        )
+
+        detail.handle_artist_albums_ready(
+            "artist123",
+            albums_result(),
+        )
+
+        captured = []
+
+        detail.album_activated.connect(
+            captured.append
+        )
+
+        row = detail.album_rows[
+            0
+        ]
+
+        self.assertTrue(
+            row.activate()
+        )
+
+        self.assertEqual(
+            captured,
+            [
+                row.album
             ],
         )
 
