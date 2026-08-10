@@ -820,6 +820,7 @@ class SpotifyPage(
         for detail_name in (
             "playlist_detail",
             "liked_songs_detail",
+            "album_detail",
         ):
             detail = getattr(
                 self,

@@ -124,6 +124,12 @@ class SpotifyAlbumTrackRow(
         )
 
         self.track = track
+        self.playing = False
+
+        self.setProperty(
+            "playing",
+            False,
+        )
 
         if getattr(
             track,
@@ -265,6 +271,53 @@ class SpotifyAlbumTrackRow(
         root.addWidget(
             self.duration_label
         )
+
+    def set_playing(
+        self,
+        playing: bool,
+    ) -> bool:
+        state = bool(
+            playing
+        )
+
+        if state == self.playing:
+            return False
+
+        self.playing = state
+
+        self.setProperty(
+            "playing",
+            state,
+        )
+
+        self.number_label.setProperty(
+            "playing",
+            state,
+        )
+
+        self.title_label.setProperty(
+            "playing",
+            state,
+        )
+
+        for widget in (
+            self,
+            self.number_label,
+            self.title_label,
+        ):
+            style = widget.style()
+
+            style.unpolish(
+                widget
+            )
+
+            style.polish(
+                widget
+            )
+
+            widget.update()
+
+        return True
 
     def activate(
         self,
@@ -424,6 +477,7 @@ class SpotifyAlbumDetail(
         self._artwork_reference = ""
 
         self._track_rows = []
+        self._current_song = None
         self._loaded_count = 0
         self._total_tracks = 0
 
@@ -1268,6 +1322,265 @@ class SpotifyAlbumDetail(
             self._loaded_count
         )
 
+    @staticmethod
+    def _normalize_identity(
+        value,
+    ) -> str:
+        return (
+            " ".join(
+                str(
+                    value
+                    or ""
+                ).split()
+            )
+            .casefold()
+        )
+
+    @classmethod
+    def _artist_identity_matches(
+        cls,
+        current_artist,
+        row_artist,
+    ) -> bool:
+        current = cls._normalize_identity(
+            current_artist
+        )
+
+        candidate = cls._normalize_identity(
+            row_artist
+        )
+
+        if (
+            not current
+            or not candidate
+        ):
+            return False
+
+        if current == candidate:
+            return True
+
+        primary, separator, _rest = (
+            candidate.partition(
+                ","
+            )
+        )
+
+        if not separator:
+            return False
+
+        return (
+            primary.strip()
+            == current
+        )
+
+    @classmethod
+    def _row_matches_song(
+        cls,
+        row,
+        song,
+    ) -> bool:
+        track = getattr(
+            row,
+            "track",
+            None,
+        )
+
+        if track is None:
+            return False
+
+        return (
+            cls._normalize_identity(
+                getattr(
+                    track,
+                    "name",
+                    "",
+                )
+            )
+            == cls._normalize_identity(
+                getattr(
+                    song,
+                    "title",
+                    "",
+                )
+            )
+            and cls._artist_identity_matches(
+                getattr(
+                    song,
+                    "artist",
+                    "",
+                ),
+                getattr(
+                    track,
+                    "artist_text",
+                    "",
+                ),
+            )
+        )
+
+    def _current_album_name(
+        self,
+    ) -> str:
+        album = getattr(
+            self,
+            "_album",
+            None,
+        )
+
+        album_name = self._normalize_identity(
+            getattr(
+                album,
+                "name",
+                "",
+            )
+        )
+
+        if album_name:
+            return album_name
+
+        search_item = getattr(
+            self,
+            "_search_item",
+            None,
+        )
+
+        return self._normalize_identity(
+            getattr(
+                search_item,
+                "name",
+                "",
+            )
+        )
+
+    def _matching_current_row(
+        self,
+    ):
+        song = getattr(
+            self,
+            "_current_song",
+            None,
+        )
+
+        if song is None:
+            return None
+
+        if not bool(
+            getattr(
+                song,
+                "playing",
+                False,
+            )
+        ):
+            return None
+
+        source = self._normalize_identity(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+        )
+
+        if "spotify" not in source:
+            return None
+
+        title = self._normalize_identity(
+            getattr(
+                song,
+                "title",
+                "",
+            )
+        )
+
+        artist = self._normalize_identity(
+            getattr(
+                song,
+                "artist",
+                "",
+            )
+        )
+
+        if (
+            not title
+            or not artist
+        ):
+            return None
+
+        song_album = self._normalize_identity(
+            getattr(
+                song,
+                "album",
+                "",
+            )
+        )
+
+        current_album = (
+            self._current_album_name()
+        )
+
+        if (
+            song_album
+            and current_album
+            and song_album
+            != current_album
+        ):
+            return None
+
+        candidates = [
+            row
+            for row in tuple(
+                getattr(
+                    self,
+                    "_track_rows",
+                    (),
+                )
+            )
+            if self._row_matches_song(
+                row,
+                song,
+            )
+        ]
+
+        if len(
+            candidates
+        ) != 1:
+            return None
+
+        return candidates[0]
+
+    def _refresh_playing_state(
+        self,
+    ) -> None:
+        matching_row = (
+            self._matching_current_row()
+        )
+
+        for row in tuple(
+            getattr(
+                self,
+                "_track_rows",
+                (),
+            )
+        ):
+            setter = getattr(
+                row,
+                "set_playing",
+                None,
+            )
+
+            if callable(
+                setter
+            ):
+                setter(
+                    row is matching_row
+                )
+
+    def set_current_song(
+        self,
+        song,
+    ) -> None:
+        self._current_song = song
+        self._refresh_playing_state()
+
     def _handle_track_activated(
         self,
         track,
@@ -1374,6 +1687,8 @@ class SpotifyAlbumDetail(
         self._track_rows.append(
             row
         )
+
+        self._refresh_playing_state()
 
     def handle_album_tracks_ready(
         self,
@@ -1597,6 +1912,15 @@ class SpotifyAlbumDetail(
 
             QFrame#spotifyAlbumTrackRow:hover {{
                 border-color: {accent};
+            }}
+
+            QFrame#spotifyAlbumTrackRow[playing="true"] {{
+                border-color: {accent};
+            }}
+
+            QLabel#spotifyAlbumTrackNumber[playing="true"],
+            QLabel#spotifyAlbumTrackTitle[playing="true"] {{
+                color: {accent};
             }}
 
             QLabel#spotifyAlbumTrackNumber,
