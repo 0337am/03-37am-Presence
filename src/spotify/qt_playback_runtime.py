@@ -110,6 +110,7 @@ class _SpotifyPlaybackWorker(
         spotify_uri: str,
         *,
         playlist_id: str | None = None,
+        playlist_position: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -123,6 +124,10 @@ class _SpotifyPlaybackWorker(
 
         self._playlist_id = (
             playlist_id
+        )
+
+        self._playlist_position = (
+            playlist_position
         )
 
     def _fail(
@@ -155,11 +160,20 @@ class _SpotifyPlaybackWorker(
                 )
                 return
 
-            method_name = (
-                "play_playlist_track"
-                if self._playlist_id is not None
-                else "play_track"
-            )
+            if self._playlist_position is not None:
+                method_name = (
+                    "play_playlist_position"
+                )
+
+            elif self._playlist_id is not None:
+                method_name = (
+                    "play_playlist_track"
+                )
+
+            else:
+                method_name = (
+                    "play_track"
+                )
 
             play_method = getattr(
                 service,
@@ -180,15 +194,21 @@ class _SpotifyPlaybackWorker(
                 return
 
             try:
-                if self._playlist_id is None:
+                if self._playlist_position is not None:
                     result = play_method(
-                        self._spotify_uri
+                        self._playlist_id,
+                        self._playlist_position,
+                    )
+
+                elif self._playlist_id is not None:
+                    result = play_method(
+                        self._playlist_id,
+                        self._spotify_uri,
                     )
 
                 else:
                     result = play_method(
-                        self._playlist_id,
-                        self._spotify_uri,
+                        self._spotify_uri
                     )
 
             except Exception:
@@ -220,6 +240,7 @@ class _SpotifyPlaybackWorker(
 
         finally:
             self.finished.emit()
+
 
 
 class SpotifyQtPlaybackRuntime(
@@ -321,6 +342,66 @@ class SpotifyQtPlaybackRuntime(
             checked
         )
 
+    def play_playlist_position(
+        self,
+        playlist_id,
+        position,
+    ) -> None:
+        if not isinstance(
+            playlist_id,
+            str,
+        ):
+            raise TypeError(
+                "playlist_id must be a string"
+            )
+
+        checked_playlist_id = (
+            playlist_id.strip()
+        )
+
+        if not checked_playlist_id:
+            raise ValueError(
+                "playlist_id cannot be empty"
+            )
+
+        if (
+            isinstance(
+                position,
+                bool,
+            )
+            or not isinstance(
+                position,
+                int,
+            )
+        ):
+            raise TypeError(
+                (
+                    "playlist position must "
+                    "be an integer"
+                )
+            )
+
+        if position < 0:
+            raise ValueError(
+                (
+                    "playlist position cannot "
+                    "be negative"
+                )
+            )
+
+        context_uri = (
+            "spotify:playlist:"
+            + checked_playlist_id
+        )
+
+        self._start_playback(
+            context_uri,
+            playlist_id=(
+                checked_playlist_id
+            ),
+            playlist_position=position,
+        )
+
     def play_playlist_track(
         self,
         playlist_id,
@@ -363,12 +444,25 @@ class SpotifyQtPlaybackRuntime(
         spotify_uri,
         *,
         playlist_id: str | None = None,
+        playlist_position: int | None = None,
     ) -> None:
-        checked_uri = (
-            _validate_playback_uri(
-                spotify_uri
+        if playlist_position is None:
+            checked_uri = (
+                _validate_playback_uri(
+                    spotify_uri
+                )
             )
-        )
+
+        else:
+            if playlist_id is None:
+                raise ValueError(
+                    (
+                        "playlist position playback "
+                        "requires a playlist ID"
+                    )
+                )
+
+            checked_uri = spotify_uri
 
         if self._shutting_down:
             raise SpotifyQtPlaybackRuntimeError(
@@ -394,6 +488,9 @@ class SpotifyQtPlaybackRuntime(
             self._service_factory,
             checked_uri,
             playlist_id=playlist_id,
+            playlist_position=(
+                playlist_position
+            ),
         )
 
         worker.moveToThread(
@@ -460,6 +557,7 @@ class SpotifyQtPlaybackRuntime(
                     "not start."
                 ),
             ) from error
+
 
     @pyqtSlot(
         object

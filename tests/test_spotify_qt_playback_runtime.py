@@ -69,6 +69,7 @@ class ResultService:
         self.result = result
         self.thread_ids = thread_ids
         self.playlist_calls = []
+        self.position_calls = []
 
     def play_track(
         self,
@@ -78,6 +79,25 @@ class ResultService:
             self.thread_ids.append(
                 threading.get_ident()
             )
+
+        return self.result
+
+    def play_playlist_position(
+        self,
+        playlist_id,
+        position,
+    ):
+        if self.thread_ids is not None:
+            self.thread_ids.append(
+                threading.get_ident()
+            )
+
+        self.position_calls.append(
+            (
+                playlist_id,
+                position,
+            )
+        )
 
         return self.result
 
@@ -626,6 +646,266 @@ class SpotifyQtPlaybackRuntimeTests(
             runtime.shutdown()
         )
 
+
+    def test_playlist_position_request_runs_in_worker(
+        self,
+    ):
+        service = ResultService(
+            ready_result()
+        )
+
+        runtime = SpotifyQtPlaybackRuntime(
+            lambda: service
+        )
+
+        runtime.play_playlist_position(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            28,
+        )
+
+        self.assertTrue(
+            process_until(
+                lambda:
+                (
+                    service.position_calls
+                    and not runtime.busy
+                )
+            )
+        )
+
+        self.assertEqual(
+            service.position_calls,
+            [
+                (
+                    "37i9dQZF1DXcBWIGoYBM5M",
+                    28,
+                ),
+            ],
+        )
+
+        self.assertEqual(
+            service.playlist_calls,
+            [],
+        )
+
+        self.assertTrue(
+            runtime.shutdown()
+        )
+
+    def test_playlist_position_runs_off_calling_thread(
+        self,
+    ):
+        worker_thread_ids = []
+
+        service = ResultService(
+            ready_result(),
+            thread_ids=worker_thread_ids,
+        )
+
+        runtime = SpotifyQtPlaybackRuntime(
+            lambda: service
+        )
+
+        calling_thread_id = (
+            threading.get_ident()
+        )
+
+        runtime.play_playlist_position(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            28,
+        )
+
+        self.assertTrue(
+            process_until(
+                lambda:
+                (
+                    worker_thread_ids
+                    and not runtime.busy
+                )
+            )
+        )
+
+        self.assertNotEqual(
+            worker_thread_ids[0],
+            calling_thread_id,
+        )
+
+        self.assertTrue(
+            runtime.shutdown()
+        )
+
+    def test_playlist_position_lifecycle_uses_context_uri(
+        self,
+    ):
+        runtime = SpotifyQtPlaybackRuntime(
+            lambda:
+            ResultService(
+                ready_result()
+            )
+        )
+
+        events = []
+
+        context_uri = (
+            "spotify:playlist:"
+            "37i9dQZF1DXcBWIGoYBM5M"
+        )
+
+        runtime.playback_started.connect(
+            lambda uri:
+            events.append(
+                (
+                    "started",
+                    uri,
+                )
+            )
+        )
+
+        runtime.playback_finished.connect(
+            lambda uri:
+            events.append(
+                (
+                    "finished",
+                    uri,
+                )
+            )
+        )
+
+        runtime.play_playlist_position(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            28,
+        )
+
+        self.assertTrue(
+            process_until(
+                lambda:
+                not runtime.busy
+            )
+        )
+
+        self.assertIn(
+            (
+                "started",
+                context_uri,
+            ),
+            events,
+        )
+
+        self.assertIn(
+            (
+                "finished",
+                context_uri,
+            ),
+            events,
+        )
+
+        self.assertIsNone(
+            runtime.active_uri
+        )
+
+        self.assertTrue(
+            runtime.shutdown()
+        )
+
+    def test_playlist_position_rejects_invalid_position_before_thread(
+        self,
+    ):
+        invalid_values = (
+            (
+                -1,
+                ValueError,
+            ),
+            (
+                True,
+                TypeError,
+            ),
+            (
+                False,
+                TypeError,
+            ),
+            (
+                1.5,
+                TypeError,
+            ),
+            (
+                "28",
+                TypeError,
+            ),
+            (
+                None,
+                TypeError,
+            ),
+        )
+
+        for (
+            value,
+            expected_error,
+        ) in invalid_values:
+            with self.subTest(
+                value=value
+            ):
+                service = ResultService(
+                    ready_result()
+                )
+
+                runtime = (
+                    SpotifyQtPlaybackRuntime(
+                        lambda: service
+                    )
+                )
+
+                with self.assertRaises(
+                    expected_error
+                ):
+                    runtime.play_playlist_position(
+                        "37i9dQZF1DXcBWIGoYBM5M",
+                        value,
+                    )
+
+                self.assertFalse(
+                    runtime.busy
+                )
+
+                self.assertEqual(
+                    service.position_calls,
+                    [],
+                )
+
+                self.assertTrue(
+                    runtime.shutdown()
+                )
+
+    def test_playlist_position_rejects_empty_playlist_before_thread(
+        self,
+    ):
+        service = ResultService(
+            ready_result()
+        )
+
+        runtime = SpotifyQtPlaybackRuntime(
+            lambda: service
+        )
+
+        with self.assertRaises(
+            ValueError
+        ):
+            runtime.play_playlist_position(
+                "   ",
+                28,
+            )
+
+        self.assertFalse(
+            runtime.busy
+        )
+
+        self.assertEqual(
+            service.position_calls,
+            [],
+        )
+
+        self.assertTrue(
+            runtime.shutdown()
+        )
 
     def test_playlist_context_request_runs_in_worker(
         self,
