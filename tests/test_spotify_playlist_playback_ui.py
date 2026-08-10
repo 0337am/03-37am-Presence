@@ -100,6 +100,7 @@ class FakePlaybackRuntime(
 
         self.busy = False
         self.calls = []
+        self.position_calls = []
 
     def play_playlist_track(
         self,
@@ -121,6 +122,28 @@ class FakePlaybackRuntime(
                 spotify_uri,
             )
         )
+
+    def play_playlist_position(
+        self,
+        playlist_id,
+        position,
+    ):
+        if self.busy:
+            error = RuntimeError(
+                "busy"
+            )
+
+            error.error_code = "busy"
+
+            raise error
+
+        self.position_calls.append(
+            (
+                playlist_id,
+                position,
+            )
+        )
+
 
 
 def catalogue_item(
@@ -144,10 +167,12 @@ def catalogue_item(
 def local_item(
     *,
     available=True,
+    position=28,
 ):
     return SimpleNamespace(
         is_local=True,
         local_available=available,
+        position=position,
         unified_track=SimpleNamespace(
             title="Local Track",
             artist="Local Artist",
@@ -161,6 +186,7 @@ def local_item(
             playable=available,
         ),
     )
+
 
 
 class SpotifyPlaylistPlaybackUiTests(
@@ -255,11 +281,12 @@ class SpotifyPlaylistPlaybackUiTests(
             ],
         )
 
-    def test_available_local_row_does_not_activate_spotify_playback(
+    def test_available_local_row_can_activate_position_playback(
         self,
     ):
         item = local_item(
-            available=True
+            available=True,
+            position=28,
         )
 
         row = SpotifyPlaylistTrackRow(
@@ -277,18 +304,21 @@ class SpotifyPlaylistPlaybackUiTests(
             observed.append
         )
 
-        self.assertFalse(
+        self.assertTrue(
             row.playback_available
         )
 
-        self.assertFalse(
+        self.assertTrue(
             row.activate()
         )
 
         self.assertEqual(
             observed,
-            [],
+            [
+                item,
+            ],
         )
+
 
     def test_unavailable_local_row_does_not_activate(
         self,
@@ -372,7 +402,7 @@ class SpotifyPlaylistPlaybackUiTests(
             "Starting Play Me...",
         )
 
-    def test_detail_never_routes_local_track_to_spotify_runtime(
+    def test_detail_routes_available_local_track_by_exact_position(
         self,
     ):
         (
@@ -380,21 +410,125 @@ class SpotifyPlaylistPlaybackUiTests(
             playback,
         ) = self.make_detail()
 
+        item = local_item(
+            available=True,
+            position=28,
+        )
+
         result = (
             detail
             ._handle_track_activated(
-                local_item()
+                item
             )
         )
 
-        self.assertFalse(
+        self.assertTrue(
             result
+        )
+
+        self.assertEqual(
+            playback.position_calls,
+            [
+                (
+                    detail.playlist.spotify_id,
+                    28,
+                ),
+            ],
         )
 
         self.assertEqual(
             playback.calls,
             [],
         )
+
+        self.assertEqual(
+            detail.status_label.text(),
+            "Starting Local Track...",
+        )
+
+
+    def test_local_row_rejects_invalid_playlist_position(
+        self,
+    ):
+        invalid_positions = (
+            -1,
+            True,
+            False,
+            1.5,
+            "28",
+            None,
+        )
+
+        for position in invalid_positions:
+            with self.subTest(
+                position=position
+            ):
+                item = local_item(
+                    available=True,
+                    position=position,
+                )
+
+                row = SpotifyPlaylistTrackRow(
+                    item,
+                    number=1,
+                )
+
+                self.addCleanup(
+                    row.deleteLater
+                )
+
+                self.assertFalse(
+                    row.playback_available
+                )
+
+                self.assertFalse(
+                    row.activate()
+                )
+
+    def test_detail_rejects_invalid_local_position_before_runtime(
+        self,
+    ):
+        invalid_positions = (
+            -1,
+            True,
+            False,
+            1.5,
+            "28",
+            None,
+        )
+
+        for position in invalid_positions:
+            with self.subTest(
+                position=position
+            ):
+                (
+                    detail,
+                    playback,
+                ) = self.make_detail()
+
+                result = (
+                    detail
+                    ._handle_track_activated(
+                        local_item(
+                            available=True,
+                            position=position,
+                        )
+                    )
+                )
+
+                self.assertFalse(
+                    result
+                )
+
+                self.assertEqual(
+                    playback.position_calls,
+                    [],
+                )
+
+                self.assertEqual(
+                    playback.calls,
+                    [],
+                )
 
     def test_busy_playback_request_is_rejected_safely(
         self,

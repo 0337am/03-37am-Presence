@@ -292,11 +292,37 @@ class SpotifyPlaylistTrackRow(
             )
         )
 
+        playlist_position = getattr(
+            resolved_item,
+            "position",
+            None,
+        )
+
+        valid_playlist_position = bool(
+            not isinstance(
+                playlist_position,
+                bool,
+            )
+            and isinstance(
+                playlist_position,
+                int,
+            )
+            and playlist_position >= 0
+        )
+
         self.playback_available = bool(
-            not is_local
-            and track_playable
-            and spotify_uri.startswith(
-                "spotify:track:"
+            (
+                is_local
+                and local_available is True
+                and track_playable
+                and valid_playlist_position
+            )
+            or (
+                not is_local
+                and track_playable
+                and spotify_uri.startswith(
+                    "spotify:track:"
+                )
             )
         )
 
@@ -412,22 +438,27 @@ class SpotifyPlaylistDetail(
         self.runtime = runtime
 
         if playback_runtime is not None:
-            play_playlist_track = getattr(
-                playback_runtime,
+            for method_name in (
                 "play_playlist_track",
-                None,
-            )
-
-            if not callable(
-                play_playlist_track
+                "play_playlist_position",
             ):
-                raise TypeError(
-                    (
-                        "playback_runtime must "
-                        "provide a callable "
-                        "play_playlist_track method"
-                    )
+                play_method = getattr(
+                    playback_runtime,
+                    method_name,
+                    None,
                 )
+
+                if not callable(
+                    play_method
+                ):
+                    raise TypeError(
+                        (
+                            "playback_runtime must "
+                            "provide a callable "
+                            + method_name
+                            + " method"
+                        )
+                    )
 
         self.playback_runtime = (
             playback_runtime
@@ -1153,14 +1184,13 @@ class SpotifyPlaylistDetail(
         if track is None:
             return False
 
-        if bool(
+        is_local = bool(
             getattr(
                 resolved_item,
                 "is_local",
                 False,
             )
-        ):
-            return False
+        )
 
         if not bool(
             getattr(
@@ -1171,19 +1201,53 @@ class SpotifyPlaylistDetail(
         ):
             return False
 
-        spotify_uri = str(
-            getattr(
-                track,
-                "spotify_uri",
-                "",
-            )
-            or ""
-        ).strip()
+        playlist_position = None
+        spotify_uri = ""
 
-        if not spotify_uri.startswith(
-            "spotify:track:"
-        ):
-            return False
+        if is_local:
+            if (
+                getattr(
+                    resolved_item,
+                    "local_available",
+                    None,
+                )
+                is not True
+            ):
+                return False
+
+            playlist_position = getattr(
+                resolved_item,
+                "position",
+                None,
+            )
+
+            if (
+                isinstance(
+                    playlist_position,
+                    bool,
+                )
+                or not isinstance(
+                    playlist_position,
+                    int,
+                )
+                or playlist_position < 0
+            ):
+                return False
+
+        else:
+            spotify_uri = str(
+                getattr(
+                    track,
+                    "spotify_uri",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not spotify_uri.startswith(
+                "spotify:track:"
+            ):
+                return False
 
         if self.playback_runtime is None:
             self.status_label.setText(
@@ -1246,10 +1310,23 @@ class SpotifyPlaylistDetail(
 
                 return False
 
-            self.playback_runtime.play_playlist_track(
-                self.playlist.spotify_id,
-                spotify_uri,
-            )
+            if is_local:
+                (
+                    self.playback_runtime
+                    .play_playlist_position(
+                        self.playlist.spotify_id,
+                        playlist_position,
+                    )
+                )
+
+            else:
+                (
+                    self.playback_runtime
+                    .play_playlist_track(
+                        self.playlist.spotify_id,
+                        spotify_uri,
+                    )
+                )
 
         except Exception as error:
             error_code = str(
@@ -1288,6 +1365,7 @@ class SpotifyPlaylistDetail(
             return False
 
         return True
+
 
     def handle_playback_result(
         self,
