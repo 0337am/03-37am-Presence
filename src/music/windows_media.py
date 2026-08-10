@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import time
 from typing import Any
 
@@ -16,6 +17,17 @@ from src.music.source_preferences import (
     SourcePreferences,
     SourcePreferencesStore,
 )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class SpotifyPlaybackState:
+    title: str = ""
+    artist: str = ""
+    playing: bool = False
+    source_app: str = ""
 
 
 class WindowsMedia:
@@ -76,6 +88,158 @@ class WindowsMedia:
                 error,
             )
             return Song()
+
+    def get_spotify_playback_state(
+        self,
+    ) -> SpotifyPlaybackState:
+        """
+        Return lightweight playback identity for
+        Spotify's Windows media session only.
+
+        This intentionally avoids artwork loading.
+        """
+
+        try:
+            return asyncio.run(
+                self
+                ._get_spotify_playback_state_async()
+            )
+
+        except Exception as error:
+            print(
+                "Spotify media verification error:",
+                error,
+            )
+
+            return SpotifyPlaybackState()
+
+    async def _request_session_manager(
+        self,
+    ):
+        return await (
+            GlobalSystemMediaTransportControlsSessionManager
+            .request_async()
+        )
+
+    def _select_spotify_session(
+        self,
+        *,
+        sessions: list[Any],
+        current_session,
+    ):
+        spotify_sessions = [
+            session
+            for session in sessions
+            if self._is_spotify_source(
+                self._source_app(
+                    session
+                )
+            )
+        ]
+
+        if not spotify_sessions:
+            return None
+
+        if (
+            current_session is not None
+            and self._is_spotify_source(
+                self._source_app(
+                    current_session
+                )
+            )
+            and self._is_playing(
+                current_session
+            )
+        ):
+            return current_session
+
+        for session in spotify_sessions:
+            if self._is_playing(
+                session
+            ):
+                return session
+
+        if (
+            current_session is not None
+            and self._is_spotify_source(
+                self._source_app(
+                    current_session
+                )
+            )
+        ):
+            return current_session
+
+        return spotify_sessions[0]
+
+    async def _get_spotify_playback_state_async(
+        self,
+    ) -> SpotifyPlaybackState:
+        manager = await (
+            self._request_session_manager()
+        )
+
+        sessions = list(
+            manager.get_sessions()
+        )
+
+        current_session = (
+            manager.get_current_session()
+        )
+
+        session = (
+            self._select_spotify_session(
+                sessions=sessions,
+                current_session=current_session,
+            )
+        )
+
+        if session is None:
+            return SpotifyPlaybackState()
+
+        try:
+            media = await (
+                session
+                .try_get_media_properties_async()
+            )
+
+        except Exception:
+            return SpotifyPlaybackState()
+
+        title = self._clean_text(
+            getattr(
+                media,
+                "title",
+                "",
+            )
+        )
+
+        artist = self._clean_text(
+            getattr(
+                media,
+                "artist",
+                "",
+            )
+        )
+
+        if not artist:
+            artist = self._clean_text(
+                getattr(
+                    media,
+                    "album_artist",
+                    "",
+                )
+            )
+
+        return SpotifyPlaybackState(
+            title=title,
+            artist=artist,
+            playing=self._is_playing(
+                session
+            ),
+            source_app=self._source_app(
+                session
+            ),
+        )
 
     async def _get_current_song_async(
         self,

@@ -7,6 +7,10 @@ from enum import Enum
 import ntpath
 import time
 
+from src.music.windows_media import (
+    WindowsMedia,
+)
+
 
 UIA_BUTTON_CONTROL_TYPE_ID = 50000
 UIA_DATA_GRID_CONTROL_TYPE_ID = 50028
@@ -92,6 +96,7 @@ class SpotifyDesktopPlaybackResult:
     artist: str
     message: str = ""
     now_playing_confirmed: bool = False
+    media_session_confirmed: bool = False
 
     @property
     def success(
@@ -143,6 +148,97 @@ def _semantic_text(
             or ""
         ).split()
     ).casefold()
+
+
+class SpotifyWindowsMediaPlaybackVerifier:
+    def __init__(
+        self,
+        media=None,
+    ) -> None:
+        self._media = (
+            WindowsMedia()
+            if media is None
+            else media
+        )
+
+        reader = getattr(
+            self._media,
+            "get_spotify_playback_state",
+            None,
+        )
+
+        if not callable(
+            reader
+        ):
+            raise TypeError(
+                (
+                    "media must provide "
+                    "get_spotify_playback_state()"
+                )
+            )
+
+    def confirms_playing(
+        self,
+        *,
+        title: str,
+        artist: str,
+    ) -> bool:
+        expected_title = (
+            _semantic_text(
+                title
+            )
+        )
+
+        expected_artist = (
+            _semantic_text(
+                artist
+            )
+        )
+
+        try:
+            state = (
+                self._media
+                .get_spotify_playback_state()
+            )
+
+        except Exception:
+            return False
+
+        if not bool(
+            getattr(
+                state,
+                "playing",
+                False,
+            )
+        ):
+            return False
+
+        actual_title = (
+            _semantic_text(
+                getattr(
+                    state,
+                    "title",
+                    "",
+                )
+            )
+        )
+
+        actual_artist = (
+            _semantic_text(
+                getattr(
+                    state,
+                    "artist",
+                    "",
+                )
+            )
+        )
+
+        return (
+            actual_title
+            == expected_title
+            and actual_artist
+            == expected_artist
+        )
 
 
 class WindowsSpotifyUiAutomationBackend:
@@ -778,6 +874,7 @@ class SpotifyDesktopPlaybackBridge:
         *,
         verification_attempts: int = 20,
         verification_interval: float = 0.10,
+        media_verifier=None,
         sleep_fn=None,
     ) -> None:
         self._backend = (
@@ -841,6 +938,31 @@ class SpotifyDesktopPlaybackBridge:
         )
 
         self._sleep = sleep_fn
+
+        if media_verifier is None:
+            media_verifier = (
+                SpotifyWindowsMediaPlaybackVerifier()
+            )
+
+        confirms_playing = getattr(
+            media_verifier,
+            "confirms_playing",
+            None,
+        )
+
+        if not callable(
+            confirms_playing
+        ):
+            raise TypeError(
+                (
+                    "media_verifier must provide "
+                    "confirms_playing()"
+                )
+            )
+
+        self._media_verifier = (
+            media_verifier
+        )
 
         required = (
             "find_spotify_window",
@@ -1334,6 +1456,32 @@ class SpotifyDesktopPlaybackBridge:
             for attempt in range(
                 self._verification_attempts
             ):
+                media_session_confirmed = (
+                    self._media_verifier
+                    .confirms_playing(
+                        title=track_title,
+                        artist=track_artist,
+                    )
+                )
+
+                if media_session_confirmed:
+                    return (
+                        SpotifyDesktopPlaybackResult(
+                            status=(
+                                SpotifyDesktopPlaybackStatus
+                                .PLAYED
+                            ),
+                            playlist_name=playlist,
+                            title=track_title,
+                            artist=track_artist,
+                            message=(
+                                "Spotify started the "
+                                "local track."
+                            ),
+                            media_session_confirmed=True,
+                        )
+                    )
+
                 (
                     playing_confirmed,
                     now_playing_confirmed,

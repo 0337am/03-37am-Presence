@@ -7,6 +7,7 @@ from src.spotify.desktop_playback_bridge import (
     SpotifyDesktopDiscoveryStatus,
     SpotifyDesktopPlaybackBridge,
     SpotifyDesktopPlaybackStatus,
+    SpotifyWindowsMediaPlaybackVerifier,
     WindowsSpotifyUiAutomationBackend,
 )
 
@@ -25,6 +26,68 @@ class FakeElement:
         default_factory=list
     )
     invoke: bool = False
+
+
+class FakeMediaVerifier:
+    def __init__(
+        self,
+        confirmed=False,
+    ):
+        self.confirmed = confirmed
+        self.calls = []
+
+    def confirms_playing(
+        self,
+        *,
+        title,
+        artist,
+    ):
+        self.calls.append(
+            (
+                title,
+                artist,
+            )
+        )
+
+        return self.confirmed
+
+
+class FakePlaybackState:
+    def __init__(
+        self,
+        *,
+        title="",
+        artist="",
+        playing=False,
+    ):
+        self.title = title
+        self.artist = artist
+        self.playing = playing
+
+
+class FakePlaybackStateReader:
+    def __init__(
+        self,
+        state=None,
+        *,
+        fail=False,
+    ):
+        self.state = (
+            state
+            if state is not None
+            else FakePlaybackState()
+        )
+        self.fail = fail
+
+    def get_spotify_playback_state(
+        self,
+    ):
+        if self.fail:
+            raise RuntimeError(
+                "simulated media failure"
+            )
+
+        return self.state
 
 
 class FakeBackend:
@@ -186,6 +249,94 @@ def tree(
     )
 
 
+class SpotifyWindowsMediaPlaybackVerifierTests(
+    unittest.TestCase
+):
+    def test_exact_playing_identity_is_confirmed(
+        self,
+    ):
+        verifier = (
+            SpotifyWindowsMediaPlaybackVerifier(
+                FakePlaybackStateReader(
+                    FakePlaybackState(
+                        title="CELLOPHANE",
+                        artist="WesGhost",
+                        playing=True,
+                    )
+                )
+            )
+        )
+
+        self.assertTrue(
+            verifier.confirms_playing(
+                title="cellophane",
+                artist="wesghost",
+            )
+        )
+
+    def test_wrong_track_is_not_confirmed(
+        self,
+    ):
+        verifier = (
+            SpotifyWindowsMediaPlaybackVerifier(
+                FakePlaybackStateReader(
+                    FakePlaybackState(
+                        title="MIGRAINE",
+                        artist="WesGhost",
+                        playing=True,
+                    )
+                )
+            )
+        )
+
+        self.assertFalse(
+            verifier.confirms_playing(
+                title="CELLOPHANE",
+                artist="WesGhost",
+            )
+        )
+
+    def test_paused_track_is_not_confirmed(
+        self,
+    ):
+        verifier = (
+            SpotifyWindowsMediaPlaybackVerifier(
+                FakePlaybackStateReader(
+                    FakePlaybackState(
+                        title="CELLOPHANE",
+                        artist="WesGhost",
+                        playing=False,
+                    )
+                )
+            )
+        )
+
+        self.assertFalse(
+            verifier.confirms_playing(
+                title="CELLOPHANE",
+                artist="WesGhost",
+            )
+        )
+
+    def test_media_failure_is_safe(
+        self,
+    ):
+        verifier = (
+            SpotifyWindowsMediaPlaybackVerifier(
+                FakePlaybackStateReader(
+                    fail=True
+                )
+            )
+        )
+
+        self.assertFalse(
+            verifier.confirms_playing(
+                title="CELLOPHANE",
+                artist="WesGhost",
+            )
+        )
+
+
 class SpotifyDesktopWindowIdentityTests(
     unittest.TestCase
 ):
@@ -246,6 +397,9 @@ class SpotifyDesktopPlaybackBridgeTests(
             ),
             verification_attempts=2,
             verification_interval=0,
+            media_verifier=FakeMediaVerifier(
+                False
+            ),
             sleep_fn=lambda seconds: None,
         )
 
@@ -636,6 +790,70 @@ class SpotifyDesktopPlaybackBridgeTests(
         self.assertEqual(
             result.status,
             SpotifyDesktopPlaybackStatus.ERROR,
+        )
+
+    def test_media_session_confirms_when_uia_state_is_stale(
+        self,
+    ):
+        before = tree()
+
+        backend = FakeBackend(
+            before,
+            after_invoke_root=before,
+        )
+
+        media_verifier = (
+            FakeMediaVerifier(
+                True
+            )
+        )
+
+        bridge = SpotifyDesktopPlaybackBridge(
+            backend,
+            verification_attempts=2,
+            verification_interval=0,
+            media_verifier=media_verifier,
+            sleep_fn=lambda seconds: None,
+        )
+
+        result = bridge.play_local_track(
+            playlist_name="WGC Forever",
+            title="CELLOPHANE",
+            artist="WesGhost",
+        )
+
+        self.assertTrue(
+            result.success
+        )
+
+        self.assertEqual(
+            result.status,
+            SpotifyDesktopPlaybackStatus.PLAYED,
+        )
+
+        self.assertTrue(
+            result.media_session_confirmed
+        )
+
+        self.assertFalse(
+            result.now_playing_confirmed
+        )
+
+        self.assertEqual(
+            backend.invoke_calls,
+            [
+                "Play CELLOPHANE by WesGhost",
+            ],
+        )
+
+        self.assertEqual(
+            media_verifier.calls,
+            [
+                (
+                    "CELLOPHANE",
+                    "WesGhost",
+                ),
+            ],
         )
 
     def test_unconfirmed_playback_is_not_success(
