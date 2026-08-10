@@ -65,6 +65,7 @@ class ApiStub:
         self.calls = []
         self.device_calls = []
         self.playlist_calls = []
+        self.position_calls = []
 
     def start_playback(
         self,
@@ -92,6 +93,26 @@ class ApiStub:
         )
 
         return self.devices
+
+    def start_playlist_position_playback(
+        self,
+        access_token,
+        playlist_uri,
+        position,
+        *,
+        device_id=None,
+    ):
+        self.position_calls.append(
+            (
+                access_token,
+                playlist_uri,
+                position,
+                device_id,
+            )
+        )
+
+        if self.error is not None:
+            raise self.error
 
     def start_playlist_playback(
         self,
@@ -537,6 +558,348 @@ class SpotifyPlaybackServiceTests(
                 retry_after_seconds=-1,
             )
 
+
+    def test_playlist_position_playback_prefers_active_device(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[
+                {
+                    "id": "desktop",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+                {
+                    "id": "phone",
+                    "type": "Smartphone",
+                    "is_active": True,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "37i9dQZF1DXcBWIGoYBM5M",
+            28,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.position_calls,
+            [
+                (
+                    "secret-access-token",
+                    (
+                        "spotify:playlist:"
+                        "37i9dQZF1DXcBWIGoYBM5M"
+                    ),
+                    28,
+                    "phone",
+                ),
+            ],
+        )
+
+        self.assertEqual(
+            api.playlist_calls,
+            [],
+        )
+
+    def test_playlist_position_zero_is_supported(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "abc123",
+            0,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.position_calls,
+            [
+                (
+                    "secret-access-token",
+                    "spotify:playlist:abc123",
+                    0,
+                    None,
+                ),
+            ],
+        )
+
+    def test_playlist_position_rejects_invalid_values_before_session(
+        self,
+    ):
+        invalid_values = (
+            -1,
+            True,
+            False,
+            1.5,
+            "28",
+            None,
+        )
+
+        for value in invalid_values:
+            with self.subTest(
+                value=value
+            ):
+                manager = SessionManagerStub(
+                    session(
+                        SpotifySessionStatus.READY
+                    )
+                )
+
+                api = ApiStub()
+
+                result = SpotifyPlaybackService(
+                    manager,
+                    api_client=api,
+                ).play_playlist_position(
+                    "abc123",
+                    value,
+                )
+
+                self.assertFalse(
+                    result.ready
+                )
+
+                self.assertEqual(
+                    result.error_code,
+                    "invalid_playlist_playback",
+                )
+
+                self.assertEqual(
+                    manager.calls,
+                    0,
+                )
+
+                self.assertEqual(
+                    api.device_calls,
+                    [],
+                )
+
+                self.assertEqual(
+                    api.position_calls,
+                    [],
+                )
+
+    def test_playlist_position_rejects_invalid_playlist_before_session(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub()
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "bad playlist",
+            28,
+        )
+
+        self.assertFalse(
+            result.ready
+        )
+
+        self.assertEqual(
+            result.error_code,
+            "invalid_playlist_playback",
+        )
+
+        self.assertEqual(
+            manager.calls,
+            0,
+        )
+
+        self.assertEqual(
+            api.device_calls,
+            [],
+        )
+
+        self.assertEqual(
+            api.position_calls,
+            [],
+        )
+
+    def test_playlist_position_falls_back_to_computer_when_paused(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[
+                {
+                    "id": "speaker",
+                    "type": "Speaker",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+                {
+                    "id": "desktop",
+                    "type": "Computer",
+                    "is_active": False,
+                    "is_restricted": False,
+                },
+            ]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "abc123",
+            28,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertEqual(
+            api.position_calls[0][3],
+            "desktop",
+        )
+
+    def test_playlist_position_without_devices_uses_active_device_fallback(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            devices=[]
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "abc123",
+            28,
+        )
+
+        self.assertTrue(
+            result.ready
+        )
+
+        self.assertIsNone(
+            api.position_calls[0][3]
+        )
+
+    def test_playlist_position_api_reauthorization_maps_to_service_state(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            error=SpotifyWebApiError(
+                "reauthorization_required",
+                "Reconnect.",
+            )
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "abc123",
+            28,
+        )
+
+        self.assertTrue(
+            result.requires_reauthorization
+        )
+
+        self.assertEqual(
+            result.status,
+            (
+                SpotifyPlaybackServiceStatus
+                .REAUTHORIZATION_REQUIRED
+            ),
+        )
+
+    def test_playlist_position_rate_limit_metadata_is_preserved(
+        self,
+    ):
+        manager = SessionManagerStub(
+            session(
+                SpotifySessionStatus.READY
+            )
+        )
+
+        api = ApiStub(
+            error=SpotifyWebApiError(
+                "rate_limited",
+                "Wait.",
+                retry_after_seconds=17,
+            )
+        )
+
+        result = SpotifyPlaybackService(
+            manager,
+            api_client=api,
+        ).play_playlist_position(
+            "abc123",
+            28,
+        )
+
+        self.assertEqual(
+            result.status,
+            SpotifyPlaybackServiceStatus.ERROR,
+        )
+
+        self.assertEqual(
+            result.error_code,
+            "rate_limited",
+        )
+
+        self.assertEqual(
+            result.retry_after_seconds,
+            17,
+        )
 
     def test_playlist_playback_prefers_active_device(
         self,
