@@ -12,6 +12,12 @@ from src.spotify.web_api import (
     SpotifyWebApiError,
 )
 
+from src.spotify.playlist_models import (
+    SpotifyPlaylistItemsPage,
+    SpotifyPlaylistParseError,
+    spotify_playlist_items_page_from_payload,
+)
+
 
 class SpotifyLikedSongsServiceStatus(
     str,
@@ -29,6 +35,7 @@ class SpotifyLikedSongsServiceStatus(
 class SpotifyLikedSongsServiceResult:
     status: SpotifyLikedSongsServiceStatus
     total: int | None = None
+    page: SpotifyPlaylistItemsPage | None = None
     message: str = ""
     error_code: str = ""
     retry_after_seconds: int | None = None
@@ -70,6 +77,21 @@ class SpotifyLikedSongsServiceResult:
         ):
             raise TypeError(
                 "refreshed must be a boolean"
+            )
+
+        if (
+            self.page is not None
+            and not isinstance(
+                self.page,
+                SpotifyPlaylistItemsPage,
+            )
+        ):
+            raise TypeError(
+                (
+                    "page must be a "
+                    "SpotifyPlaylistItemsPage "
+                    "or None"
+                )
             )
 
         if (
@@ -130,11 +152,26 @@ class SpotifyLikedSongsServiceResult:
                     )
                 )
 
-        elif self.total is not None:
+            if (
+                self.page is not None
+                and self.page.total
+                != self.total
+            ):
+                raise ValueError(
+                    (
+                        "Liked Songs page total "
+                        "must match result total."
+                    )
+                )
+
+        elif (
+            self.total is not None
+            or self.page is not None
+        ):
             raise ValueError(
                 (
                     "Non-ready Liked Songs results "
-                    "cannot expose a total."
+                    "cannot expose data."
                 )
             )
 
@@ -517,6 +554,128 @@ class SpotifyLikedSongsService:
                 SpotifyLikedSongsServiceStatus.READY
             ),
             total=total,
+            message=(
+                "Liked Songs loaded."
+            ),
+            refreshed=refreshed,
+        )
+
+
+    def get_tracks_page(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> SpotifyLikedSongsServiceResult:
+        if (
+            isinstance(
+                limit,
+                bool,
+            )
+            or not isinstance(
+                limit,
+                int,
+            )
+        ):
+            raise TypeError(
+                "limit must be an integer"
+            )
+
+        if (
+            limit < 1
+            or limit > 50
+        ):
+            raise ValueError(
+                (
+                    "limit must be between "
+                    "1 and 50"
+                )
+            )
+
+        if (
+            isinstance(
+                offset,
+                bool,
+            )
+            or not isinstance(
+                offset,
+                int,
+            )
+        ):
+            raise TypeError(
+                "offset must be an integer"
+            )
+
+        if offset < 0:
+            raise ValueError(
+                "offset cannot be negative"
+            )
+
+        (
+            access_token,
+            refreshed,
+            immediate,
+        ) = self._resolve_session()
+
+        if immediate is not None:
+            return immediate
+
+        try:
+            payload = (
+                self._api_client
+                .get_json(
+                    access_token,
+                    "/me/tracks",
+                    query={
+                        "limit": limit,
+                        "offset": offset,
+                    },
+                )
+            )
+
+        except SpotifyWebApiError as error:
+            return self._api_error(
+                error,
+                refreshed=refreshed,
+            )
+
+        except Exception:
+            return self._error(
+                "spotify_api_error",
+                (
+                    "Liked Songs could not be "
+                    "loaded from Spotify."
+                ),
+                refreshed=refreshed,
+            )
+
+        try:
+            page = (
+                spotify_playlist_items_page_from_payload(
+                    payload
+                )
+            )
+
+        except (
+            SpotifyPlaylistParseError,
+            TypeError,
+            ValueError,
+        ):
+            return self._error(
+                "invalid_response",
+                (
+                    "Spotify returned invalid "
+                    "Liked Songs data."
+                ),
+                refreshed=refreshed,
+            )
+
+        return SpotifyLikedSongsServiceResult(
+            status=(
+                SpotifyLikedSongsServiceStatus.READY
+            ),
+            total=page.total,
+            page=page,
             message=(
                 "Liked Songs loaded."
             ),
