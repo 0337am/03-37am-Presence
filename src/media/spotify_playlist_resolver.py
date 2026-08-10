@@ -137,6 +137,12 @@ class ResolvedSpotifyPlaylistItem:
         return self.playlist_item.added_at
 
     @property
+    def position(
+        self,
+    ) -> int:
+        return self.playlist_item.position
+
+    @property
     def local_available(
         self,
     ) -> bool | None:

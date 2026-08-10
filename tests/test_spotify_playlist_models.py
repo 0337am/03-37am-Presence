@@ -344,6 +344,156 @@ class SpotifyPlaylistModelTests(
             "Rental",
         )
 
+    def test_item_positions_preserve_raw_playlist_index_when_entries_are_omitted(
+        self,
+    ):
+        from unittest.mock import patch
+
+        from src.spotify.playlist_models import (
+            SpotifyPlaylistTrack,
+        )
+
+        track = SpotifyPlaylistTrack(
+            title="Position Test",
+            artist="Test Artist",
+            album="Test Album",
+            duration_ms=180000,
+            spotify_id="track123",
+            spotify_uri=(
+                "spotify:track:track123"
+            ),
+            artwork_reference="",
+            is_local=False,
+            playable=True,
+        )
+
+        payload = items_page(
+            [
+                {
+                    "is_local": False,
+                    "added_at": (
+                        "2026-08-08T00:00:00Z"
+                    ),
+                    "item": {
+                        "type": "track",
+                    },
+                },
+                {
+                    "is_local": False,
+                    "item": None,
+                },
+                {
+                    "is_local": False,
+                    "added_at": (
+                        "2026-08-08T00:00:00Z"
+                    ),
+                    "item": {
+                        "type": "track",
+                    },
+                },
+            ]
+        )
+
+        payload["offset"] = 27
+
+        with patch(
+            (
+                "src.spotify.playlist_models."
+                "_track_from_payload"
+            ),
+            return_value=track,
+        ):
+            page = (
+                spotify_playlist_items_page_from_payload(
+                    payload
+                )
+            )
+
+        self.assertEqual(
+            page.omitted_items,
+            1,
+        )
+
+        self.assertEqual(
+            [
+                item.position
+                for item in page.items
+            ],
+            [
+                27,
+                29,
+            ],
+        )
+
+    def test_playlist_item_position_rejects_invalid_values(
+        self,
+    ):
+        from dataclasses import replace
+        from unittest.mock import patch
+
+        from src.spotify.playlist_models import (
+            SpotifyPlaylistTrack,
+        )
+
+        track = SpotifyPlaylistTrack(
+            title="Position Test",
+            artist="Test Artist",
+            album="Test Album",
+            duration_ms=180000,
+            spotify_id="track123",
+            spotify_uri=(
+                "spotify:track:track123"
+            ),
+            artwork_reference="",
+            is_local=False,
+            playable=True,
+        )
+
+        payload = items_page(
+            [
+                {
+                    "is_local": False,
+                    "added_at": (
+                        "2026-08-08T00:00:00Z"
+                    ),
+                    "item": {
+                        "type": "track",
+                    },
+                },
+            ]
+        )
+
+        with patch(
+            (
+                "src.spotify.playlist_models."
+                "_track_from_payload"
+            ),
+            return_value=track,
+        ):
+            page = (
+                spotify_playlist_items_page_from_payload(
+                    payload
+                )
+            )
+
+        item = page.items[0]
+
+        with self.assertRaises(
+            ValueError
+        ):
+            replace(
+                item,
+                position=-1,
+            )
+
+        with self.assertRaises(
+            TypeError
+        ):
+            replace(
+                item,
+                position=True,
+            )
+
     def test_null_item_is_omitted(
         self,
     ):

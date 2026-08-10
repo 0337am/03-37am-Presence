@@ -171,6 +171,33 @@ class ExplodingResolver:
 class ResolvedSpotifyPlaylistModelTests(
     unittest.TestCase
 ):
+    def test_resolved_item_exposes_exact_playlist_position(
+        self,
+    ):
+        from dataclasses import replace
+
+        item = replace(
+            catalogue_item(),
+            position=28,
+        )
+
+        resolved = (
+            SpotifyPlaylistResolver()
+            .resolve_item(
+                item
+            )
+        )
+
+        self.assertEqual(
+            resolved.position,
+            28,
+        )
+
+        self.assertEqual(
+            resolved.playlist_item.position,
+            28,
+        )
+
     def test_resolved_item_is_frozen(
         self,
     ):

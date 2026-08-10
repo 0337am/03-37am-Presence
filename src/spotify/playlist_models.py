@@ -497,6 +497,7 @@ class SpotifyPlaylistItem:
     track: SpotifyPlaylistTrack
     is_local: bool
     added_at: str = ""
+    position: int = 0
 
     def __post_init__(
         self,
@@ -524,6 +525,32 @@ class SpotifyPlaylistItem:
                     "must match its track."
                 )
             )
+
+        raw_position = self.position
+
+        if isinstance(
+            raw_position,
+            bool,
+        ):
+            raise TypeError(
+                "position must be an integer"
+            )
+
+        checked_position = _integer(
+            raw_position,
+            "position",
+        )
+
+        if checked_position < 0:
+            raise ValueError(
+                "position cannot be negative"
+            )
+
+        object.__setattr__(
+            self,
+            "position",
+            checked_position,
+        )
 
         object.__setattr__(
             self,
@@ -992,7 +1019,12 @@ def spotify_playlist_items_page_from_payload(
     parsed = []
     omitted = 0
 
-    for raw_entry in raw_items:
+    for (
+        raw_index,
+        raw_entry,
+    ) in enumerate(
+        raw_items
+    ):
         entry = _object(
             raw_entry,
             "playlist entry",
@@ -1064,6 +1096,10 @@ def spotify_playlist_items_page_from_payload(
                 track=track,
                 is_local=(
                     track.is_local
+                ),
+                position=(
+                    offset
+                    + raw_index
                 ),
                 added_at=_text(
                     entry.get(
