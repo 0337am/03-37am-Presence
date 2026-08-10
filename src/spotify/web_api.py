@@ -1259,6 +1259,37 @@ def _validate_spotify_playlist_uri(
     return checked
 
 
+def _validate_spotify_playlist_position(
+    position,
+) -> int:
+    if (
+        isinstance(
+            position,
+            bool,
+        )
+        or not isinstance(
+            position,
+            int,
+        )
+    ):
+        raise TypeError(
+            (
+                "Spotify playlist position "
+                "must be an integer."
+            )
+        )
+
+    if position < 0:
+        raise ValueError(
+            (
+                "Spotify playlist position "
+                "cannot be negative."
+            )
+        )
+
+    return position
+
+
 def _validate_spotify_device_id(
     device_id,
 ) -> str:
@@ -1765,6 +1796,56 @@ class SpotifyWebApiClient:
                 "offset": {
                     "uri": track_uri,
                 },
+            },
+        )
+
+    def start_playlist_position_playback(
+        self,
+        access_token: str,
+        playlist_uri: str,
+        position: int,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        context_uri = (
+            _validate_spotify_playlist_uri(
+                playlist_uri
+            )
+        )
+
+        playlist_position = (
+            _validate_spotify_playlist_position(
+                position
+            )
+        )
+
+        query = None
+
+        if device_id is not None:
+            query = {
+                "device_id": (
+                    _validate_spotify_device_id(
+                        device_id
+                    )
+                ),
+            }
+
+        url = _build_spotify_api_url(
+            START_PLAYBACK_PATH,
+            query,
+        )
+
+        self._put_json_no_content(
+            url,
+            access_token,
+            {
+                "context_uri": context_uri,
+                "offset": {
+                    "position": (
+                        playlist_position
+                    ),
+                },
+                "position_ms": 0,
             },
         )
 

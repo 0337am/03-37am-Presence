@@ -481,6 +481,296 @@ class SpotifyPlaybackApiTests(
         )
 
 
+    def test_playlist_position_playback_contract(
+        self,
+    ):
+        response = FakeResponse(
+            url=(
+                PLAYBACK_URL
+                + "?device_id=desktop-device"
+            )
+        )
+
+        transport = RecordingUrlOpen(
+            response
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=transport,
+            timeout_seconds=6.5,
+        )
+
+        result = (
+            client
+            .start_playlist_position_playback(
+                "test-access-token",
+                (
+                    "spotify:playlist:"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
+                28,
+                device_id="desktop-device",
+            )
+        )
+
+        self.assertIsNone(
+            result
+        )
+
+        self.assertEqual(
+            len(
+                transport.requests
+            ),
+            1,
+        )
+
+        request = transport.requests[
+            0
+        ]
+
+        self.assertEqual(
+            request.get_method(),
+            "PUT",
+        )
+
+        self.assertEqual(
+            request.full_url,
+            (
+                PLAYBACK_URL
+                + "?device_id=desktop-device"
+            ),
+        )
+
+        self.assertEqual(
+            request.get_header(
+                "Authorization"
+            ),
+            "Bearer test-access-token",
+        )
+
+        self.assertEqual(
+            json.loads(
+                request.data.decode(
+                    "utf-8"
+                )
+            ),
+            {
+                "context_uri": (
+                    "spotify:playlist:"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
+                "offset": {
+                    "position": 28,
+                },
+                "position_ms": 0,
+            },
+        )
+
+        self.assertEqual(
+            transport.timeouts,
+            [
+                6.5,
+            ],
+        )
+
+        self.assertTrue(
+            response.closed
+        )
+
+    def test_playlist_position_zero_is_accepted(
+        self,
+    ):
+        transport = RecordingUrlOpen(
+            FakeResponse()
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=transport
+        )
+
+        client.start_playlist_position_playback(
+            "token",
+            "spotify:playlist:abc123",
+            0,
+        )
+
+        self.assertEqual(
+            len(
+                transport.requests
+            ),
+            1,
+        )
+
+        request = transport.requests[
+            0
+        ]
+
+        self.assertEqual(
+            request.full_url,
+            PLAYBACK_URL,
+        )
+
+        self.assertEqual(
+            json.loads(
+                request.data.decode(
+                    "utf-8"
+                )
+            ),
+            {
+                "context_uri": (
+                    "spotify:playlist:abc123"
+                ),
+                "offset": {
+                    "position": 0,
+                },
+                "position_ms": 0,
+            },
+        )
+
+    def test_playlist_position_rejects_invalid_values(
+        self,
+    ):
+        transport = RecordingUrlOpen(
+            FakeResponse()
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=transport
+        )
+
+        invalid_values = (
+            (
+                -1,
+                ValueError,
+            ),
+            (
+                True,
+                TypeError,
+            ),
+            (
+                False,
+                TypeError,
+            ),
+            (
+                1.5,
+                TypeError,
+            ),
+            (
+                "1",
+                TypeError,
+            ),
+            (
+                None,
+                TypeError,
+            ),
+        )
+
+        for (
+            value,
+            expected_error,
+        ) in invalid_values:
+            with self.subTest(
+                value=value
+            ):
+                with self.assertRaises(
+                    expected_error
+                ):
+                    (
+                        client
+                        .start_playlist_position_playback(
+                            "token",
+                            (
+                                "spotify:playlist:"
+                                "abc123"
+                            ),
+                            value,
+                        )
+                    )
+
+        self.assertEqual(
+            transport.requests,
+            [],
+        )
+
+    def test_playlist_position_rejects_invalid_playlist_before_network(
+        self,
+    ):
+        transport = RecordingUrlOpen(
+            FakeResponse()
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=transport
+        )
+
+        invalid_values = (
+            "",
+            " spotify:playlist:abc123",
+            "spotify:playlist:",
+            "spotify:playlist:abc def",
+            "spotify:album:abc123",
+        )
+
+        for value in invalid_values:
+            with self.subTest(
+                value=value
+            ):
+                with self.assertRaises(
+                    ValueError
+                ):
+                    (
+                        client
+                        .start_playlist_position_playback(
+                            "token",
+                            value,
+                            0,
+                        )
+                    )
+
+        self.assertEqual(
+            transport.requests,
+            [],
+        )
+
+    def test_playlist_position_preserves_api_error_mapping(
+        self,
+    ):
+        error = HTTPError(
+            PLAYBACK_URL,
+            403,
+            "Forbidden",
+            {},
+            BytesIO(
+                b'{"error":{"status":403}}'
+            ),
+        )
+
+        client = SpotifyWebApiClient(
+            urlopen=RecordingUrlOpen(
+                error
+            )
+        )
+
+        with self.assertRaises(
+            SpotifyWebApiError
+        ) as caught:
+            (
+                client
+                .start_playlist_position_playback(
+                    "token",
+                    (
+                        "spotify:playlist:"
+                        "abc123"
+                    ),
+                    28,
+                )
+            )
+
+        self.assertEqual(
+            caught.exception.error_code,
+            "forbidden",
+        )
+
     def test_playlist_context_playback_contract(
         self,
     ):
