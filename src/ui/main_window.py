@@ -61,6 +61,9 @@ from src.spotify.liked_songs_service import (
 from src.spotify.album_service import (
     SpotifyAlbumService,
 )
+from src.spotify.artist_service import (
+    SpotifyArtistService,
+)
 from src.spotify.resolved_playlist_service import (
     SpotifyResolvedPlaylistService,
 )
@@ -81,6 +84,9 @@ from src.spotify.qt_liked_songs_runtime import (
 )
 from src.spotify.qt_album_runtime import (
     SpotifyQtAlbumRuntime,
+)
+from src.spotify.qt_artist_runtime import (
+    SpotifyQtArtistRuntime,
 )
 from src.spotify.qt_search_runtime import (
     SpotifyQtSearchRuntime,
@@ -1038,6 +1044,12 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.spotify_artist_service = (
+            SpotifyArtistService(
+                self.spotify_session_manager
+            )
+        )
+
         self.spotify_resolved_playlist_service = (
             SpotifyResolvedPlaylistService(
                 self.spotify_playlist_service,
@@ -1063,6 +1075,10 @@ class MainWindow(QMainWindow):
             self.spotify_album_service
         )
 
+        spotify_artist_service = (
+            self.spotify_artist_service
+        )
+
         self.spotify_liked_songs_runtime = (
             SpotifyQtLikedSongsRuntime(
                 (
@@ -1077,6 +1093,16 @@ class MainWindow(QMainWindow):
             SpotifyQtAlbumRuntime(
                 (
                     lambda service=spotify_album_service:
+                    service
+                ),
+                parent=self,
+            )
+        )
+
+        self.spotify_artist_runtime = (
+            SpotifyQtArtistRuntime(
+                (
+                    lambda service=spotify_artist_service:
                     service
                 ),
                 parent=self,
@@ -2291,6 +2317,7 @@ class MainWindow(QMainWindow):
         for spotify_runtime_name in (
             "spotify_playback_runtime",
             "spotify_album_runtime",
+            "spotify_artist_runtime",
             "spotify_playlist_runtime",
             "spotify_liked_songs_runtime",
             "spotify_search_runtime",
