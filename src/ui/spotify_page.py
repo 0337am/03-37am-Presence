@@ -21,6 +21,9 @@ from src.spotify.search_models import (
     SpotifySearchItem,
     SpotifySearchItemType,
 )
+from src.spotify.playlist_models import (
+    SpotifyPlaylistSummary,
+)
 from src.ui.theme import ThemeManager
 from src.ui.spotify_playlist_detail import (
     SpotifyPlaylistDetail,
@@ -126,6 +129,10 @@ class SpotifyPage(
 
         self._activated = False
         self._current_song = None
+
+        self._playlist_detail_return_index = (
+            SPOTIFY_HOME_INDEX
+        )
 
         self.setObjectName(
             "spotifyRoot"
@@ -453,6 +460,10 @@ class SpotifyPage(
             self._handle_search_track_activated
         )
 
+        self.search_page.playlist_activated.connect(
+            self._handle_search_playlist_activated
+        )
+
         self.playlist_home.playlist_activated.connect(
             self.show_playlist_detail
         )
@@ -462,11 +473,89 @@ class SpotifyPage(
         )
 
         self.playlist_detail.back_requested.connect(
-            self.show_home
+            self._show_playlist_detail_return_section
         )
 
         self.liked_songs_detail.back_requested.connect(
             self.show_home
+        )
+
+    def _handle_search_playlist_activated(
+        self,
+        item,
+    ) -> bool:
+        if not isinstance(
+            item,
+            SpotifySearchItem,
+        ):
+            return False
+
+        if (
+            item.item_type
+            is not SpotifySearchItemType.PLAYLIST
+        ):
+            return False
+
+        playlist_uri = (
+            item.uri.strip()
+            if isinstance(
+                item.uri,
+                str,
+            )
+            else ""
+        )
+
+        expected_uri = (
+            "spotify:playlist:"
+            + item.spotify_id
+        )
+
+        if playlist_uri != expected_uri:
+            return False
+
+        owner_name = (
+            item.subtitle.strip()
+            if isinstance(
+                item.subtitle,
+                str,
+            )
+            else ""
+        )
+
+        if owner_name.casefold() == "playlist":
+            owner_name = ""
+
+        artwork_reference = (
+            item.image_url.strip()
+            if isinstance(
+                item.image_url,
+                str,
+            )
+            else ""
+        )
+
+        try:
+            playlist = SpotifyPlaylistSummary(
+                spotify_id=item.spotify_id,
+                name=item.name,
+                spotify_uri=playlist_uri,
+                owner_name=owner_name,
+                total_items=0,
+                artwork_reference=(
+                    artwork_reference
+                ),
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        return bool(
+            self.show_playlist_detail(
+                playlist
+            )
         )
 
     def _handle_search_track_activated(
@@ -899,10 +988,35 @@ class SpotifyPage(
                 )
             )
 
+    def _show_playlist_detail_return_section(
+        self,
+    ) -> None:
+        if (
+            self._playlist_detail_return_index
+            == SPOTIFY_SEARCH_INDEX
+        ):
+            self.show_search()
+
+            return
+
+        self.show_home()
+
     def show_playlist_detail(
         self,
         playlist,
     ) -> bool:
+        current_index = (
+            self.content_stack.currentIndex()
+        )
+
+        if current_index in {
+            SPOTIFY_HOME_INDEX,
+            SPOTIFY_SEARCH_INDEX,
+        }:
+            self._playlist_detail_return_index = (
+                current_index
+            )
+
         self.playlist_detail.set_playlist(
             playlist
         )

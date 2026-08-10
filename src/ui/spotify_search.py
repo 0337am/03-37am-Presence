@@ -120,7 +120,10 @@ class SpotifySearchResultRow(
 
         self._activatable = (
             item.item_type
-            is SpotifySearchItemType.TRACK
+            in {
+                SpotifySearchItemType.TRACK,
+                SpotifySearchItemType.PLAYLIST,
+            }
         )
 
         if self._activatable:
@@ -639,6 +642,7 @@ class SpotifySearchPage(
     QWidget
 ):
     track_activated = pyqtSignal(object)
+    playlist_activated = pyqtSignal(object)
 
     def __init__(
         self,
@@ -1123,13 +1127,21 @@ class SpotifySearchPage(
 
         if (
             item.item_type
-            is not SpotifySearchItemType.TRACK
+            is SpotifySearchItemType.TRACK
         ):
+            self.track_activated.emit(
+                item
+            )
+
             return
 
-        self.track_activated.emit(
-            item
-        )
+        if (
+            item.item_type
+            is SpotifySearchItemType.PLAYLIST
+        ):
+            self.playlist_activated.emit(
+                item
+            )
 
     def _sync_search_controls(
         self,

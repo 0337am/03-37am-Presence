@@ -1062,6 +1062,52 @@ class SpotifyPlaylistDetail(
 
         self._refresh_playing_rows()
 
+    def _update_playlist_subtitle(
+        self,
+        total_items,
+    ) -> None:
+        if self.playlist is None:
+            return
+
+        try:
+            checked_total = int(
+                total_items
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return
+
+        if checked_total < 0:
+            return
+
+        owner = (
+            self.playlist.owner_name
+            or "Unknown owner"
+        )
+
+        count = (
+            str(
+                checked_total
+            )
+            + (
+                " track"
+                if checked_total == 1
+                else " tracks"
+            )
+        )
+
+        self.subtitle_label.setText(
+            (
+                owner
+                + " | "
+                + count
+            )
+        )
+
+
     def set_playlist(
         self,
         playlist,
@@ -1120,7 +1166,7 @@ class SpotifyPlaylistDetail(
         self.subtitle_label.setText(
             (
                 owner
-                + " • "
+                + " | "
                 + count
             )
         )
@@ -1128,6 +1174,7 @@ class SpotifyPlaylistDetail(
         self.status_label.setText(
             "Ready to load playlist tracks."
         )
+
 
     def load(
         self,
@@ -1172,6 +1219,10 @@ class SpotifyPlaylistDetail(
 
         self.rows.clear()
 
+        self.empty_label.setText(
+            "No tracks to display."
+        )
+
         self.empty_label.setVisible(
             True
         )
@@ -1198,6 +1249,61 @@ class SpotifyPlaylistDetail(
                 local_snapshot_available
             ),
         )
+
+    @staticmethod
+    def _playlist_items_error_message(
+        error_code,
+        message,
+    ) -> str:
+        checked_code = str(
+            error_code
+            or ""
+        ).strip().lower()
+
+        if checked_code == "forbidden":
+            return (
+                "Spotify did not allow this app "
+                "to load tracks for this playlist."
+            )
+
+        return str(
+            message
+            or (
+                "Spotify could not load "
+                "this playlist."
+            )
+        ).strip()
+
+    @staticmethod
+    def _playlist_items_error_is_forbidden(
+        error_code,
+    ) -> bool:
+        return (
+            str(
+                error_code
+                or ""
+            ).strip().lower()
+            == "forbidden"
+        )
+
+    def _update_playlist_subtitle_unavailable(
+        self,
+    ) -> None:
+        if self.playlist is None:
+            return
+
+        owner = (
+            self.playlist.owner_name
+            or "Unknown owner"
+        )
+
+        self.subtitle_label.setText(
+            (
+                owner
+                + " | track count unavailable"
+            )
+        )
+
 
     def handle_items_ready(
         self,
@@ -1240,15 +1346,20 @@ class SpotifyPlaylistDetail(
             self._pending_load = False
             self._pending_next_page = False
 
-            message = str(
-                getattr(
-                    result,
-                    "message",
-                    "",
-                )
-                or (
-                    "Spotify could not load "
-                    "this playlist."
+            error_code = getattr(
+                result,
+                "error_code",
+                "",
+            )
+
+            message = (
+                self._playlist_items_error_message(
+                    error_code,
+                    getattr(
+                        result,
+                        "message",
+                        "",
+                    ),
                 )
             )
 
@@ -1267,6 +1378,19 @@ class SpotifyPlaylistDetail(
 
             else:
                 self.clear_tracks()
+
+                if (
+                    self
+                    ._playlist_items_error_is_forbidden(
+                        error_code
+                    )
+                ):
+                    self.empty_label.setText(
+                        "Track list unavailable."
+                    )
+
+
+                    self._update_playlist_subtitle_unavailable()
 
                 self.status_label.setText(
                     message
@@ -1407,13 +1531,12 @@ class SpotifyPlaylistDetail(
         if not self._pagination_enabled:
             return
 
-        safe_message = str(
-            message
-            or (
-                "Spotify could not load "
-                "this playlist."
+        safe_message = (
+            self._playlist_items_error_message(
+                error_code,
+                message,
             )
-        ).strip()
+        )
 
         if self.rows:
             self.status_label.setText(
@@ -1429,6 +1552,19 @@ class SpotifyPlaylistDetail(
             )
 
         else:
+            if (
+                self
+                ._playlist_items_error_is_forbidden(
+                    error_code
+                )
+            ):
+                self.empty_label.setText(
+                    "Track list unavailable."
+                )
+
+
+                self._update_playlist_subtitle_unavailable()
+
             self.status_label.setText(
                 safe_message
             )
@@ -1940,6 +2076,10 @@ class SpotifyPlaylistDetail(
             return True
 
         self._total = page_total
+
+        self._update_playlist_subtitle(
+            page_total
+        )
 
         stretch_index = (
             self.track_layout.count()

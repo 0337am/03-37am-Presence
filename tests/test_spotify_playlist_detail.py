@@ -591,6 +591,216 @@ class SpotifyPlaylistDetailTests(
             widget.last_result
         )
 
+\
+    def test_ready_result_updates_header_with_real_total(
+        self,
+    ):
+        widget, _runtime = (
+            self.make_detail()
+        )
+
+        widget.set_playlist(
+            playlist()
+        )
+
+        self.assertIn(
+            "94 tracks",
+            widget.subtitle_label.text(),
+        )
+
+        widget.load()
+
+        page = resolved_page(
+            resolved_item(
+                title="Rental",
+            ),
+            total=35,
+        )
+
+        widget.handle_items_ready(
+            "playlist123",
+            ready_result(
+                page
+            ),
+        )
+
+        self.assertIn(
+            "35 tracks",
+            widget.subtitle_label.text(),
+        )
+
+        self.assertNotIn(
+            "94 tracks",
+            widget.subtitle_label.text(),
+        )
+
+    def test_forbidden_result_uses_track_list_unavailable_state(
+        self,
+    ):
+        widget, _runtime = (
+            self.make_detail()
+        )
+
+        widget.set_playlist(
+            playlist()
+        )
+
+        widget.load()
+
+        widget.handle_items_ready(
+            "playlist123",
+            SimpleNamespace(
+                ready=False,
+                error_code="forbidden",
+                message=(
+                    "Spotify playlists could "
+                    "not be loaded."
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            widget.empty_label.text(),
+            "Track list unavailable.",
+        )
+
+
+        self.assertIn(
+            "track count unavailable",
+            widget.subtitle_label.text(),
+        )
+
+        self.assertNotIn(
+            "0 tracks",
+            widget.subtitle_label.text(),
+        )
+
+        self.assertEqual(
+            widget.status_label.text(),
+            (
+                "Spotify did not allow this app "
+                "to load tracks for this playlist."
+            ),
+        )
+
+    def test_forbidden_runtime_failure_uses_track_list_unavailable_state(
+        self,
+    ):
+        widget, _runtime = (
+            self.make_detail()
+        )
+
+        widget.set_playlist(
+            playlist()
+        )
+
+        widget.load()
+
+        widget.handle_runtime_failure(
+            OPERATION_PLAYLIST_ITEMS,
+            "playlist123",
+            "forbidden",
+            (
+                "Spotify playlists could "
+                "not be loaded."
+            ),
+        )
+
+        self.assertEqual(
+            widget.empty_label.text(),
+            "Track list unavailable.",
+        )
+
+
+        self.assertIn(
+            "track count unavailable",
+            widget.subtitle_label.text(),
+        )
+
+        self.assertNotIn(
+            "0 tracks",
+            widget.subtitle_label.text(),
+        )
+
+        self.assertEqual(
+            widget.status_label.text(),
+            (
+                "Spotify did not allow this app "
+                "to load tracks for this playlist."
+            ),
+        )
+
+\
+    def test_playlist_subtitle_uses_ascii_separator(
+        self,
+    ):
+        widget, _runtime = (
+            self.make_detail()
+        )
+
+        widget.set_playlist(
+            playlist()
+        )
+
+        self.assertEqual(
+            widget.subtitle_label.text(),
+            "03:37am | 94 tracks",
+        )
+
+        widget.load()
+
+        page = resolved_page(
+            resolved_item(
+                title="Rental",
+            ),
+            total=35,
+        )
+
+        widget.handle_items_ready(
+            "playlist123",
+            ready_result(
+                page
+            ),
+        )
+
+        self.assertEqual(
+            widget.subtitle_label.text(),
+            "03:37am | 35 tracks",
+        )
+
+    def test_forbidden_playlist_subtitle_uses_ascii_separator(
+        self,
+    ):
+        widget, _runtime = (
+            self.make_detail()
+        )
+
+        widget.set_playlist(
+            playlist()
+        )
+
+        widget.load()
+
+        widget.handle_items_ready(
+            "playlist123",
+            SimpleNamespace(
+                ready=False,
+                error_code="forbidden",
+                message=(
+                    "Spotify playlists could "
+                    "not be loaded."
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            widget.subtitle_label.text(),
+            (
+                "03:37am | "
+                "track count unavailable"
+            ),
+        )
+
     def test_non_ready_and_runtime_failures_are_user_safe(
         self,
     ):
