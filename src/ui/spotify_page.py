@@ -1165,6 +1165,16 @@ class SpotifyPage(
     def _install_playlist_detail(
         self,
     ) -> None:
+        search_artwork_loader = getattr(
+            getattr(
+                self,
+                "search_page",
+                None,
+            ),
+            "artwork_loader",
+            None,
+        )
+
         self.playlist_detail = (
             SpotifyPlaylistDetail(
                 self.playlist_runtime,
@@ -1173,6 +1183,9 @@ class SpotifyPage(
                 ),
                 theme_manager=(
                     self.theme_manager
+                ),
+                artwork_loader=(
+                    search_artwork_loader
                 ),
                 parent=(
                     self.content_stack

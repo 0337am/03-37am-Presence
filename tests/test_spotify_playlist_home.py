@@ -598,6 +598,16 @@ class SpotifyPlaylistHomeTests(
             [],
         )
 
+        self.assertIs(
+            page_widget.playlist_home.artwork_loader,
+            page_widget.search_page.artwork_loader,
+        )
+
+        self.assertIs(
+            page_widget.playlist_detail.artwork_loader,
+            page_widget.search_page.artwork_loader,
+        )
+
     def test_activating_spotify_page_loads_playlists_once(
         self,
     ):

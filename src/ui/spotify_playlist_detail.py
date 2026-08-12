@@ -112,6 +112,7 @@ class SpotifyPlaylistTrackRow(
         resolved_item,
         *,
         number: int,
+        artwork_loader=None,
         parent=None,
     ) -> None:
         super().__init__(
@@ -121,6 +122,8 @@ class SpotifyPlaylistTrackRow(
         self.resolved_item = (
             resolved_item
         )
+        self.artwork_loader = artwork_loader
+        self._artwork_installed = False
 
         self._number_text = str(
             number
@@ -178,6 +181,42 @@ class SpotifyPlaylistTrackRow(
             resolved_item,
             "unified_track",
             None,
+        )
+
+        is_local = bool(
+            getattr(
+                resolved_item,
+                "is_local",
+                False,
+            )
+        )
+
+        self._artwork_reference = (
+            str(
+                getattr(
+                    track,
+                    "artwork_reference",
+                    "",
+                )
+                or ""
+            ).strip()
+            if not is_local
+            else ""
+        )
+
+        self.artwork_label = QLabel(
+            "\u266b",
+            self,
+        )
+        self.artwork_label.setObjectName(
+            "spotifyPlaylistTrackArtwork"
+        )
+        self.artwork_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.artwork_label.setFixedSize(
+            44,
+            44,
         )
 
         title = str(
@@ -241,14 +280,6 @@ class SpotifyPlaylistTrackRow(
 
         information.addWidget(
             self.artist_label
-        )
-
-        is_local = bool(
-            getattr(
-                resolved_item,
-                "is_local",
-                False,
-            )
         )
 
         local_available = getattr(
@@ -380,6 +411,10 @@ class SpotifyPlaylistTrackRow(
             self.number_label
         )
 
+        layout.addWidget(
+            self.artwork_label
+        )
+
         layout.addLayout(
             information,
             stretch=1,
@@ -392,6 +427,104 @@ class SpotifyPlaylistTrackRow(
         layout.addWidget(
             self.duration_label
         )
+
+        self._request_artwork()
+
+    def _request_artwork(
+        self,
+    ) -> None:
+        if (
+            not self._artwork_reference
+            or self.artwork_loader is None
+        ):
+            return
+
+        request = getattr(
+            self.artwork_loader,
+            "request",
+            None,
+        )
+        ready = getattr(
+            self.artwork_loader,
+            "artwork_ready",
+            None,
+        )
+        failed = getattr(
+            self.artwork_loader,
+            "artwork_failed",
+            None,
+        )
+
+        if (
+            not callable(request)
+            or ready is None
+            or failed is None
+        ):
+            return
+
+        try:
+            ready.connect(
+                self._handle_artwork_ready
+            )
+            failed.connect(
+                self._handle_artwork_failed
+            )
+            request(
+                self._artwork_reference
+            )
+        except Exception:
+            return
+
+    def _handle_artwork_ready(
+        self,
+        artwork_url: str,
+        pixmap,
+    ) -> None:
+        if artwork_url != self._artwork_reference:
+            return
+
+        is_null = getattr(
+            pixmap,
+            "isNull",
+            None,
+        )
+        scaled = getattr(
+            pixmap,
+            "scaled",
+            None,
+        )
+
+        if (
+            not callable(is_null)
+            or not callable(scaled)
+            or is_null()
+        ):
+            return
+
+        display = scaled(
+            self.artwork_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+        if display.isNull():
+            return
+
+        self.artwork_label.setText("")
+        self.artwork_label.setPixmap(display)
+        self._artwork_installed = True
+
+    def _handle_artwork_failed(
+        self,
+        artwork_url: str,
+    ) -> None:
+        if artwork_url != self._artwork_reference:
+            return
+
+        # The fallback is already present. In particular, never
+        # replace a good pixmap after a later failure signal.
+        if self._artwork_installed:
+            return
 
 
     def set_playing(
@@ -483,6 +616,7 @@ class SpotifyPlaylistDetail(
         *,
         playback_runtime=None,
         theme_manager=None,
+        artwork_loader=None,
         parent=None,
     ) -> None:
         super().__init__(
@@ -533,6 +667,7 @@ class SpotifyPlaylistDetail(
         self.playback_runtime = (
             playback_runtime
         )
+        self.artwork_loader = artwork_loader
 
         self._active_playback_title = ""
         self._current_song = None
@@ -2095,6 +2230,9 @@ class SpotifyPlaylistDetail(
                             self.rows
                         )
                         + 1
+                    ),
+                    artwork_loader=(
+                        self.artwork_loader
                     ),
                     parent=(
                         self.track_container

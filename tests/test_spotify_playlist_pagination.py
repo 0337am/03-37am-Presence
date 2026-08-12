@@ -7,6 +7,7 @@ from PyQt6.QtCore import (
     QObject,
     pyqtSignal,
 )
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
 )
@@ -85,6 +86,20 @@ class PaginationRuntime(
         )
 
 
+class FakeArtworkLoader(
+    QObject
+):
+    artwork_ready = pyqtSignal(str, object)
+    artwork_failed = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.requests = []
+
+    def request(self, artwork_url):
+        self.requests.append(artwork_url)
+
+
 def playlist(
     total=94,
 ):
@@ -101,15 +116,21 @@ def playlist(
 
 def item(
     title="Rental",
+    artwork_reference="",
+    position=0,
 ):
     return SimpleNamespace(
         is_local=False,
         local_available=None,
+        position=position,
         unified_track=(
             SimpleNamespace(
                 title=title,
                 artist="Juice WRLD",
                 duration_ms=240000,
+                artwork_reference=(
+                    artwork_reference
+                ),
             )
         ),
     )
@@ -164,6 +185,7 @@ class SpotifyPlaylistPaginationTests(
         self,
         *,
         total=94,
+        artwork_loader=None,
     ):
         runtime = (
             PaginationRuntime()
@@ -174,6 +196,9 @@ class SpotifyPlaylistPaginationTests(
                 runtime,
                 theme_manager=(
                     FakeThemeManager()
+                ),
+                artwork_loader=(
+                    artwork_loader
                 ),
             )
         )
@@ -191,6 +216,74 @@ class SpotifyPlaylistPaginationTests(
         return (
             widget,
             runtime,
+        )
+
+    def test_paginated_rows_use_shared_loader_and_own_references(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        widget, _runtime = self.make_detail(
+            total=4,
+            artwork_loader=loader,
+        )
+        first_reference = "https://i.scdn.co/image/first"
+        second_reference = "https://i.scdn.co/image/second"
+
+        widget.set_resolved_page(
+            page(
+                item(
+                    "First",
+                    first_reference,
+                    position=0,
+                ),
+                total=4,
+                offset=0,
+                limit=2,
+                omitted_items=1,
+            )
+        )
+        widget._append_resolved_page(
+            page(
+                item(
+                    "Second",
+                    second_reference,
+                    position=3,
+                ),
+                total=4,
+                offset=2,
+                limit=2,
+                omitted_items=1,
+            )
+        )
+
+        self.assertEqual(
+            loader.requests,
+            [first_reference, second_reference],
+        )
+        self.assertTrue(
+            all(row.artwork_loader is loader for row in widget.rows)
+        )
+        self.assertEqual(
+            [row.resolved_item.position for row in widget.rows],
+            [0, 3],
+        )
+        self.assertEqual(
+            [row.number_label.text() for row in widget.rows],
+            ["1", "2"],
+        )
+
+        loader.artwork_ready.emit(
+            second_reference,
+            QPixmap(8, 8),
+        )
+
+        self.assertEqual(widget.rows[0].artwork_label.text(), "\u266b")
+        self.assertTrue(
+            widget.rows[0].artwork_label.pixmap().isNull()
+        )
+        self.assertEqual(widget.rows[1].artwork_label.text(), "")
+        self.assertFalse(
+            widget.rows[1].artwork_label.pixmap().isNull()
         )
 
     def items(

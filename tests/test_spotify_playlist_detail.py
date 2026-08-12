@@ -8,6 +8,7 @@ from PyQt6.QtCore import (
     QObject,
     pyqtSignal,
 )
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
 )
@@ -101,12 +102,51 @@ class FakePlaylistRuntime(
         )
 
 
-def playlist():
+class FakeArtworkLoader(
+    QObject
+):
+    artwork_ready = pyqtSignal(
+        str,
+        object,
+    )
+    artwork_failed = pyqtSignal(
+        str
+    )
+
+    def __init__(
+        self,
+        *,
+        cached_pixmap=None,
+    ):
+        super().__init__()
+        self.requests = []
+        self.cached_pixmap = cached_pixmap
+
+    def request(
+        self,
+        artwork_url,
+    ):
+        self.requests.append(
+            artwork_url
+        )
+
+        if self.cached_pixmap is not None:
+            self.artwork_ready.emit(
+                artwork_url,
+                self.cached_pixmap,
+            )
+
+
+def playlist(
+    spotify_id="playlist123",
+    name="LLJW",
+):
     return SpotifyPlaylistSummary(
-        spotify_id="playlist123",
-        name="LLJW",
+        spotify_id=spotify_id,
+        name=name,
         spotify_uri=(
-            "spotify:playlist:playlist123"
+            "spotify:playlist:"
+            + spotify_id
         ),
         owner_name="03:37am",
         total_items=94,
@@ -120,6 +160,7 @@ def resolved_item(
     duration_ms=240000,
     is_local=False,
     local_available=None,
+    artwork_reference="",
 ):
     return SimpleNamespace(
         is_local=is_local,
@@ -132,6 +173,9 @@ def resolved_item(
                 artist=artist,
                 duration_ms=(
                     duration_ms
+                ),
+                artwork_reference=(
+                    artwork_reference
                 ),
             )
         ),
@@ -213,6 +257,8 @@ class SpotifyPlaylistDetailTests(
 
     def make_detail(
         self,
+        *,
+        artwork_loader=None,
     ):
         runtime = (
             FakePlaylistRuntime()
@@ -224,6 +270,9 @@ class SpotifyPlaylistDetailTests(
                 theme_manager=(
                     FakeThemeManager()
                 ),
+                artwork_loader=(
+                    artwork_loader
+                ),
             )
         )
 
@@ -234,6 +283,238 @@ class SpotifyPlaylistDetailTests(
         return (
             widget,
             runtime,
+        )
+
+    def test_catalogue_row_requests_expected_artwork(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        reference = "https://i.scdn.co/image/album"
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(
+                artwork_reference=reference,
+            ),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+
+        self.assertEqual(loader.requests, [reference])
+        self.assertEqual(row.artwork_label.text(), "\u266b")
+
+    def test_missing_artwork_keeps_fallback_without_request(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+
+        self.assertEqual(loader.requests, [])
+        self.assertEqual(row.artwork_label.text(), "\u266b")
+        self.assertTrue(
+            row.artwork_label.pixmap().isNull()
+        )
+
+    def test_matching_artwork_installs_pixmap(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        reference = "https://i.scdn.co/image/album"
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(artwork_reference=reference),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+        pixmap = QPixmap(8, 8)
+
+        loader.artwork_ready.emit(reference, pixmap)
+
+        self.assertEqual(row.artwork_label.text(), "")
+        self.assertIsNotNone(row.artwork_label.pixmap())
+
+    def test_unrelated_artwork_and_failure_keep_fallback(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        reference = "https://i.scdn.co/image/album"
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(artwork_reference=reference),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+
+        loader.artwork_ready.emit(
+            "https://i.scdn.co/image/other",
+            QPixmap(8, 8),
+        )
+        loader.artwork_failed.emit(reference)
+
+        self.assertEqual(row.artwork_label.text(), "\u266b")
+        self.assertTrue(
+            row.artwork_label.pixmap().isNull()
+        )
+
+    def test_null_pixmap_keeps_fallback(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        reference = "https://i.scdn.co/image/album"
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(artwork_reference=reference),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+
+        loader.artwork_ready.emit(reference, QPixmap())
+
+        self.assertEqual(row.artwork_label.text(), "\u266b")
+        self.assertTrue(
+            row.artwork_label.pixmap().isNull()
+        )
+
+    def test_synchronous_cached_artwork_is_handled(
+        self,
+    ):
+        loader = FakeArtworkLoader(
+            cached_pixmap=QPixmap(8, 8)
+        )
+        reference = "https://i.scdn.co/image/album"
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(artwork_reference=reference),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+
+        self.assertEqual(row.artwork_label.text(), "")
+        self.assertIsNotNone(row.artwork_label.pixmap())
+
+    def test_shared_album_artwork_updates_multiple_rows(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        reference = "https://i.scdn.co/image/shared"
+        rows = [
+            SpotifyPlaylistTrackRow(
+                resolved_item(
+                    title=title,
+                    artwork_reference=reference,
+                ),
+                number=index,
+                artwork_loader=loader,
+            )
+            for index, title in enumerate(
+                ("One", "Two"),
+                start=1,
+            )
+        ]
+        for row in rows:
+            self.addCleanup(row.deleteLater)
+
+        loader.artwork_ready.emit(reference, QPixmap(8, 8))
+
+        for row in rows:
+            self.assertEqual(
+                row.artwork_label.text(),
+                "",
+            )
+            self.assertFalse(
+                row.artwork_label.pixmap().isNull()
+            )
+
+    def test_good_artwork_is_not_replaced_by_failure(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        reference = "https://i.scdn.co/image/album"
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(artwork_reference=reference),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+        loader.artwork_ready.emit(reference, QPixmap(8, 8))
+
+        loader.artwork_failed.emit(reference)
+
+        self.assertEqual(row.artwork_label.text(), "")
+        self.assertIsNotNone(row.artwork_label.pixmap())
+
+    def test_local_row_keeps_fallback_without_artwork_request(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        row = SpotifyPlaylistTrackRow(
+            resolved_item(
+                is_local=True,
+                local_available=True,
+                artwork_reference="C:\\Music\\cover.jpg",
+            ),
+            number=1,
+            artwork_loader=loader,
+        )
+        self.addCleanup(row.deleteLater)
+
+        self.assertEqual(loader.requests, [])
+        self.assertEqual(row.artwork_label.text(), "\u266b")
+
+    def test_detail_passes_shared_loader_and_rejects_old_playlist_artwork(
+        self,
+    ):
+        loader = FakeArtworkLoader()
+        widget, _runtime = self.make_detail(
+            artwork_loader=loader
+        )
+        playlist_a = playlist(
+            "playlist-a",
+            "Playlist A",
+        )
+        playlist_b = playlist(
+            "playlist-b",
+            "Playlist B",
+        )
+        artwork_a = "https://i.scdn.co/image/artwork-a"
+        artwork_b = "https://i.scdn.co/image/artwork-b"
+        widget.set_playlist(playlist_a)
+        widget.set_resolved_page(
+            resolved_page(
+                resolved_item(artwork_reference=artwork_a)
+            )
+        )
+        widget.set_playlist(playlist_b)
+        widget.set_resolved_page(
+            resolved_page(
+                resolved_item(artwork_reference=artwork_b)
+            )
+        )
+        current_row = widget.rows[0]
+
+        loader.artwork_ready.emit(artwork_a, QPixmap(8, 8))
+
+        self.assertIs(widget.playlist, playlist_b)
+        self.assertEqual(widget.title_label.text(), "Playlist B")
+        self.assertEqual(
+            current_row._artwork_reference,
+            artwork_b,
+        )
+        self.assertIs(current_row.artwork_loader, loader)
+        self.assertEqual(current_row.artwork_label.text(), "\u266b")
+        self.assertTrue(
+            current_row.artwork_label.pixmap().isNull()
+        )
+
+        loader.artwork_ready.emit(artwork_b, QPixmap(8, 8))
+
+        self.assertEqual(current_row.artwork_label.text(), "")
+        self.assertFalse(
+            current_row.artwork_label.pixmap().isNull()
         )
 
     def test_duration_formatter_uses_minutes_and_seconds(
