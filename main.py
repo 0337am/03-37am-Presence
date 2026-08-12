@@ -17,6 +17,7 @@ from src.system.first_run import (
     FirstRunDecision,
     FirstRunManager,
 )
+from src.system.startup_native_stage import install_startup_native_stage
 from src.ui.main_window import MainWindow
 from src.ui.tray import TrayController
 from src.ui.welcome import WelcomeDialog
@@ -315,6 +316,180 @@ def start_media_hotkey_runtime(
         return None
 
 
+STARTUP_WINDOW_WARMUP_MS = 200
+STARTUP_SPOTIFY_SETTLE_GRACE_MS = 100
+STARTUP_REVEAL_FALLBACK_MS = 2500
+
+
+def _show_window_when_startup_ready(
+    window,
+) -> None:
+    from PyQt6.QtCore import Qt as _Qt
+
+    hidden_native_attribute = (
+        _Qt.WidgetAttribute.WA_DontShowOnScreen
+    )
+
+    state = {
+        "warmup_complete": False,
+        "spotify_ready": True,
+        "spotify_grace_pending": False,
+        "revealed": False,
+    }
+
+    def reveal_if_ready() -> None:
+        if (
+            state["revealed"]
+            or not state["warmup_complete"]
+            or not state["spotify_ready"]
+        ):
+            return
+
+        state["revealed"] = True
+
+        try:
+            window.hide()
+            window.setAttribute(
+                hidden_native_attribute,
+                False,
+            )
+            window.show()
+        except RuntimeError:
+            return
+
+    def mark_warmup_complete() -> None:
+        state["warmup_complete"] = True
+        reveal_if_ready()
+
+    def mark_spotify_settled() -> None:
+        if (
+            state["revealed"]
+            or state["spotify_ready"]
+            or state["spotify_grace_pending"]
+        ):
+            return
+
+        state["spotify_grace_pending"] = True
+
+        def finish_spotify_grace() -> None:
+            state["spotify_grace_pending"] = False
+
+            if state["revealed"]:
+                return
+
+            state["spotify_ready"] = True
+            reveal_if_ready()
+
+        QTimer.singleShot(
+            STARTUP_SPOTIFY_SETTLE_GRACE_MS,
+            finish_spotify_grace,
+        )
+
+    def force_reveal() -> None:
+        if state["revealed"]:
+            return
+
+        state["warmup_complete"] = True
+        state["spotify_ready"] = True
+        reveal_if_ready()
+
+    spotify_home = None
+
+    try:
+        pages = getattr(
+            window,
+            "pages",
+            None,
+        )
+
+        spotify_page = getattr(
+            window,
+            "spotify_page",
+            None,
+        )
+
+        if (
+            pages is not None
+            and spotify_page is not None
+            and pages.currentWidget()
+            is spotify_page
+        ):
+            content_stack = getattr(
+                spotify_page,
+                "content_stack",
+                None,
+            )
+
+            candidate_home = getattr(
+                spotify_page,
+                "playlist_home",
+                None,
+            )
+
+            if (
+                content_stack is not None
+                and candidate_home is not None
+                and content_stack.currentWidget()
+                is candidate_home
+            ):
+                spotify_home = candidate_home
+
+    except Exception:
+        spotify_home = None
+
+    if spotify_home is not None:
+        settled_check = getattr(
+            spotify_home,
+            "initial_content_is_settled",
+            None,
+        )
+
+        settled_signal = getattr(
+            spotify_home,
+            "initial_content_settled",
+            None,
+        )
+
+        connect = getattr(
+            settled_signal,
+            "connect",
+            None,
+        )
+
+        if (
+            callable(settled_check)
+            and callable(connect)
+        ):
+            state["spotify_ready"] = False
+
+            try:
+                connect(
+                    mark_spotify_settled
+                )
+
+                if bool(settled_check()):
+                    mark_spotify_settled()
+
+            except Exception:
+                state["spotify_ready"] = True
+
+    window.setAttribute(
+        hidden_native_attribute,
+        True,
+    )
+
+    window.show()
+
+    QTimer.singleShot(
+        STARTUP_WINDOW_WARMUP_MS,
+        mark_warmup_complete,
+    )
+
+    QTimer.singleShot(
+        STARTUP_REVEAL_FALLBACK_MS,
+        force_reveal,
+    )
+
 def main() -> int:
     sys.excepthook = (
         handle_unhandled_exception
@@ -374,6 +549,10 @@ def main() -> int:
             app_icon
         )
 
+    install_startup_native_stage(
+        MainWindow
+    )
+
     window = MainWindow()
 
     QTimer.singleShot(
@@ -428,7 +607,9 @@ def main() -> int:
     )
 
     if show_main_window:
-        window.show()
+        _show_window_when_startup_ready(
+            window
+        )
 
     welcome_dialog = None
     welcome_flow = None

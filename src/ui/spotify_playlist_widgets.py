@@ -59,6 +59,7 @@ class SpotifyPlaylistRow(
     QFrame
 ):
     activated = pyqtSignal(object)
+    artwork_settled = pyqtSignal()
     def __init__(
         self,
         playlist: SpotifyPlaylistSummary,
@@ -83,6 +84,7 @@ class SpotifyPlaylistRow(
         )
 
         self._playlist_summary = playlist
+        self._artwork_settled = False
 
         self.setCursor(
             Qt.CursorShape.PointingHandCursor
@@ -230,6 +232,22 @@ class SpotifyPlaylistRow(
 
         self._request_artwork()
 
+    def artwork_is_settled(
+        self,
+    ) -> bool:
+        return bool(
+            self._artwork_settled
+        )
+
+    def _mark_artwork_settled(
+        self,
+    ) -> None:
+        if self._artwork_settled:
+            return
+
+        self._artwork_settled = True
+        self.artwork_settled.emit()
+
     def _request_artwork(
         self,
     ) -> None:
@@ -246,6 +264,7 @@ class SpotifyPlaylistRow(
             or self.artwork_loader
             is None
         ):
+            self._mark_artwork_settled()
             return
 
         request = getattr(
@@ -269,6 +288,7 @@ class SpotifyPlaylistRow(
         if not callable(
             request
         ):
+            self._mark_artwork_settled()
             return
 
         try:
@@ -287,7 +307,7 @@ class SpotifyPlaylistRow(
             )
 
         except Exception:
-            return
+            self._mark_artwork_settled()
 
     def _handle_artwork_ready(
         self,
@@ -300,30 +320,26 @@ class SpotifyPlaylistRow(
         ):
             return
 
-        is_null = getattr(
-            pixmap,
-            "isNull",
-            None,
-        )
-
-        scaled = getattr(
-            pixmap,
-            "scaled",
-            None,
-        )
-
-        if (
-            not callable(
-                is_null
-            )
-            or not callable(
-                scaled
-            )
-            or is_null()
-        ):
-            return
-
         try:
+            is_null = getattr(
+                pixmap,
+                "isNull",
+                None,
+            )
+
+            scaled = getattr(
+                pixmap,
+                "scaled",
+                None,
+            )
+
+            if (
+                not callable(is_null)
+                or not callable(scaled)
+                or is_null()
+            ):
+                return
+
             display = scaled(
                 self.artwork_label.size(),
                 (
@@ -336,16 +352,16 @@ class SpotifyPlaylistRow(
                 ),
             )
 
-        except Exception:
-            return
+            self.artwork_label.setText(
+                ""
+            )
 
-        self.artwork_label.setText(
-            ""
-        )
+            self.artwork_label.setPixmap(
+                display
+            )
 
-        self.artwork_label.setPixmap(
-            display
-        )
+        finally:
+            self._mark_artwork_settled()
 
     def _handle_artwork_failed(
         self,
@@ -356,6 +372,8 @@ class SpotifyPlaylistRow(
             != self.playlist.artwork_reference
         ):
             return
+
+        self._mark_artwork_settled()
 
     def activate(
         self,
@@ -425,6 +443,7 @@ class SpotifyPlaylistHome(
 ):
     playlist_activated = pyqtSignal(object)
     liked_songs_activated = pyqtSignal()
+    initial_content_settled = pyqtSignal()
     def __init__(
         self,
         runtime,
@@ -500,6 +519,11 @@ class SpotifyPlaylistHome(
         self._last_result = None
         self._loaded = False
         self._auto_load_attempted = False
+        self._initial_content_settled = False
+        self._initial_playlist_metadata_settled = False
+        self._initial_liked_songs_summary_settled = (
+            self.liked_songs_runtime is None
+        )
 
         self._playlist_busy = False
         self._liked_songs_busy = False
@@ -1152,6 +1176,49 @@ class SpotifyPlaylistHome(
 
         return False
 
+    def initial_content_is_settled(
+        self,
+    ) -> bool:
+        return bool(
+            self._initial_content_settled
+        )
+
+    def _maybe_mark_initial_content_settled(
+        self,
+    ) -> None:
+        if self._initial_content_settled:
+            return
+
+        if not self._initial_playlist_metadata_settled:
+            return
+
+        if not self._initial_liked_songs_summary_settled:
+            return
+
+        for row in self._rows:
+            artwork_is_settled = getattr(
+                row,
+                "artwork_is_settled",
+                None,
+            )
+
+            if (
+                callable(artwork_is_settled)
+                and not artwork_is_settled()
+            ):
+                return
+
+        self._mark_initial_content_settled()
+
+    def _mark_initial_content_settled(
+        self,
+    ) -> None:
+        if self._initial_content_settled:
+            return
+
+        self._initial_content_settled = True
+        self.initial_content_settled.emit()
+
     def ensure_loaded(
         self,
     ) -> bool:
@@ -1323,6 +1390,17 @@ class SpotifyPlaylistHome(
                 self.playlist_activated.emit
             )
 
+            artwork_settled = getattr(
+                row,
+                "artwork_settled",
+                None,
+            )
+
+            if artwork_settled is not None:
+                artwork_settled.connect(
+                    self._maybe_mark_initial_content_settled
+                )
+
             self._rows.append(
                 row
             )
@@ -1423,6 +1501,8 @@ class SpotifyPlaylistHome(
             )
 
             self._loaded = True
+            self._initial_playlist_metadata_settled = True
+            self._maybe_mark_initial_content_settled()
 
             return
 
@@ -1454,6 +1534,9 @@ class SpotifyPlaylistHome(
         self.status_label.setText(
             safe_message
         )
+
+        self._initial_playlist_metadata_settled = True
+        self._maybe_mark_initial_content_settled()
 
     def handle_runtime_failure(
         self,
@@ -1499,6 +1582,9 @@ class SpotifyPlaylistHome(
                 "not be loaded."
             )
         )
+
+        self._initial_playlist_metadata_settled = True
+        self._maybe_mark_initial_content_settled()
 
     def _update_refresh_state(
         self,
@@ -1613,6 +1699,9 @@ class SpotifyPlaylistHome(
             )
         )
 
+        self._initial_liked_songs_summary_settled = True
+        self._maybe_mark_initial_content_settled()
+
     def handle_liked_songs_failure(
         self,
         error_code,
@@ -1636,6 +1725,9 @@ class SpotifyPlaylistHome(
                 "be loaded."
             )
         )
+
+        self._initial_liked_songs_summary_settled = True
+        self._maybe_mark_initial_content_settled()
 
     def handle_liked_songs_busy_changed(
         self,
