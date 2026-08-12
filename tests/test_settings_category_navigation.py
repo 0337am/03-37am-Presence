@@ -290,5 +290,59 @@ class SettingsCategoryNavigationTests(unittest.TestCase):
         )
 
 
+    def test_deleted_deep_link_card_cleanup_is_safe(self):
+        class DeletedCard:
+            def setProperty(
+                self,
+                _name,
+                _value,
+            ):
+                raise RuntimeError(
+                    "wrapped C/C++ object has been deleted"
+                )
+
+        card = DeletedCard()
+
+        self.page._focused_settings_card = (
+            card
+        )
+
+        self.page._clear_settings_highlight(
+            card
+        )
+
+        self.assertIsNone(
+            self.page._focused_settings_card
+        )
+
+    def test_deleted_card_during_style_refresh_is_safe(self):
+        class DeletedDuringRefreshCard:
+            def setProperty(
+                self,
+                _name,
+                _value,
+            ):
+                return None
+
+            def style(self):
+                raise RuntimeError(
+                    "wrapped C/C++ object has been deleted"
+                )
+
+        card = DeletedDuringRefreshCard()
+
+        self.page._focused_settings_card = (
+            card
+        )
+
+        self.page._clear_settings_highlight(
+            card
+        )
+
+        self.assertIsNone(
+            self.page._focused_settings_card
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

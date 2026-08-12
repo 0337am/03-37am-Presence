@@ -37,6 +37,9 @@ from PyQt6.QtWidgets import (
 from src.discord.extended_presence import (
     ExtendedDiscordPresence,
 )
+from src.discord.identity_preferences import (
+    DiscordIdentityPreferencesStore,
+)
 from src.discord.presence_controller import (
     PresenceController,
 )
@@ -465,8 +468,21 @@ class MainWindow(QMainWindow):
             680,
         )
 
+        self.discord_identity_preferences_store = (
+            DiscordIdentityPreferencesStore()
+        )
+
+        discord_identity_preferences = (
+            self.discord_identity_preferences_store.load()
+        )
+
         self.discord = (
-            ExtendedDiscordPresence()
+            ExtendedDiscordPresence(
+                client_id=(
+                    discord_identity_preferences
+                    .resolved_application_id
+                )
+            )
         )
 
         self.presence_controller = (
@@ -996,6 +1012,12 @@ class MainWindow(QMainWindow):
             self.theme_manager,
             spotify_runtime=(
                 self.spotify_connection_runtime
+            ),
+            discord_identity_store=(
+                self.discord_identity_preferences_store
+            ),
+            discord_identity_runtime=(
+                self.discord
             ),
         )
 

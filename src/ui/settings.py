@@ -65,6 +65,10 @@ from src.ui.artwork_hosting_card import (
     ArtworkHostingCard,
 )
 
+from src.ui.discord_identity_card import (
+    DiscordIdentitySettingsCard,
+)
+
 from src.ui.spotify_connection_card import (
     SpotifyConnectionCard,
 )
@@ -208,8 +212,17 @@ class SettingsPage(QWidget):
         theme_manager=None,
         *,
         spotify_runtime=None,
+        discord_identity_store=None,
+        discord_identity_runtime=None,
     ):
         super().__init__()
+
+        self.discord_identity_store = (
+            discord_identity_store
+        )
+        self.discord_identity_runtime = (
+            discord_identity_runtime
+        )
 
         self.store = QSettings(
             "0337am",
@@ -397,7 +410,7 @@ class SettingsPage(QWidget):
             (
                 "discord",
                 "Discord",
-                "media_sources",
+                "discord_identity",
             ),
             (
                 "customization",
@@ -1053,6 +1066,25 @@ class SettingsPage(QWidget):
 
         sources_layout.addWidget(
             browser_help
+        )
+
+        self.discord_identity_card = (
+            DiscordIdentitySettingsCard(
+                preference_store=(
+                    self.discord_identity_store
+                ),
+                runtime=(
+                    self.discord_identity_runtime
+                ),
+            )
+        )
+
+        self.discord_identity_card.message_changed.connect(
+            lambda message:
+            self.set_status_message(
+                message,
+                category="discord",
+            )
         )
 
         self.spotify_connection_card = (
@@ -2003,6 +2035,9 @@ class SettingsPage(QWidget):
         root.addWidget(branding)
         root.addWidget(theme_card)
         root.addWidget(atmosphere_card)
+        root.addWidget(
+            self.discord_identity_card
+        )
         root.addWidget(sources)
         root.addWidget(
             self.spotify_connection_card
@@ -2034,6 +2069,9 @@ class SettingsPage(QWidget):
             "theme": theme_card,
             "atmosphere": atmosphere_card,
             "media_sources": sources,
+            "discord_identity": (
+                self.discord_identity_card
+            ),
             "spotify": (
                 self.spotify_connection_card
             ),
@@ -2061,6 +2099,7 @@ class SettingsPage(QWidget):
             "appearance": "general",
             "windows_startup": "general",
             "media_sources": "discord",
+            "discord_identity": "discord",
             "artwork_hosting": "discord",
             "auto_afk": "discord",
             "branding": "customization",
@@ -2081,6 +2120,7 @@ class SettingsPage(QWidget):
                 startup,
             ),
             "discord": (
+                self.discord_identity_card,
                 sources,
                 self.artwork_hosting_card,
                 auto_afk,
@@ -2125,8 +2165,8 @@ class SettingsPage(QWidget):
                 "Everyday application and window behaviour."
             ),
             "discord": (
-                "Control Discord presence sources, artwork, "
-                "and automatic AFK behaviour."
+                "Control Discord identity, presence sources, "
+                "artwork, and automatic AFK behaviour."
             ),
             "customization": (
                 "Personalise branding, colours, themes, "
@@ -3895,7 +3935,10 @@ class SettingsPage(QWidget):
             "window settings": "appearance",
             "windows startup": "windows_startup",
             "startup": "windows_startup",
-            "discord": "media_sources",
+            "discord": "discord_identity",
+            "discord identity": "discord_identity",
+            "presence identity": "discord_identity",
+            "application id": "discord_identity",
             "customization": "branding",
             "customisation": "branding",
             "branding": "branding",
@@ -4044,12 +4087,19 @@ class SettingsPage(QWidget):
         ):
             return
 
-        card.setProperty(
-            "deepLinkFocus",
-            False,
-        )
-
+        # Clear our Python-side reference first. A delayed
+        # QTimer callback can outlive the underlying Qt widget,
+        # leaving a valid Python wrapper around a deleted C++
+        # object.
         self._focused_settings_card = None
+
+        try:
+            card.setProperty(
+                "deepLinkFocus",
+                False,
+            )
+        except RuntimeError:
+            return
 
         self._refresh_widget_style(
             card
@@ -4059,16 +4109,23 @@ class SettingsPage(QWidget):
     def _refresh_widget_style(
         widget,
     ):
-        style = widget.style()
+        try:
+            style = widget.style()
 
-        style.unpolish(
-            widget
-        )
-        style.polish(
-            widget
-        )
+            style.unpolish(
+                widget
+            )
+            style.polish(
+                widget
+            )
 
-        widget.update()
+            widget.update()
+
+        except RuntimeError:
+            # Qt may delete a card after a delayed deep-link
+            # cleanup has already been scheduled. Treat that
+            # normal lifetime race as completed cleanup.
+            return
 
     def create_card(
         self,
@@ -5068,6 +5125,8 @@ class SettingsPage(QWidget):
         self.windows_box.setChecked(False)
 
         self.artwork_hosting_card.reset_preferences()
+
+        self.discord_identity_card.reset_preferences()
 
         self.media_hotkeys_card.reset_preferences()
 

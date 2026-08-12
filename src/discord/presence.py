@@ -8,6 +8,10 @@ from pypresence import Presence
 from src.artwork.uploader import (
     ArtworkUploader,
 )
+from src.discord.identity_preferences import (
+    DEFAULT_DISCORD_APPLICATION_ID,
+    safe_discord_application_id,
+)
 
 
 try:
@@ -33,8 +37,19 @@ class DiscordPresence:
     def __init__(
         self,
         artwork_uploader=None,
+        client_id=None,
     ):
-        self.client_id = "1523801127962022070"
+        requested_client_id = (
+            DEFAULT_DISCORD_APPLICATION_ID
+            if client_id is None
+            else client_id
+        )
+
+        self.client_id = (
+            safe_discord_application_id(
+                requested_client_id
+            )
+        )
 
         self.artwork_uploader = (
             artwork_uploader
@@ -46,6 +61,9 @@ class DiscordPresence:
         self._updates = queue.Queue(maxsize=1)
         self._stop_event = threading.Event()
         self._thread = None
+
+        self._identity_lock = threading.Lock()
+        self._reconnect_event = threading.Event()
 
         self._state_lock = threading.Lock()
         self._connected = False
@@ -70,6 +88,37 @@ class DiscordPresence:
     def last_error(self) -> str:
         with self._state_lock:
             return self._last_error
+
+    @property
+    def active_client_id(self) -> str:
+        with self._identity_lock:
+            return self.client_id
+
+    def request_client_id(
+        self,
+        client_id,
+    ) -> str:
+        requested = (
+            safe_discord_application_id(
+                client_id
+            )
+        )
+
+        with self._identity_lock:
+            changed = (
+                requested
+                != self.client_id
+            )
+
+            self.client_id = requested
+
+        if (
+            changed
+            and self.is_running
+        ):
+            self._reconnect_event.set()
+
+        return requested
 
     def connect(self) -> bool:
         if self.is_running:
@@ -110,12 +159,32 @@ class DiscordPresence:
 
     def _run(self):
         pending_song = _NO_ITEM
+        last_published_item = _NO_ITEM
         last_presence_key = _NO_ITEM
         last_playing_state = _NO_ITEM
         last_update_time = 0.0
 
         try:
             while not self._stop_event.is_set():
+                if self._reconnect_event.is_set():
+                    self._reconnect_event.clear()
+
+                    self._disconnect(
+                        clear_presence=True
+                    )
+
+                    if (
+                        last_published_item
+                        is not _NO_ITEM
+                    ):
+                        pending_song = (
+                            last_published_item
+                        )
+
+                    last_presence_key = _NO_ITEM
+                    last_playing_state = _NO_ITEM
+                    last_update_time = 0.0
+
                 if self.rpc is None:
                     if not self._open_connection():
                         self._stop_event.wait(
@@ -202,6 +271,9 @@ class DiscordPresence:
                     self._disconnect()
                     continue
 
+                last_published_item = (
+                    pending_song
+                )
                 last_presence_key = presence_key
                 last_playing_state = (
                     pending_playing_state
@@ -214,7 +286,13 @@ class DiscordPresence:
 
     def _open_connection(self) -> bool:
         try:
-            rpc = Presence(self.client_id)
+            client_id = (
+                self.active_client_id
+            )
+
+            rpc = Presence(
+                client_id
+            )
             rpc.connect()
 
             self.rpc = rpc
