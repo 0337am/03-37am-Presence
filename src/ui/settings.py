@@ -339,6 +339,140 @@ class SettingsPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
+        shell = QHBoxLayout()
+        shell.setContentsMargins(
+            18,
+            18,
+            18,
+            18,
+        )
+        shell.setSpacing(14)
+
+        navigation = QFrame()
+        navigation.setObjectName(
+            "settingsCategoryRail"
+        )
+        navigation.setMinimumWidth(176)
+        navigation.setMaximumWidth(196)
+
+        navigation_layout = QVBoxLayout(
+            navigation
+        )
+        navigation_layout.setContentsMargins(
+            10,
+            12,
+            10,
+            12,
+        )
+        navigation_layout.setSpacing(6)
+
+        navigation_title = QLabel(
+            "SETTINGS"
+        )
+        navigation_title.setObjectName(
+            "settingsCategoryRailTitle"
+        )
+
+        navigation_help = QLabel(
+            "Choose a category"
+        )
+        navigation_help.setObjectName(
+            "settingsCategoryRailHelp"
+        )
+
+        navigation_layout.addWidget(
+            navigation_title
+        )
+        navigation_layout.addWidget(
+            navigation_help
+        )
+        navigation_layout.addSpacing(6)
+
+        category_definitions = (
+            (
+                "general",
+                "General",
+                "appearance",
+            ),
+            (
+                "discord",
+                "Discord",
+                "media_sources",
+            ),
+            (
+                "customization",
+                "Customization",
+                "branding",
+            ),
+            (
+                "spotify",
+                "Spotify",
+                "spotify",
+            ),
+            (
+                "local_music",
+                "Local Music",
+                "local_music",
+            ),
+            (
+                "playback",
+                "Playback",
+                "media_hotkeys",
+            ),
+            (
+                "library_data",
+                "Library & Data",
+                "data_storage",
+            ),
+            (
+                "updates",
+                "Updates",
+                "updates",
+            ),
+            (
+                "advanced",
+                "Advanced",
+                "diagnostics",
+            ),
+        )
+
+        self.settings_category_buttons = {}
+
+        for (
+            category_key,
+            label_text,
+            section_target,
+        ) in category_definitions:
+            button = QPushButton(
+                label_text
+            )
+            button.setObjectName(
+                "settingsCategoryButton"
+            )
+            button.setCheckable(True)
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+            button.setMinimumHeight(36)
+
+            button.clicked.connect(
+                lambda checked=False,
+                target=section_target:
+                self.show_section(
+                    target
+                )
+            )
+
+            navigation_layout.addWidget(
+                button
+            )
+
+            self.settings_category_buttons[
+                category_key
+            ] = button
+
+        navigation_layout.addStretch()
+
         scroll = QScrollArea()
         self.settings_scroll = scroll
         scroll.setObjectName("settingsScroll")
@@ -370,6 +504,9 @@ class SettingsPage(QWidget):
         subtitle.setObjectName(
             "pageSubtitle"
         )
+
+        self.settings_page_title = title
+        self.settings_page_subtitle = subtitle
 
         root.addWidget(title)
         root.addWidget(subtitle)
@@ -925,7 +1062,11 @@ class SettingsPage(QWidget):
         )
 
         self.spotify_connection_card.message_changed.connect(
-            self.set_status_message
+            lambda message:
+            self.set_status_message(
+                message,
+                category="spotify",
+            )
         )
 
         self.artwork_hosting_card = (
@@ -933,7 +1074,11 @@ class SettingsPage(QWidget):
         )
 
         self.artwork_hosting_card.message_changed.connect(
-            self.set_status_message
+            lambda message:
+            self.set_status_message(
+                message,
+                category="discord",
+            )
         )
 
         afk_preferences = (
@@ -1495,7 +1640,11 @@ class SettingsPage(QWidget):
                     self.media_hotkey_preferences_store
                 ),
                 status_callback=(
-                    self.set_status_message
+                    lambda message:
+                    self.set_status_message(
+                        message,
+                        category="playback",
+                    )
                 ),
             )
         )
@@ -1840,6 +1989,13 @@ class SettingsPage(QWidget):
             self.reset_settings
         )
 
+        self.reset_theme_button = (
+            reset_theme
+        )
+        self.reset_all_settings_button = (
+            reset_all
+        )
+
         button_row.addWidget(reset_theme)
         button_row.addWidget(reset_all)
         button_row.addStretch()
@@ -1874,9 +2030,7 @@ class SettingsPage(QWidget):
         root.addStretch()
 
         self.settings_sections = {
-            "local_music": (
-                self.local_music_card
-            ),
+            "branding": branding,
             "theme": theme_card,
             "atmosphere": atmosphere_card,
             "media_sources": sources,
@@ -1887,8 +2041,13 @@ class SettingsPage(QWidget):
                 self.artwork_hosting_card
             ),
             "auto_afk": auto_afk,
+            "appearance": appearance,
+            "windows_startup": startup,
             "media_hotkeys": (
                 self.media_hotkeys_card
+            ),
+            "local_music": (
+                self.local_music_card
             ),
             "data_storage": storage,
             "settings_backup": (
@@ -1898,8 +2057,118 @@ class SettingsPage(QWidget):
             "diagnostics": diagnostics,
         }
 
+        self.settings_section_categories = {
+            "appearance": "general",
+            "windows_startup": "general",
+            "media_sources": "discord",
+            "artwork_hosting": "discord",
+            "auto_afk": "discord",
+            "branding": "customization",
+            "theme": "customization",
+            "atmosphere": "customization",
+            "spotify": "spotify",
+            "local_music": "local_music",
+            "media_hotkeys": "playback",
+            "data_storage": "library_data",
+            "settings_backup": "library_data",
+            "updates": "updates",
+            "diagnostics": "advanced",
+        }
+
+        self.settings_category_cards = {
+            "general": (
+                appearance,
+                startup,
+            ),
+            "discord": (
+                sources,
+                self.artwork_hosting_card,
+                auto_afk,
+            ),
+            "customization": (
+                branding,
+                theme_card,
+                atmosphere_card,
+            ),
+            "spotify": (
+                self.spotify_connection_card,
+            ),
+            "local_music": (
+                self.local_music_card,
+            ),
+            "playback": (
+                self.media_hotkeys_card,
+            ),
+            "library_data": (
+                storage,
+                settings_backup,
+            ),
+            "updates": (
+                updates,
+            ),
+            "advanced": (
+                diagnostics,
+            ),
+        }
+
+        self.settings_category_extras = {
+            "customization": (
+                self.reset_theme_button,
+            ),
+            "advanced": (
+                self.reset_all_settings_button,
+            ),
+        }
+
+        self.settings_category_descriptions = {
+            "general": (
+                "Everyday application and window behaviour."
+            ),
+            "discord": (
+                "Control Discord presence sources, artwork, "
+                "and automatic AFK behaviour."
+            ),
+            "customization": (
+                "Personalise branding, colours, themes, "
+                "and atmosphere."
+            ),
+            "spotify": (
+                "Connect and manage your Spotify account."
+            ),
+            "local_music": (
+                "Manage local music folders and scanning."
+            ),
+            "playback": (
+                "Configure global media controls and hotkeys."
+            ),
+            "library_data": (
+                "Review, export, back up, and manage app data."
+            ),
+            "updates": (
+                "Check, download, and install app updates."
+            ),
+            "advanced": (
+                "Diagnostics, support tools, and reset options."
+            ),
+        }
+
         scroll.setWidget(content)
-        outer.addWidget(scroll)
+
+        shell.addWidget(
+            navigation
+        )
+        shell.addWidget(
+            scroll,
+            1,
+        )
+
+        outer.addLayout(
+            shell
+        )
+
+        self._set_active_settings_category(
+            "general"
+        )
 
         self.refresh_storage_summary()
         self.refresh_diagnostics()
@@ -1907,10 +2176,55 @@ class SettingsPage(QWidget):
     def set_status_message(
         self,
         message: str,
+        *,
+        category: str | None = None,
     ):
-        self.status.setText(
-            str(message)
+        active_category = str(
+            getattr(
+                self,
+                "_active_settings_category",
+                "general",
+            )
+            or "general"
+        ).strip().lower()
+
+        target_category = str(
+            category
+            or active_category
+        ).strip().lower()
+
+        if not target_category:
+            target_category = (
+                active_category
+            )
+
+        status_messages = getattr(
+            self,
+            "_settings_status_messages",
+            None,
         )
+
+        if status_messages is None:
+            status_messages = {}
+            self._settings_status_messages = (
+                status_messages
+            )
+
+        text = str(
+            message or ""
+        )
+
+        status_messages[
+            target_category
+        ] = text
+
+        if (
+            target_category
+            == active_category
+        ):
+            self.status.setText(
+                text
+            )
 
     def restore_spotify_connection(
         self,
@@ -3436,6 +3750,137 @@ class SettingsPage(QWidget):
             "Listening history cleared."
         )
 
+    def _set_active_settings_category(
+        self,
+        category_key: str,
+    ):
+        buttons = getattr(
+            self,
+            "settings_category_buttons",
+            {},
+        )
+
+        requested = str(
+            category_key or ""
+        ).strip().lower()
+
+        if (
+            requested not in buttons
+            and buttons
+        ):
+            requested = "general"
+
+        self._active_settings_category = (
+            requested
+        )
+
+        for key, button in buttons.items():
+            button.blockSignals(
+                True
+            )
+            button.setChecked(
+                key == requested
+            )
+            button.blockSignals(
+                False
+            )
+
+        category_cards = getattr(
+            self,
+            "settings_category_cards",
+            {},
+        )
+
+        for key, cards in (
+            category_cards.items()
+        ):
+            visible = (
+                key == requested
+            )
+
+            for card in cards:
+                card.setVisible(
+                    visible
+                )
+
+        category_extras = getattr(
+            self,
+            "settings_category_extras",
+            {},
+        )
+
+        all_extras = set()
+
+        for extras in (
+            category_extras.values()
+        ):
+            all_extras.update(
+                extras
+            )
+
+        selected_extras = set(
+            category_extras.get(
+                requested,
+                (),
+            )
+        )
+
+        for widget in all_extras:
+            widget.setVisible(
+                widget in selected_extras
+            )
+
+        subtitle = getattr(
+            self,
+            "settings_page_subtitle",
+            None,
+        )
+
+        descriptions = getattr(
+            self,
+            "settings_category_descriptions",
+            {},
+        )
+
+        if subtitle is not None:
+            subtitle.setText(
+                descriptions.get(
+                    requested,
+                    "Configure 03:37am Presence.",
+                )
+            )
+
+        status = getattr(
+            self,
+            "status",
+            None,
+        )
+
+        status_messages = getattr(
+            self,
+            "_settings_status_messages",
+            {},
+        )
+
+        if status is not None:
+            status.setText(
+                status_messages.get(
+                    requested,
+                    "",
+                )
+            )
+
+        scroll = getattr(
+            self,
+            "settings_scroll",
+            None,
+        )
+
+        if scroll is not None:
+            scroll.verticalScrollBar().setValue(
+                0
+            )
+
     def show_section(
         self,
         section_name: str,
@@ -3445,6 +3890,20 @@ class SettingsPage(QWidget):
         ).strip().lower()
 
         aliases = {
+            "general": "appearance",
+            "window": "appearance",
+            "window settings": "appearance",
+            "windows startup": "windows_startup",
+            "startup": "windows_startup",
+            "discord": "media_sources",
+            "customization": "branding",
+            "customisation": "branding",
+            "branding": "branding",
+            "playback": "media_hotkeys",
+            "library": "data_storage",
+            "library data": "data_storage",
+            "library & data": "data_storage",
+            "advanced": "diagnostics",
             "local music": "local_music",
             "local files": "local_music",
             "music folders": "local_music",
@@ -3487,6 +3946,19 @@ class SettingsPage(QWidget):
             requested,
             requested,
         )
+
+        category_key = getattr(
+            self,
+            "settings_section_categories",
+            {},
+        ).get(
+            section_key
+        )
+
+        if category_key:
+            self._set_active_settings_category(
+                category_key
+            )
 
         sections = getattr(
             self,
@@ -4261,6 +4733,52 @@ class SettingsPage(QWidget):
             QWidget#settingsContent {{
                 background: {page_background};
                 border: none;
+            }}
+
+            QFrame#settingsCategoryRail {{
+                background: {theme["card"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 12px;
+            }}
+
+            QLabel#settingsCategoryRailTitle {{
+                color: {theme["text"]};
+                background: transparent;
+                border: none;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 1px;
+                padding: 2px 8px 0px 8px;
+            }}
+
+            QLabel#settingsCategoryRailHelp {{
+                color: {theme["muted"]};
+                background: transparent;
+                border: none;
+                font-size: 9px;
+                padding: 0px 8px 4px 8px;
+            }}
+
+            QPushButton#settingsCategoryButton {{
+                color: {theme["text"]};
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 8px;
+                text-align: left;
+                padding: 7px 10px;
+                font-size: 10px;
+                font-weight: 650;
+            }}
+
+            QPushButton#settingsCategoryButton:hover {{
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+            }}
+
+            QPushButton#settingsCategoryButton:checked {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["accent"]};
             }}
 
             QLabel#pageTitle {{
