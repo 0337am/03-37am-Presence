@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.0.0 - Overhaul
+
+Released 13 August 2026.
+
+### Added
+
+- Added Settings categories for a cleaner, more focused configuration experience across General, Discord, Customization, Spotify, Local Music, Playback, Library & Data, Updates, and Advanced sections.
+- Added optional custom Discord Application ID support so users can run Rich Presence through their own Discord application identity while retaining the official 03:37am Presence identity by default.
+- Added Spotify playlist track artwork, including artwork support for resolved local Spotify playlist entries.
+- Added a real audio-reactive Spotify equalizer powered by process-specific Windows audio capture and broad-band spectrum analysis instead of the previous simulated animation.
+
+### Improved
+
+- The Dashboard equalizer now follows actual Spotify audio with adaptive dynamics, quieter-song protection, responsive attack and release behaviour, and a balanced eight-band presentation.
+- Spotify process audio capture automatically recovers when Spotify is closed and reopened without requiring 03:37am Presence to restart.
+- Equalizer pause, resume, seeking, and song changes follow the existing Windows media presentation state while keeping raw captured audio ephemeral and outside persistent storage.
+- Spotify playlist artwork loading now preserves safe fallbacks and avoids replacing good artwork with failed or stale results.
+
+### Playback, privacy, and performance safety
+
+- Spotify process audio analysis does not use Spotify UI automation, simulated keyboard or mouse input, foreground-window activation, or a playback fallback that opens Spotify.
+- Foreground testing confirmed that neither 03:37am Presence nor Spotify takes foreground focus during remote Spotify song changes.
+- Captured Spotify audio is analysed in memory only; the spectrum service publishes normalized band levels and does not save raw audio to disk.
+- Live performance testing kept the complete 03:37am Presence process within the accepted CPU guard while the audio-reactive equalizer was active.
+
+### Upgrade notes
+
+- Existing v2.9 settings, Dashboard layouts, Layout Profiles, Link Cards, Launcher Cards, Presence Presets, Library history, Spotify connection state, first-run state, media-source preferences, and global media-hotkey preferences continue to use the existing upgrade paths.
+- Custom Discord Application ID mode is optional. Existing users continue using the official Discord application identity unless they explicitly choose a custom ID.
+- The v3.0.0 release keeps the existing installer identity so supported older installations can be upgraded in place.
+
 ## v2.9.0 - Spotify Integration
 
 Released 10 August 2026.

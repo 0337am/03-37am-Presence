@@ -12,17 +12,17 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_python_version_metadata(self):
         self.assertEqual(
             APP_VERSION,
-            "2.9.0",
+            "3.0.0",
         )
 
         self.assertEqual(
             RELEASE_NAME,
-            "Spotify Integration",
+            "Overhaul",
         )
 
         self.assertEqual(
             DISPLAY_VERSION,
-            "v2.9.0 - Spotify Integration",
+            "v3.0.0 - Overhaul",
         )
 
     def test_windows_version_metadata(self):
@@ -33,62 +33,67 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "filevers=(2, 9, 0, 0)",
+            "filevers=(3, 0, 0, 0)",
             source,
         )
 
         self.assertIn(
-            "prodvers=(2, 9, 0, 0)",
+            "prodvers=(3, 0, 0, 0)",
             source,
         )
 
         self.assertEqual(
-            source.count('"2.9.0.0"'),
+            source.count('"3.0.0.0"'),
             2,
         )
 
         self.assertIn(
-            "03:37am Presence - Spotify Integration",
+            "03:37am Presence - Overhaul",
             source,
         )
 
-    def test_changelog_starts_with_v29(self):
+    def test_changelog_starts_with_v30(self):
         source = Path(
             "CHANGELOG.md"
         ).read_text(
             encoding="utf-8"
         )
 
+        v30 = source.index(
+            "## v3.0.0 - Overhaul"
+        )
+
         v29 = source.index(
             "## v2.9.0 - Spotify Integration"
         )
 
-        v28 = source.index(
-            "## v2.8.0 - First-Run Polish"
-        )
-
         self.assertLess(
+            v30,
             v29,
-            v28,
         )
 
         self.assertIn(
-            "Released 10 August 2026.",
+            "Released 13 August 2026.",
             source,
         )
 
         self.assertIn(
-            "Spotify Search",
+            "Settings categories",
             source,
         )
 
         self.assertIn(
-            "Liked Songs",
+            "custom Discord Application ID",
             source,
         )
 
         self.assertIn(
-            "Spotify UI automation",
+            "Spotify playlist track artwork",
+            source,
+        )
+
+        self.assertIn(
+            "audio-reactive Spotify equalizer",
             source,
         )
 
@@ -97,7 +102,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             source,
         )
 
-    def test_readme_describes_v29(self):
+    def test_readme_describes_v30(self):
         source = Path(
             "README.MD"
         ).read_text(
@@ -105,32 +110,49 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "## v2.9.0 highlights",
+            "## v3.0.0 highlights",
             source,
         )
 
         self.assertNotIn(
-            "## v2.8.0 highlights",
+            "## v2.9.0 highlights",
             source,
         )
 
         self.assertIn(
-            "Spotify Search",
+            "custom Discord Application ID",
             source,
         )
 
         self.assertIn(
-            "Liked Songs",
+            "playlist track artwork",
             source,
         )
 
         self.assertIn(
-            "Load more results",
+            "audio-reactive Spotify equalizer",
             source,
         )
 
         self.assertIn(
             "foreground focus",
+            source,
+        )
+
+    def test_spotify_user_agent_tracks_v30(self):
+        source = Path(
+            "src/spotify/web_api.py"
+        ).read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "03-37am-Presence/3.0 Spotify-Web-API",
+            source,
+        )
+
+        self.assertNotIn(
+            "03-37am-Presence/2.9 Spotify-Web-API",
             source,
         )
 

@@ -1,5 +1,5 @@
-APP_VERSION = "2.9.0"
-RELEASE_NAME = "Spotify Integration"
+APP_VERSION = "3.0.0"
+RELEASE_NAME = "Overhaul"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

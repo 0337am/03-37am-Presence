@@ -2,18 +2,16 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v2.9.0 highlights
+## v3.0.0 highlights
 
-- Connect a Spotify account from the app through the optional Spotify integration.
-- Browse Spotify playlists and open full Playlist Detail views without driving the Spotify desktop interface.
-- Browse Liked Songs with pagination, playback, and current-track highlighting.
-- Use Spotify Search for tracks, albums, artists, and playlists, including **Load more results** pagination.
-- Open Album Detail pages with album metadata, track playback, album-context playback, and current-playing state.
-- Open Artist Detail pages, browse paginated releases, and move directly from an artist release into Album Detail.
-- Start catalogue tracks and supported local Spotify playlist entries through native Spotify playback control without Spotify UI automation.
-- Preserve keyboard, mouse, and foreground focus when starting playback from 03:37am Presence.
-- Optionally scan local music at startup to improve matching for local-file entries found in Spotify playlists.
-- Keep Spotify authentication opt-in, with Spotify credentials excluded from portable settings backups.
+- Navigate a reorganized Settings experience with dedicated categories for the app's major feature groups.
+- Optionally use a custom Discord Application ID for a personal Discord Rich Presence application identity while keeping the official identity as the default.
+- See Spotify playlist track artwork for catalogue tracks and supported resolved local playlist entries.
+- Use a real audio-reactive Spotify equalizer driven by process-specific Windows audio capture and live spectrum analysis.
+- Keep raw captured audio ephemeral: only normalized equalizer band levels are exposed to the Dashboard and no captured audio is saved.
+- Recover the Spotify equalizer automatically after Spotify is closed and reopened.
+- Preserve keyboard, mouse, and foreground focus during Spotify playback and remote song changes.
+- Continue using Spotify Search, playlists, Liked Songs, albums, artists, native playback, local-file resolution, and existing privacy-aware Spotify authentication from v2.9.
 
 ## Core features
 
