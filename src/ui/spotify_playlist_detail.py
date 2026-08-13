@@ -113,6 +113,7 @@ class SpotifyPlaylistTrackRow(
         *,
         number: int,
         artwork_loader=None,
+        local_artwork_loader=None,
         parent=None,
     ) -> None:
         super().__init__(
@@ -123,6 +124,10 @@ class SpotifyPlaylistTrackRow(
             resolved_item
         )
         self.artwork_loader = artwork_loader
+        self.local_artwork_loader = (
+            local_artwork_loader
+        )
+
         self._artwork_installed = False
 
         self._number_text = str(
@@ -191,18 +196,49 @@ class SpotifyPlaylistTrackRow(
             )
         )
 
-        self._artwork_reference = (
-            str(
-                getattr(
-                    track,
-                    "artwork_reference",
-                    "",
-                )
-                or ""
-            ).strip()
-            if not is_local
-            else ""
+        local_artwork_available = bool(
+            is_local
+            and getattr(
+                resolved_item,
+                "local_available",
+                None,
+            )
+            is True
         )
+
+        if is_local:
+            self._artwork_reference = (
+                str(
+                    getattr(
+                        track,
+                        "local_path",
+                        "",
+                    )
+                    or ""
+                ).strip()
+                if local_artwork_available
+                else ""
+            )
+
+            self._active_artwork_loader = (
+                self.local_artwork_loader
+            )
+
+        else:
+            self._artwork_reference = (
+                str(
+                    getattr(
+                        track,
+                        "artwork_reference",
+                        "",
+                    )
+                    or ""
+                ).strip()
+            )
+
+            self._active_artwork_loader = (
+                self.artwork_loader
+            )
 
         self.artwork_label = QLabel(
             "\u266b",
@@ -435,22 +471,22 @@ class SpotifyPlaylistTrackRow(
     ) -> None:
         if (
             not self._artwork_reference
-            or self.artwork_loader is None
+            or self._active_artwork_loader is None
         ):
             return
 
         request = getattr(
-            self.artwork_loader,
+            self._active_artwork_loader,
             "request",
             None,
         )
         ready = getattr(
-            self.artwork_loader,
+            self._active_artwork_loader,
             "artwork_ready",
             None,
         )
         failed = getattr(
-            self.artwork_loader,
+            self._active_artwork_loader,
             "artwork_failed",
             None,
         )
@@ -617,6 +653,7 @@ class SpotifyPlaylistDetail(
         playback_runtime=None,
         theme_manager=None,
         artwork_loader=None,
+        local_artwork_loader=None,
         parent=None,
     ) -> None:
         super().__init__(
@@ -668,6 +705,10 @@ class SpotifyPlaylistDetail(
             playback_runtime
         )
         self.artwork_loader = artwork_loader
+        self.local_artwork_loader = (
+            local_artwork_loader
+        )
+
 
         self._active_playback_title = ""
         self._current_song = None
@@ -2233,6 +2274,9 @@ class SpotifyPlaylistDetail(
                     ),
                     artwork_loader=(
                         self.artwork_loader
+                    ),
+                    local_artwork_loader=(
+                        self.local_artwork_loader
                     ),
                     parent=(
                         self.track_container

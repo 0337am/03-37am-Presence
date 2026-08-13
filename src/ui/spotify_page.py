@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from PyQt6.QtCore import QCoreApplication
+
+from src.ui.local_artwork_loader import LocalArtworkLoader
+
 from src.ui.spotify_playlist_widgets import (
     SpotifyPlaylistHome,
 )
@@ -162,6 +166,21 @@ class SpotifyPage(
         self._artist_detail_return_index = (
             SPOTIFY_HOME_INDEX
         )
+        self.local_artwork_loader = (
+            LocalArtworkLoader(
+                parent=self
+            )
+        )
+
+        application = (
+            QCoreApplication.instance()
+        )
+
+        if application is not None:
+            application.aboutToQuit.connect(
+                self.shutdown
+            )
+
 
         self.setObjectName(
             "spotifyRoot"
@@ -1187,6 +1206,9 @@ class SpotifyPage(
                 artwork_loader=(
                     search_artwork_loader
                 ),
+                local_artwork_loader=(
+                    self.local_artwork_loader
+                ),
                 parent=(
                     self.content_stack
                 ),
@@ -1453,6 +1475,38 @@ class SpotifyPage(
             return
 
         self.show_home()
+
+    def shutdown(
+        self,
+    ) -> bool:
+        loader = getattr(
+            self,
+            "local_artwork_loader",
+            None,
+        )
+
+        if loader is None:
+            return True
+
+        shutdown_loader = getattr(
+            loader,
+            "shutdown",
+            None,
+        )
+
+        if not callable(
+            shutdown_loader
+        ):
+            return True
+
+        try:
+            return bool(
+                shutdown_loader()
+            )
+
+        except Exception:
+            return False
+
 
     def show_playlist_detail(
         self,
