@@ -1,5 +1,5 @@
-APP_VERSION = "3.0.0"
-RELEASE_NAME = "Overhaul"
+APP_VERSION = "3.0.1"
+RELEASE_NAME = "Updater Relaunch Fix"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

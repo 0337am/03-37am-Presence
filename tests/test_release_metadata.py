@@ -12,17 +12,17 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_python_version_metadata(self):
         self.assertEqual(
             APP_VERSION,
-            "3.0.0",
+            "3.0.1",
         )
 
         self.assertEqual(
             RELEASE_NAME,
-            "Overhaul",
+            "Updater Relaunch Fix",
         )
 
         self.assertEqual(
             DISPLAY_VERSION,
-            "v3.0.0 - Overhaul",
+            "v3.0.1 - Updater Relaunch Fix",
         )
 
     def test_windows_version_metadata(self):
@@ -33,22 +33,22 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "filevers=(3, 0, 0, 0)",
+            "filevers=(3, 0, 1, 0)",
             source,
         )
 
         self.assertIn(
-            "prodvers=(3, 0, 0, 0)",
+            "prodvers=(3, 0, 1, 0)",
             source,
         )
 
         self.assertEqual(
-            source.count('"3.0.0.0"'),
+            source.count('"3.0.1.0"'),
             2,
         )
 
         self.assertIn(
-            "03:37am Presence - Overhaul",
+            "03:37am Presence - Updater Relaunch Fix",
             source,
         )
 
@@ -60,7 +60,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         v30 = source.index(
-            "## v3.0.0 - Overhaul"
+            "## v3.0.1 - Updater Relaunch Fix"
         )
 
         v29 = source.index(
@@ -110,7 +110,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "## v3.0.0 highlights",
+            "## v3.0.1 highlights",
             source,
         )
 
@@ -147,7 +147,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "03-37am-Presence/3.0 Spotify-Web-API",
+            "03-37am-Presence/3.0.1 Spotify-Web-API",
             source,
         )
 

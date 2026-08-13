@@ -2,7 +2,9 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.0.0 highlights
+## v3.0.1 highlights
+
+- **Updater relaunch hotfix:** the installer now resets inherited PyInstaller runtime state before launching the newly installed app, preventing stale `_MEI` paths and missing Python DLL errors after an in-place update.
 
 - Navigate a reorganized Settings experience with dedicated categories for the app's major feature groups.
 - Optionally use a custom Discord Application ID for a personal Discord Rich Presence application identity while keeping the official identity as the default.

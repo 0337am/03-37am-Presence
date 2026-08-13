@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.0.1 - Updater Relaunch Fix
+
+Released 13 August 2026.
+
+### Fixed
+
+- Fixed the automatic post-update launch after upgrading from a PyInstaller one-file build. The installer now starts the newly installed app with `PYINSTALLER_RESET_ENVIRONMENT=1`, forcing a fresh runtime extraction instead of reusing the previous app's `_MEI` directory.
+- Prevented the post-install launch from failing with a missing `python314.dll` after the updater exits and PyInstaller cleans up the old extraction directory.
+
+### Upgrade notes
+
+- Update discovery, SHA-256 verification, installer download, and in-place installation remain unchanged.
+- Existing settings, local application data, and the established installer identity continue to use the same upgrade paths.
+- This hotfix repairs the automatic relaunch step observed during the real v2.9.0 to v3.0.0 updater acceptance test.
+
 ## v3.0.0 - Overhaul
 
 Released 13 August 2026.

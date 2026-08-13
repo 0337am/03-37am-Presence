@@ -1,7 +1,7 @@
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(3, 0, 0, 0),
-        prodvers=(3, 0, 0, 0),
+        filevers=(3, 0, 1, 0),
+        prodvers=(3, 0, 1, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,
@@ -21,11 +21,11 @@ VSVersionInfo(
                         ),
                         StringStruct(
                             "FileDescription",
-                            "03:37am Presence - Overhaul",
+                            "03:37am Presence - Updater Relaunch Fix",
                         ),
                         StringStruct(
                             "FileVersion",
-                            "3.0.0.0",
+                            "3.0.1.0",
                         ),
                         StringStruct(
                             "InternalName",
@@ -45,7 +45,7 @@ VSVersionInfo(
                         ),
                         StringStruct(
                             "ProductVersion",
-                            "3.0.0.0",
+                            "3.0.1.0",
                         ),
                     ],
                 )
