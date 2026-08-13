@@ -59,6 +59,12 @@ from src.ui.playback_presentation_clock import (
     PlaybackPresentationClock,
     format_playback_time,
 )
+from src.media.audio_spectrum import (
+    spectrum_levels_to_text,
+)
+from src.media.windows_process_audio import (
+    SpotifyAudioSpectrumService,
+)
 from src.music.source_preferences import (
     SourcePreferencesStore,
 )
@@ -653,24 +659,15 @@ class DashboardPage(QWidget):
 
         self.build_ui()
 
-        self._equalizer_frames = [
-            "▁▃▆█▄▂▇▅",
-            "▃▇▄▁▆█▂▅",
-            "▆▂█▄▁▅▇▃",
-            "█▄▁▇▃▆▂▅",
-            "▄▆▃█▂▁▇▅",
-            "▂▅▇▃█▄▁▆",
-            "▇▁▄▆▂█▅▃",
-            "▃█▅▂▇▁▄▆",
-        ]
-
-        self._equalizer_index = 0
+        self.spotify_audio_spectrum_service = (
+            SpotifyAudioSpectrumService()
+        )
 
         self.equalizer_timer = QTimer(
             self
         )
         self.equalizer_timer.setInterval(
-            140
+            33
         )
         self.equalizer_timer.timeout.connect(
             self.advance_equalizer
@@ -10078,9 +10075,37 @@ class DashboardPage(QWidget):
         )
 
     def start_equalizer_animation(self):
+        source_app = str(
+            getattr(
+                self.song,
+                "source_app",
+                "",
+            )
+            or ""
+        ).casefold()
+
+        if "spotify" not in source_app:
+            self.stop_equalizer_animation()
+            return
+
+        spectrum_service = getattr(
+            self,
+            "spotify_audio_spectrum_service",
+            None,
+        )
+
+        if spectrum_service is None:
+            self.equalizer.clear()
+            self.equalizer.setVisible(
+                False
+            )
+            return
+
         self.equalizer.setVisible(
             True
         )
+
+        spectrum_service.start()
 
         if not self.equalizer_timer.isActive():
             self.equalizer_timer.start()
@@ -10089,25 +10114,50 @@ class DashboardPage(QWidget):
 
     def stop_equalizer_animation(self):
         self.equalizer_timer.stop()
+
+        spectrum_service = getattr(
+            self,
+            "spotify_audio_spectrum_service",
+            None,
+        )
+
+        if spectrum_service is not None:
+            spectrum_service.stop(
+                timeout_seconds=0.5
+            )
+
         self.equalizer.clear()
         self.equalizer.setVisible(
             False
         )
 
     def advance_equalizer(self):
-        if not self._equalizer_frames:
-            return
-
-        self.equalizer.setText(
-            self._equalizer_frames[
-                self._equalizer_index
-            ]
+        spectrum_service = getattr(
+            self,
+            "spotify_audio_spectrum_service",
+            None,
         )
 
-        self._equalizer_index = (
-            self._equalizer_index + 1
-        ) % len(
-            self._equalizer_frames
+        if spectrum_service is None:
+            return
+
+        try:
+            equalizer_text = (
+                spectrum_levels_to_text(
+                    spectrum_service.latest_levels
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            equalizer_text = (
+                "▁" * 8
+            )
+
+        self.equalizer.setText(
+            equalizer_text
         )
 
     @pyqtSlot(object)
@@ -10965,6 +11015,17 @@ class DashboardPage(QWidget):
 
         if playback_presentation_timer is not None:
             playback_presentation_timer.stop()
+
+        spectrum_service = getattr(
+            self,
+            "spotify_audio_spectrum_service",
+            None,
+        )
+
+        if spectrum_service is not None:
+            spectrum_service.shutdown(
+                timeout_seconds=2.0
+            )
 
         worker = getattr(
             self,

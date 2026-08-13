@@ -2,6 +2,7 @@
 PyQt6
 pypresence
 winsdk
+comtypes==1.4.16
 tinytag==2.2.1
 
 # Windows executable build
