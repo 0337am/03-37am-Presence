@@ -57,4 +57,4 @@ Name: "{commondesktop}\{#MyInstallName}"; Filename: "{app}\{#MyAppExeName}"; Wor
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppDisplayName}"; Flags: nowait postinstall skipifsilent
+Filename: "{cmd}"; Parameters: "/D /C ""set PYINSTALLER_RESET_ENVIRONMENT=1&&start """" /D ""{app}"" ""{app}\{#MyAppExeName}"""""; Description: "Launch {#MyAppDisplayName}"; Flags: runhidden nowait postinstall skipifsilent

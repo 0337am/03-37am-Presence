@@ -153,6 +153,39 @@ class InstallerTemplateTests(unittest.TestCase):
                 source,
             )
 
+    def test_postinstall_launch_resets_pyinstaller_environment(self):
+        source = installer_source()
+
+        required_values = (
+            'Filename: "{cmd}"',
+            "PYINSTALLER_RESET_ENVIRONMENT=1",
+            'start """" /D ""{app}""',
+            (
+                '""{app}\\{#MyAppExeName}""""'
+            ),
+            (
+                "Flags: runhidden nowait "
+                "postinstall skipifsilent"
+            ),
+        )
+
+        for required_value in required_values:
+            self.assertIn(
+                required_value,
+                source,
+            )
+
+        self.assertNotIn(
+            (
+                'Filename: "{app}\\{#MyAppExeName}"; '
+                'Description: "Launch '
+                '{#MyAppDisplayName}"; '
+                'Flags: nowait postinstall '
+                'skipifsilent'
+            ),
+            source,
+        )
+
     def test_installer_contains_no_personal_paths(self):
         source = installer_source().lower()
 
