@@ -3,6 +3,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.discord.presence_link_buttons import (
+    PresenceLinkButton,
+    normalize_presence_buttons,
+)
+
 
 VALID_MODES = {
     "music",
@@ -58,6 +63,8 @@ class PresenceMode:
     message: str = ""
     image_path: str = ""
     show_elapsed: bool = False
+    show_buttons: bool = False
+    buttons: tuple[PresenceLinkButton, ...] = ()
 
     def normalized_mode(self) -> str:
         normalized = str(
@@ -118,7 +125,29 @@ class PresenceMode:
 
         return path.stem
 
+    def normalized_buttons(
+        self,
+    ) -> tuple[PresenceLinkButton, ...]:
+        if self.normalized_mode() == "disabled":
+            return ()
+
+        return normalize_presence_buttons(
+            self.buttons
+        )
+
+    def link_buttons_enabled(
+        self,
+    ) -> bool:
+        if self.normalized_mode() == "disabled":
+            return False
+
+        return bool(
+            self.show_buttons
+        )
+
     def to_payload(self) -> dict:
+        buttons = self.normalized_buttons()
+
         return {
             "mode": self.normalized_mode(),
             "title": self.resolved_title(),
@@ -128,6 +157,13 @@ class PresenceMode:
             "show_elapsed": bool(
                 self.show_elapsed
             ),
+            "show_buttons": (
+                self.link_buttons_enabled()
+            ),
+            "buttons": [
+                button.to_dict()
+                for button in buttons
+            ],
         }
 
 

@@ -440,7 +440,12 @@ class DiscordPresence:
 
         return raw_album
 
-    def _publish_song(self, song):
+    def _publish_song(
+        self,
+        song,
+        *,
+        buttons=None,
+    ):
         if (
             song is None
             or not getattr(song, "title", "")
@@ -496,6 +501,15 @@ class DiscordPresence:
             "details": title,
             "state": state,
         }
+
+        button_payload = list(
+            buttons or []
+        )
+
+        if button_payload:
+            options["buttons"] = (
+                button_payload
+            )
 
         if ActivityType is not None:
             options["activity_type"] = (

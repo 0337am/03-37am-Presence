@@ -15,6 +15,12 @@ from src.discord.presence_modes import (
     VALID_MODES,
 )
 
+from src.discord.presence_link_buttons import (
+    PresenceLinkButton,
+    PresenceLinkButtonError,
+    normalize_presence_buttons,
+)
+
 
 PRESET_STORAGE_KIND = "0337am-presence-presets"
 SCHEMA_VERSION = 1
@@ -145,6 +151,8 @@ class PresencePreset:
     message: str = ""
     image_path: str = ""
     show_elapsed: bool = False
+    show_buttons: bool = False
+    buttons: tuple[PresenceLinkButton, ...] = ()
     pinned: bool = False
     created_at: str = ""
     updated_at: str = ""
@@ -165,6 +173,7 @@ class PresencePreset:
             self.title,
             limit=MAX_TEXT_LENGTH,
         )
+
         message = clean_text(
             self.message,
             limit=MAX_TEXT_LENGTH,
@@ -178,13 +187,34 @@ class PresencePreset:
             message = ""
             image_path = ""
             show_elapsed = False
+
         else:
             image_path = validate_image_path(
                 self.image_path,
             )
+
             show_elapsed = bool(
                 self.show_elapsed
             )
+
+        if mode == "disabled":
+            show_buttons = False
+            buttons = ()
+
+        else:
+            show_buttons = bool(
+                self.show_buttons
+            )
+
+            try:
+                buttons = normalize_presence_buttons(
+                    self.buttons
+                )
+
+            except PresenceLinkButtonError as error:
+                raise PresencePresetError(
+                    str(error)
+                ) from error
 
         return replace(
             self,
@@ -195,6 +225,8 @@ class PresencePreset:
             message=message,
             image_path=image_path,
             show_elapsed=show_elapsed,
+            show_buttons=show_buttons,
+            buttons=buttons,
             pinned=bool(self.pinned),
             created_at=str(
                 self.created_at or now
@@ -213,6 +245,8 @@ class PresencePreset:
             message=preset.message,
             image_path=preset.image_path,
             show_elapsed=preset.show_elapsed,
+            show_buttons=preset.show_buttons,
+            buttons=preset.buttons,
         )
 
     def to_dict(self) -> dict:
@@ -226,6 +260,11 @@ class PresencePreset:
             "message": preset.message,
             "image_path": preset.image_path,
             "show_elapsed": preset.show_elapsed,
+            "show_buttons": preset.show_buttons,
+            "buttons": [
+                button.to_dict()
+                for button in preset.buttons
+            ],
             "pinned": preset.pinned,
             "created_at": preset.created_at,
             "updated_at": preset.updated_at,
@@ -282,6 +321,13 @@ def preset_from_dict(data: dict) -> PresencePreset:
         ),
         show_elapsed=bool(
             data.get("show_elapsed", False)
+        ),
+        show_buttons=bool(
+            data.get("show_buttons", False)
+        ),
+        buttons=data.get(
+            "buttons",
+            (),
         ),
         pinned=bool(
             data.get("pinned", False)
@@ -534,6 +580,8 @@ class PresencePresetStore:
             message=presence_mode.message,
             image_path=presence_mode.image_path,
             show_elapsed=presence_mode.show_elapsed,
+            show_buttons=presence_mode.show_buttons,
+            buttons=presence_mode.buttons,
             pinned=pinned,
             created_at=now,
             updated_at=now,
@@ -592,6 +640,8 @@ class PresencePresetStore:
             message=presence_mode.message,
             image_path=presence_mode.image_path,
             show_elapsed=presence_mode.show_elapsed,
+            show_buttons=presence_mode.show_buttons,
+            buttons=presence_mode.buttons,
             pinned=(
                 existing.pinned
                 if pinned is None

@@ -6,6 +6,12 @@ from src.discord.presence_modes import (
     VALID_MODES,
 )
 
+from src.discord.presence_link_buttons import (
+    PresenceLinkButtonError,
+    decode_presence_buttons,
+    encode_presence_buttons,
+)
+
 
 class PresenceController(QObject):
     mode_changed = pyqtSignal(dict)
@@ -87,12 +93,31 @@ class PresenceController(QObject):
             type=bool,
         )
 
+        show_buttons = self.store.value(
+            f"presence/{normalized}/show_buttons",
+            False,
+            type=bool,
+        )
+
+        try:
+            buttons = decode_presence_buttons(
+                self.store.value(
+                    f"presence/{normalized}/buttons",
+                    "",
+                )
+            )
+        except PresenceLinkButtonError:
+            show_buttons = False
+            buttons = ()
+
         return PresenceMode(
             mode=normalized,
             title=title,
             message=message,
             image_path=image_path,
             show_elapsed=show_elapsed,
+            show_buttons=show_buttons,
+            buttons=buttons,
         )
 
     def save_mode(
@@ -100,6 +125,18 @@ class PresenceController(QObject):
         presence_mode: PresenceMode,
     ):
         mode = presence_mode.normalized_mode()
+
+        buttons_json = ""
+        show_buttons = False
+
+        if mode != "disabled":
+            buttons_json = encode_presence_buttons(
+                presence_mode.normalized_buttons()
+            )
+
+            show_buttons = (
+                presence_mode.link_buttons_enabled()
+            )
 
         self.store.setValue(
             "presence/active_mode",
@@ -130,6 +167,17 @@ class PresenceController(QObject):
                 presence_mode.show_elapsed,
             )
 
+        if mode != "disabled":
+            self.store.setValue(
+                f"presence/{mode}/show_buttons",
+                show_buttons,
+            )
+
+            self.store.setValue(
+                f"presence/{mode}/buttons",
+                buttons_json,
+            )
+
         self.store.sync()
 
     @staticmethod
@@ -150,6 +198,21 @@ class PresenceController(QObject):
 
         return bool(title)
 
+    @staticmethod
+    def _discord_buttons_for_mode(
+        presence_mode: PresenceMode,
+    ) -> list[dict]:
+        if not presence_mode.link_buttons_enabled():
+            return []
+
+        return [
+            button.to_dict()
+            for button in (
+                presence_mode
+                .normalized_buttons()
+            )
+        ]
+
     def apply_mode(
         self,
         presence_mode: PresenceMode,
@@ -162,6 +225,12 @@ class PresenceController(QObject):
 
         self.save_mode(presence_mode)
 
+        discord_buttons = (
+            self._discord_buttons_for_mode(
+                presence_mode
+            )
+        )
+
         if mode == "music":
             latest_song = self._latest_song
 
@@ -169,7 +238,8 @@ class PresenceController(QObject):
                 latest_song
             ):
                 self.discord.update_song(
-                    latest_song
+                    latest_song,
+                    buttons=discord_buttons,
                 )
             else:
                 self.discord.clear_presence()
@@ -186,6 +256,7 @@ class PresenceController(QObject):
                 image_bytes=payload["image_bytes"],
                 image_name=payload["image_name"],
                 show_elapsed=payload["show_elapsed"],
+                buttons=discord_buttons,
             )
 
         self.mode_changed.emit(
@@ -227,12 +298,19 @@ class PresenceController(QObject):
 
         payload = afk_mode.to_payload()
 
+        discord_buttons = (
+            self._discord_buttons_for_mode(
+                afk_mode
+            )
+        )
+
         self.discord.update_custom(
             title=payload["title"],
             message=payload["message"],
             image_bytes=payload["image_bytes"],
             image_name=payload["image_name"],
             show_elapsed=payload["show_elapsed"],
+            buttons=discord_buttons,
         )
 
         self.mode_changed.emit(
@@ -271,8 +349,19 @@ class PresenceController(QObject):
         if self._has_song(
             song
         ):
+            music_mode = self.load_mode(
+                "music"
+            )
+
+            discord_buttons = (
+                self._discord_buttons_for_mode(
+                    music_mode
+                )
+            )
+
             self.discord.update_song(
-                song
+                song,
+                buttons=discord_buttons,
             )
             return
 

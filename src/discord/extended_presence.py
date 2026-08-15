@@ -4,10 +4,30 @@ from dataclasses import dataclass
 
 from src.discord.presence import DiscordPresence
 
+from src.discord.presence_link_buttons import (
+    normalize_presence_buttons,
+)
+
 try:
     from pypresence.types import ActivityType
 except ImportError:
     ActivityType = None
+
+
+@dataclass(frozen=True)
+class SongPresenceUpdate:
+    song: object
+    buttons: tuple[tuple[str, str], ...]
+
+    @property
+    def playing(self) -> bool:
+        return bool(
+            getattr(
+                self.song,
+                "playing",
+                False,
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -18,9 +38,63 @@ class CustomPresenceUpdate:
     image_name: str
     show_elapsed: bool
     started_at: int | None
+    buttons: tuple[tuple[str, str], ...] = ()
 
 
 class ExtendedDiscordPresence(DiscordPresence):
+    @staticmethod
+    def _normalize_rpc_buttons(
+        buttons,
+    ) -> tuple[tuple[str, str], ...]:
+        normalized = normalize_presence_buttons(
+            buttons
+        )
+
+        return tuple(
+            (
+                button.label,
+                button.url,
+            )
+            for button in normalized
+        )
+
+    @staticmethod
+    def _rpc_button_payload(
+        buttons,
+    ) -> list[dict]:
+        return [
+            {
+                "label": label,
+                "url": url,
+            }
+            for label, url in buttons
+        ]
+
+    def update_song(
+        self,
+        song,
+        buttons=None,
+    ):
+        if self._stop_event.is_set():
+            return
+
+        if song is None:
+            self._replace_queued_item(
+                None
+            )
+            return
+
+        update = SongPresenceUpdate(
+            song=song,
+            buttons=self._normalize_rpc_buttons(
+                buttons
+            ),
+        )
+
+        self._replace_queued_item(
+            update
+        )
+
     def update_custom(
         self,
         title: str,
@@ -28,24 +102,38 @@ class ExtendedDiscordPresence(DiscordPresence):
         image_bytes=None,
         image_name: str = "",
         show_elapsed: bool = False,
+        buttons=None,
     ):
         if self._stop_event.is_set():
             return
 
         update = CustomPresenceUpdate(
-            title=str(title or "").strip(),
-            message=str(message or "").strip(),
+            title=str(
+                title or ""
+            ).strip(),
+            message=str(
+                message or ""
+            ).strip(),
             image_bytes=image_bytes,
-            image_name=str(image_name or "").strip(),
-            show_elapsed=bool(show_elapsed),
+            image_name=str(
+                image_name or ""
+            ).strip(),
+            show_elapsed=bool(
+                show_elapsed
+            ),
             started_at=(
                 int(time.time())
                 if show_elapsed
                 else None
             ),
+            buttons=self._normalize_rpc_buttons(
+                buttons
+            ),
         )
 
-        self._replace_queued_item(update)
+        self._replace_queued_item(
+            update
+        )
 
     def clear_presence(self):
         if self._stop_event.is_set():
@@ -53,15 +141,37 @@ class ExtendedDiscordPresence(DiscordPresence):
 
         self._replace_queued_item(None)
 
-    def _publish_song(self, item):
+    def _publish_song(
+        self,
+        item,
+    ):
         if isinstance(
             item,
             CustomPresenceUpdate,
         ):
-            self._publish_custom(item)
+            self._publish_custom(
+                item
+            )
             return
 
-        super()._publish_song(item)
+        if isinstance(
+            item,
+            SongPresenceUpdate,
+        ):
+            super()._publish_song(
+                item.song,
+                buttons=(
+                    self._rpc_button_payload(
+                        item.buttons
+                    )
+                ),
+            )
+            return
+
+        super()._publish_song(
+            item,
+            buttons=[],
+        )
 
     def _publish_custom(
         self,
@@ -81,6 +191,17 @@ class ExtendedDiscordPresence(DiscordPresence):
             "details": title,
             "state": message,
         }
+
+        button_payload = (
+            self._rpc_button_payload(
+                update.buttons
+            )
+        )
+
+        if button_payload:
+            options["buttons"] = (
+                button_payload
+            )
 
         if ActivityType is not None:
             playing_type = getattr(
@@ -159,6 +280,7 @@ class ExtendedDiscordPresence(DiscordPresence):
         )
 
     @staticmethod
+    @staticmethod
     def _make_presence_key(item):
         if isinstance(
             item,
@@ -179,6 +301,19 @@ class ExtendedDiscordPresence(DiscordPresence):
                 item.show_elapsed,
                 item.started_at,
                 image_key,
+                item.buttons,
+            )
+
+        if isinstance(
+            item,
+            SongPresenceUpdate,
+        ):
+            return (
+                "music",
+                *DiscordPresence._make_presence_key(
+                    item.song
+                ),
+                item.buttons,
             )
 
         return DiscordPresence._make_presence_key(

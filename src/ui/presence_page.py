@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
 )
 
 from src.discord.presence_modes import (
@@ -33,6 +34,13 @@ from src.discord.presence_modes import (
     PresenceMode,
     remove_mode_image,
     save_mode_image,
+)
+
+from src.discord.presence_link_buttons import (
+    MAX_PRESENCE_LINK_LABEL_LENGTH,
+    MAX_PRESENCE_LINK_URL_LENGTH,
+    PresenceLinkButton,
+    PresenceLinkButtonError,
 )
 from src.discord.presence_presets import (
     PresencePresetError,
@@ -349,6 +357,10 @@ class PresencePage(QWidget):
             "presenceCard"
         )
 
+        self.editor_card.setMinimumHeight(
+            180
+        )
+
         self.editor_layout = QVBoxLayout(
             self.editor_card
         )
@@ -380,6 +392,9 @@ class PresencePage(QWidget):
             "Away right now"
         )
         self.title_input.setMaxLength(128)
+        self.title_input.setMinimumHeight(
+            34
+        )
 
         message_label = QLabel("Message")
         message_label.setObjectName(
@@ -394,6 +409,9 @@ class PresencePage(QWidget):
             "Replies not guaranteed"
         )
         self.message_input.setMaxLength(128)
+        self.message_input.setMinimumHeight(
+            34
+        )
 
         self.elapsed_box = QCheckBox(
             "Show elapsed time"
@@ -404,6 +422,236 @@ class PresencePage(QWidget):
         self.elapsed_box.setCursor(
             Qt.CursorShape.PointingHandCursor
         )
+
+        self.link_buttons_editor = QFrame()
+        self.link_buttons_editor.setObjectName(
+            "presenceStudioLinkButtonsCard"
+        )
+
+        self.link_buttons_editor.setMinimumHeight(
+            286
+        )
+
+        self.link_buttons_editor.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
+
+        link_buttons_layout = QVBoxLayout(
+            self.link_buttons_editor
+        )
+
+        link_buttons_layout.setContentsMargins(
+            14,
+            12,
+            14,
+            14,
+        )
+
+        link_buttons_layout.setSpacing(
+            9
+        )
+
+        link_header = QHBoxLayout()
+        link_header.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        link_header.setSpacing(
+            8
+        )
+
+        link_heading = QLabel(
+            "LINK BUTTONS"
+        )
+
+        link_heading.setObjectName(
+            "presenceStudioSectionTitle"
+        )
+
+        self.show_link_buttons_box = QCheckBox(
+            "Show on Discord"
+        )
+
+        self.show_link_buttons_box.setObjectName(
+            "elapsedBox"
+        )
+
+        self.show_link_buttons_box.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.show_link_buttons_box.setToolTip(
+            "Controls whether the saved link "
+            "buttons are published to Discord."
+        )
+
+        link_header.addWidget(
+            link_heading
+        )
+
+        link_header.addStretch()
+
+        link_header.addWidget(
+            self.show_link_buttons_box
+        )
+
+        self.link_buttons_help = QLabel(
+            "Add up to two links to this Presence. "
+            "Turning visibility off keeps the saved links. "
+            "Discord hides your own Rich Presence buttons "
+            "from you, but other users can see them."
+        )
+
+        self.link_buttons_help.setObjectName(
+            "modeHelp"
+        )
+
+        self.link_buttons_help.setWordWrap(
+            True
+        )
+
+        self.link_buttons_status = QLabel(
+            "No buttons configured"
+        )
+
+        self.link_buttons_status.setObjectName(
+            "presenceStudioLinkButtonsStatus"
+        )
+
+        self.link_buttons_status.setWordWrap(
+            True
+        )
+
+        self.link_button_label_inputs = []
+        self.link_button_url_inputs = []
+
+        link_buttons_layout.addLayout(
+            link_header
+        )
+
+        link_buttons_layout.addWidget(
+            self.link_buttons_help
+        )
+
+        link_buttons_layout.addWidget(
+            self.link_buttons_status
+        )
+
+        for button_number in (
+            1,
+            2,
+        ):
+            slot = QFrame()
+            slot.setObjectName(
+                "presenceStudioLinkButtonSlot"
+            )
+
+            slot.setMinimumHeight(
+                88
+            )
+
+            slot_layout = QVBoxLayout(
+                slot
+            )
+
+            slot_layout.setContentsMargins(
+                10,
+                8,
+                10,
+                10,
+            )
+
+            slot_layout.setSpacing(
+                5
+            )
+
+            button_heading = QLabel(
+                f"Button {button_number}"
+            )
+
+            button_heading.setObjectName(
+                "fieldTitle"
+            )
+
+            label_input = QLineEdit()
+            label_input.setObjectName(
+                "presenceInput"
+            )
+
+            label_input.setPlaceholderText(
+                "Button label"
+            )
+
+            label_input.setMaxLength(
+                MAX_PRESENCE_LINK_LABEL_LENGTH
+            )
+
+            label_input.setMinimumHeight(
+                34
+            )
+
+            label_input.setClearButtonEnabled(
+                True
+            )
+
+            label_input.setToolTip(
+                "Discord button label, up to "
+                "32 characters."
+            )
+
+            url_input = QLineEdit()
+            url_input.setObjectName(
+                "presenceInput"
+            )
+
+            url_input.setPlaceholderText(
+                "https://example.com"
+            )
+
+            url_input.setMaxLength(
+                MAX_PRESENCE_LINK_URL_LENGTH
+            )
+
+            url_input.setMinimumHeight(
+                34
+            )
+
+            url_input.setClearButtonEnabled(
+                True
+            )
+
+            url_input.setToolTip(
+                "HTTP or HTTPS link for this "
+                "Discord Presence button."
+            )
+
+            self.link_button_label_inputs.append(
+                label_input
+            )
+
+            self.link_button_url_inputs.append(
+                url_input
+            )
+
+            slot_layout.addWidget(
+                button_heading
+            )
+
+            slot_layout.addWidget(
+                label_input
+            )
+
+            slot_layout.addWidget(
+                url_input
+            )
+
+            link_buttons_layout.addWidget(
+                slot
+            )
 
         self.editor_layout.addWidget(
             editor_heading
@@ -429,6 +677,10 @@ class PresencePage(QWidget):
         self.image_card = QFrame()
         self.image_card.setObjectName(
             "presenceCard"
+        )
+
+        self.image_card.setMinimumHeight(
+            180
         )
 
         image_layout = QVBoxLayout(
@@ -677,6 +929,59 @@ class PresencePage(QWidget):
         preview_layout.addLayout(
             activity_row
         )
+
+        self.preview_link_buttons = []
+
+        preview_link_buttons_row = QHBoxLayout()
+
+        preview_link_buttons_row.setSpacing(
+            6
+        )
+
+        for _ in range(2):
+            preview_link_button = QLabel(
+                ""
+            )
+
+            preview_link_button.setObjectName(
+                "previewLinkButton"
+            )
+
+            preview_link_button.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+
+            preview_link_button.setMinimumHeight(
+                30
+            )
+
+            preview_link_button.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+
+            preview_link_button.setHidden(
+                True
+            )
+
+            preview_link_button.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+                True,
+            )
+
+            self.preview_link_buttons.append(
+                preview_link_button
+            )
+
+            preview_link_buttons_row.addWidget(
+                preview_link_button,
+                stretch=1,
+            )
+
+        preview_layout.addLayout(
+            preview_link_buttons_row
+        )
+
         preview_layout.addStretch()
 
         right_column = QVBoxLayout()
@@ -1094,11 +1399,11 @@ class PresencePage(QWidget):
         )
 
         self.preview_card.setMinimumHeight(
-            170
+            206
         )
 
         self.preview_card.setMaximumHeight(
-            235
+            271
         )
 
         self.preview_card.setSizePolicy(
@@ -1176,6 +1481,10 @@ class PresencePage(QWidget):
             "presenceStudioEditorContainer"
         )
 
+        self.studio_editor_container.setMinimumHeight(
+            180
+        )
+
         editor_container_layout = QHBoxLayout(
             self.studio_editor_container
         )
@@ -1212,6 +1521,10 @@ class PresencePage(QWidget):
 
         self.studio_action_bar.setObjectName(
             "presenceStudioActionBar"
+        )
+
+        self.studio_action_bar.setMinimumHeight(
+            52
         )
 
         action_layout = QHBoxLayout(
@@ -1277,8 +1590,41 @@ class PresencePage(QWidget):
             stretch=5,
         )
 
+        self.studio_workspace_scroll = QScrollArea(
+            self
+        )
+
+        self.studio_workspace_scroll.setObjectName(
+            "presenceStudioWorkspaceScroll"
+        )
+
+        self.studio_workspace_scroll.setWidgetResizable(
+            True
+        )
+
+        self.studio_workspace_scroll.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+        self.studio_workspace_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        self.studio_workspace_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        self.studio_workspace_scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+
+        self.studio_workspace_scroll.setWidget(
+            self.studio_workspace
+        )
+
         self.studio_row.addWidget(
-            self.studio_workspace,
+            self.studio_workspace_scroll,
             stretch=6,
         )
 
@@ -1308,6 +1654,7 @@ class PresencePage(QWidget):
             self.save_current_as_preset
         )
 
+        self._install_link_buttons_studio_card()
         self._refresh_studio_mode_controls()
 
     def _refresh_studio_mode_controls(
@@ -1369,6 +1716,153 @@ class PresencePage(QWidget):
         self.update_image_preview()
         self.update_preview()
 
+    def _install_link_buttons_studio_card(
+        self,
+    ):
+        link_card = getattr(
+            self,
+            "link_buttons_editor",
+            None,
+        )
+
+        workspace = getattr(
+            self,
+            "studio_workspace",
+            None,
+        )
+
+        action_bar = getattr(
+            self,
+            "studio_action_bar",
+            None,
+        )
+
+        if (
+            link_card is None
+            or workspace is None
+            or action_bar is None
+        ):
+            return
+
+        workspace_layout = workspace.layout()
+
+        if workspace_layout is None:
+            return
+
+        old_layout = getattr(
+            self,
+            "editor_layout",
+            None,
+        )
+
+        if old_layout is not None:
+            old_layout.removeWidget(
+                link_card
+            )
+
+        current_index = workspace_layout.indexOf(
+            link_card
+        )
+
+        if current_index >= 0:
+            workspace_layout.removeWidget(
+                link_card
+            )
+
+        link_card.setParent(
+            workspace
+        )
+
+        action_index = workspace_layout.indexOf(
+            action_bar
+        )
+
+        if action_index < 0:
+            workspace_layout.addWidget(
+                link_card
+            )
+
+        else:
+            workspace_layout.insertWidget(
+                action_index,
+                link_card,
+            )
+
+    def _apply_presence_studio_scroll_theme(
+        self,
+        theme,
+    ):
+        scroll = getattr(
+            self,
+            "studio_workspace_scroll",
+            None,
+        )
+
+        if scroll is None:
+            return
+
+        background = theme.get(
+            "background",
+            "#160d12",
+        )
+
+        card_alt = theme.get(
+            "card_alt",
+            "#351d2a",
+        )
+
+        border = theme.get(
+            "border",
+            "#5a3346",
+        )
+
+        accent = theme.get(
+            "accent",
+            "#ff6ea9",
+        )
+
+        scroll.setStyleSheet(
+            f"""
+            QScrollArea#presenceStudioWorkspaceScroll {{
+                background: transparent;
+                border: none;
+            }}
+
+            QScrollArea#presenceStudioWorkspaceScroll > QWidget > QWidget {{
+                background: transparent;
+            }}
+
+            QScrollBar:vertical {{
+                background: {background};
+                width: 10px;
+                margin: 2px 0 2px 0;
+                border: 1px solid {border};
+                border-radius: 5px;
+            }}
+
+            QScrollBar::handle:vertical {{
+                background: {card_alt};
+                min-height: 32px;
+                border: 1px solid {border};
+                border-radius: 4px;
+            }}
+
+            QScrollBar::handle:vertical:hover {{
+                background: {accent};
+            }}
+
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
+            """
+        )
+
     def _apply_presence_studio_theme(
         self,
         theme,
@@ -1381,6 +1875,10 @@ class PresencePage(QWidget):
 
         if workspace is None:
             return
+
+        self._apply_presence_studio_scroll_theme(
+            theme
+        )
 
         text = theme.get(
             "text",
@@ -1492,6 +1990,24 @@ class PresencePage(QWidget):
             QFrame#presenceStudioEditorContainer {{
                 background: transparent;
                 border: none;
+            }}
+
+            QFrame#presenceStudioLinkButtonsCard {{
+                background: {card_alt};
+                border: 1px solid {border};
+                border-radius: 12px;
+            }}
+
+            QLabel#presenceStudioLinkButtonsStatus {{
+                color: {accent};
+                font-size: 10px;
+                font-weight: 650;
+            }}
+
+            QFrame#presenceStudioLinkButtonSlot {{
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 10px;
             }}
 
             QFrame#presenceStudioActionBar {{
@@ -1639,6 +2155,10 @@ class PresencePage(QWidget):
             False
         )
 
+        self._load_link_button_editor(
+            presence_mode
+        )
+
         self.image_path = (
             presence_mode.image_path
         )
@@ -1781,6 +2301,8 @@ class PresencePage(QWidget):
             False
         )
 
+        self._clear_link_button_editor()
+
         self.image_path = ""
 
         self.update_preset_buttons()
@@ -1843,6 +2365,18 @@ class PresencePage(QWidget):
         self.elapsed_box.toggled.connect(
             self.update_preview
         )
+
+        self.show_link_buttons_box.toggled.connect(
+            self.update_preview
+        )
+
+        for link_input in (
+            self.link_button_label_inputs
+            + self.link_button_url_inputs
+        ):
+            link_input.textChanged.connect(
+                self.update_preview
+            )
 
         self.choose_image_button.clicked.connect(
             self.choose_image
@@ -1948,17 +2482,168 @@ class PresencePage(QWidget):
             preset_id
         )
 
+    def _editor_presence_buttons(
+        self,
+    ) -> tuple[PresenceLinkButton, ...]:
+        buttons = []
+
+        for index, (
+            label_input,
+            url_input,
+        ) in enumerate(
+            zip(
+                self.link_button_label_inputs,
+                self.link_button_url_inputs,
+            ),
+            start=1,
+        ):
+            label = (
+                label_input.text().strip()
+            )
+            url = (
+                url_input.text().strip()
+            )
+
+            if not label and not url:
+                continue
+
+            if not label or not url:
+                raise PresenceLinkButtonError(
+                    f"Button {index} needs both "
+                    "a label and a URL."
+                )
+
+            try:
+                button = PresenceLinkButton(
+                    label=label,
+                    url=url,
+                ).normalized()
+
+            except PresenceLinkButtonError as error:
+                raise PresenceLinkButtonError(
+                    f"Button {index}: {error}"
+                ) from error
+
+            buttons.append(
+                button
+            )
+
+        return tuple(
+            buttons
+        )
+
+    def _load_link_button_editor(
+        self,
+        presence_mode: PresenceMode,
+    ):
+        controls = [
+            self.show_link_buttons_box,
+            *self.link_button_label_inputs,
+            *self.link_button_url_inputs,
+        ]
+
+        for control in controls:
+            control.blockSignals(
+                True
+            )
+
+        try:
+            self.show_link_buttons_box.setChecked(
+                bool(
+                    presence_mode.show_buttons
+                )
+            )
+
+            for input_widget in (
+                self.link_button_label_inputs
+                + self.link_button_url_inputs
+            ):
+                input_widget.clear()
+
+            buttons = (
+                presence_mode.normalized_buttons()
+            )
+
+            for index, button in enumerate(
+                buttons[:2]
+            ):
+                self.link_button_label_inputs[
+                    index
+                ].setText(
+                    button.label
+                )
+
+                self.link_button_url_inputs[
+                    index
+                ].setText(
+                    button.url
+                )
+
+        finally:
+            for control in controls:
+                control.blockSignals(
+                    False
+                )
+
+    def _clear_link_button_editor(
+        self,
+    ):
+        controls = [
+            self.show_link_buttons_box,
+            *self.link_button_label_inputs,
+            *self.link_button_url_inputs,
+        ]
+
+        for control in controls:
+            control.blockSignals(
+                True
+            )
+
+        try:
+            self.show_link_buttons_box.setChecked(
+                False
+            )
+
+            for input_widget in (
+                self.link_button_label_inputs
+                + self.link_button_url_inputs
+            ):
+                input_widget.clear()
+
+        finally:
+            for control in controls:
+                control.blockSignals(
+                    False
+                )
+
     def current_editor_presence_mode(
         self,
     ) -> PresenceMode:
+        mode = self.current_mode
+
+        if mode == "disabled":
+            show_buttons = False
+            buttons = ()
+
+        else:
+            show_buttons = (
+                self.show_link_buttons_box.isChecked()
+            )
+
+            buttons = (
+                self._editor_presence_buttons()
+            )
+
         return PresenceMode(
-            mode=self.current_mode,
+            mode=mode,
             title=self.title_input.text().strip(),
             message=self.message_input.text().strip(),
             image_path=self.image_path,
             show_elapsed=(
                 self.elapsed_box.isChecked()
             ),
+            show_buttons=show_buttons,
+            buttons=buttons,
         )
 
     def on_preset_changed(self, *_):
@@ -2072,7 +2757,10 @@ class PresencePage(QWidget):
                 f"Preset saved: {preset.name}"
             )
 
-        except PresencePresetError as error:
+        except (
+            PresencePresetError,
+            PresenceLinkButtonError,
+        ) as error:
             self.status_label.setText(
                 str(error)
             )
@@ -2112,6 +2800,10 @@ class PresencePage(QWidget):
         self.title_input.blockSignals(False)
         self.message_input.blockSignals(False)
         self.elapsed_box.blockSignals(False)
+
+        self._load_link_button_editor(
+            presence_mode
+        )
 
         self.image_path = presence_mode.image_path
 
@@ -2171,7 +2863,10 @@ class PresencePage(QWidget):
                 f"Preset updated: {updated.name}"
             )
 
-        except PresencePresetError as error:
+        except (
+            PresencePresetError,
+            PresenceLinkButtonError,
+        ) as error:
             self.status_label.setText(
                 str(error)
             )
@@ -2570,6 +3265,16 @@ class PresencePage(QWidget):
                 font-weight: 700;
             }}
 
+            QLabel#previewLinkButton {{
+                color: {theme["text"]};
+                background: {theme["card_alt"]};
+                border: 1px solid {theme["border"]};
+                border-radius: 7px;
+                padding: 5px 9px;
+                font-size: 10px;
+                font-weight: 650;
+            }}
+
             QLabel#previewMessage,
             QLabel#previewTimer {{
                 color: {theme["muted"]};
@@ -2640,6 +3345,10 @@ class PresencePage(QWidget):
         self.message_input.blockSignals(False)
         self.elapsed_box.blockSignals(False)
 
+        self._load_link_button_editor(
+            presence_mode
+        )
+
         self.image_path = (
             presence_mode.image_path
         )
@@ -2653,6 +3362,23 @@ class PresencePage(QWidget):
             "music",
             "disabled",
         }
+
+        buttons_available = (
+            mode != "disabled"
+        )
+
+        if mode == "disabled":
+            workspace_minimum_height = 520
+
+        elif mode == "music":
+            workspace_minimum_height = 760
+
+        else:
+            workspace_minimum_height = 900
+
+        self.studio_workspace.setMinimumHeight(
+            workspace_minimum_height
+        )
 
         self.editor_card.setVisible(
             editable
@@ -2672,6 +3398,18 @@ class PresencePage(QWidget):
 
         self.elapsed_box.setEnabled(
             editable
+        )
+
+        self.show_link_buttons_box.setEnabled(
+            buttons_available
+        )
+
+        self.link_buttons_editor.setEnabled(
+            buttons_available
+        )
+
+        self.link_buttons_editor.setVisible(
+            buttons_available
         )
 
         has_image = bool(
@@ -2715,7 +3453,7 @@ class PresencePage(QWidget):
 
         if mode == "music":
             self.mode_help.setText(
-                "Music follows the active Spotify or Windows media session automatically."
+                "Music follows the active Spotify or Windows media session automatically. Optional Link Buttons remain fixed for the Music Presence."
             )
 
         elif mode == "disabled":
@@ -2725,7 +3463,7 @@ class PresencePage(QWidget):
 
         else:
             self.mode_help.setText(
-                "Edit the title, message, artwork, and optional timer before publishing."
+                "Edit the title, message, artwork, timer, and optional link buttons before publishing."
             )
 
         editor_container = getattr(
@@ -2772,7 +3510,7 @@ class PresencePage(QWidget):
                 )
 
                 context_text.setText(
-                    "Track title, artist, artwork, and playback timing follow your active media session automatically. No Spotify window interaction is required."
+                    "Track title, artist, artwork, and playback timing follow your active media session automatically. Optional Link Buttons can be configured below without interacting with Spotify."
                 )
 
             elif mode == "disabled":
@@ -2814,7 +3552,7 @@ class PresencePage(QWidget):
 
         if save_button is not None:
             save_button.setVisible(
-                editable
+                mode != "disabled"
             )
 
         self._refresh_studio_mode_controls()
@@ -2828,6 +3566,98 @@ class PresencePage(QWidget):
 
         self.preview_app.setText(title)
 
+    def _update_link_button_preview(
+        self,
+    ):
+        mode = self.current_mode
+
+        completed_labels = []
+        has_saved_data = False
+
+        for (
+            label_input,
+            url_input,
+        ) in zip(
+            self.link_button_label_inputs,
+            self.link_button_url_inputs,
+        ):
+            label = (
+                label_input.text().strip()
+            )
+
+            url = (
+                url_input.text().strip()
+            )
+
+            if label or url:
+                has_saved_data = True
+
+            if label and url:
+                completed_labels.append(
+                    label
+                )
+
+        show_buttons = (
+            mode != "disabled"
+            and self.show_link_buttons_box.isChecked()
+        )
+
+        visible_labels = (
+            completed_labels[:2]
+            if show_buttons
+            else []
+        )
+
+        for index, preview_button in enumerate(
+            self.preview_link_buttons
+        ):
+            if index < len(
+                visible_labels
+            ):
+                preview_button.setText(
+                    visible_labels[index]
+                )
+
+                preview_button.setHidden(
+                    False
+                )
+
+            else:
+                preview_button.clear()
+
+                preview_button.setHidden(
+                    True
+                )
+
+        if mode == "disabled":
+            status = (
+                "Unavailable while Rich Presence is off"
+            )
+
+        elif not show_buttons:
+            if has_saved_data:
+                status = (
+                    "Hidden on Discord - links saved"
+                )
+            else:
+                status = (
+                    "Hidden on Discord"
+                )
+
+        elif completed_labels:
+            status = (
+                "Visible to others on Discord"
+            )
+
+        else:
+            status = (
+                "No buttons configured"
+            )
+
+        self.link_buttons_status.setText(
+            status
+        )
+
     def update_preview(self, *_):
         mode = self.current_mode
 
@@ -2840,6 +3670,8 @@ class PresencePage(QWidget):
                 else mode_name.upper()
             )
         )
+
+        self._update_link_button_preview()
 
         if mode == "music":
             self.preview_title.setText(
@@ -2980,6 +3812,8 @@ class PresencePage(QWidget):
             "presence/custom/message",
             "presence/custom/image_path",
             "presence/custom/show_elapsed",
+            "presence/custom/show_buttons",
+            "presence/custom/buttons",
         ):
             store.remove(key)
 
@@ -3295,15 +4129,16 @@ class PresencePage(QWidget):
         self.remove_image_button.setEnabled(editable)
 
     def apply_presence(self):
-        presence_mode = PresenceMode(
-            mode=self.current_mode,
-            title=self.title_input.text().strip(),
-            message=self.message_input.text().strip(),
-            image_path=self.image_path,
-            show_elapsed=(
-                self.elapsed_box.isChecked()
-            ),
-        )
+        try:
+            presence_mode = (
+                self.current_editor_presence_mode()
+            )
+
+        except PresenceLinkButtonError as error:
+            self.status_label.setText(
+                str(error)
+            )
+            return
 
         self.controller.apply_mode(
             presence_mode

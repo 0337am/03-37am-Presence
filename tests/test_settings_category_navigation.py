@@ -124,6 +124,32 @@ class SettingsCategoryNavigationTests(unittest.TestCase):
             },
         )
 
+    def test_library_data_label_escapes_qt_mnemonic_ampersand(
+        self,
+    ):
+        from pathlib import Path
+
+        source = Path(
+            "src/ui/settings.py"
+        ).read_text(
+            encoding="utf-8-sig"
+        )
+
+        self.assertIn(
+            '"Library && Data"',
+            source,
+        )
+
+        self.assertNotIn(
+            '"Library & Data"',
+            source,
+        )
+
+        self.assertIn(
+            '"library_data"',
+            source,
+        )
+
     def test_general_is_selected_initially(self):
         self.assertEqual(
             self.page._active_settings_category,

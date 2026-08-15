@@ -434,7 +434,7 @@ class SettingsPage(QWidget):
             ),
             (
                 "library_data",
-                "Library & Data",
+                "Library && Data",
                 "data_storage",
             ),
             (
