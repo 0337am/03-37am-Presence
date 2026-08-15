@@ -82,6 +82,8 @@ def colour_with_alpha(
     )
 
 
+from src.ui.presence_library import PresenceLibraryPanel
+
 class PresencePage(QWidget):
     presets_changed = pyqtSignal()
 
@@ -764,6 +766,1044 @@ class PresencePage(QWidget):
         )
         self.root_layout.addStretch()
 
+        self._install_presence_studio_shell()
+
+    def _install_presence_studio_shell(
+        self,
+    ):
+        self.page_title.setText(
+            "Presence Studio"
+        )
+
+        self.page_subtitle.setText(
+            "Create, collect, preview, and switch your Discord presence."
+        )
+
+        # The original mode and preset controls stay alive
+        # underneath the Studio as compatibility engines.
+        self.mode_card.setVisible(
+            False
+        )
+
+        self.presets_card.setVisible(
+            False
+        )
+
+        self.presence_library = PresenceLibraryPanel(
+            self
+        )
+
+        self.presence_library.setMinimumWidth(
+            410
+        )
+
+        self.presence_library.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+
+        content_index = -1
+
+        for index in range(
+            self.root_layout.count()
+        ):
+            item = self.root_layout.itemAt(
+                index
+            )
+
+            if (
+                item is not None
+                and item.layout()
+                is self.content_row
+            ):
+                content_index = index
+                break
+
+        if content_index < 0:
+            raise RuntimeError(
+                "Presence Studio could not locate "
+                "the legacy content workspace."
+            )
+
+        self.root_layout.takeAt(
+            content_index
+        )
+
+        bottom_layout = None
+        bottom_index = -1
+
+        for index in range(
+            self.root_layout.count()
+        ):
+            item = self.root_layout.itemAt(
+                index
+            )
+
+            layout = (
+                item.layout()
+                if item is not None
+                else None
+            )
+
+            if (
+                layout is not None
+                and layout.indexOf(
+                    self.apply_button
+                )
+                >= 0
+            ):
+                bottom_layout = layout
+                bottom_index = index
+                break
+
+        if (
+            bottom_layout is None
+            or bottom_index < 0
+        ):
+            raise RuntimeError(
+                "Presence Studio could not locate "
+                "the legacy action row."
+            )
+
+        self.root_layout.takeAt(
+            bottom_index
+        )
+
+        while self.root_layout.count():
+            last_index = (
+                self.root_layout.count()
+                - 1
+            )
+
+            last_item = (
+                self.root_layout.itemAt(
+                    last_index
+                )
+            )
+
+            if (
+                last_item is None
+                or last_item.spacerItem()
+                is None
+            ):
+                break
+
+            self.root_layout.takeAt(
+                last_index
+            )
+
+        def drain_layout(
+            layout,
+        ):
+            while layout.count():
+                item = layout.takeAt(
+                    0
+                )
+
+                child_layout = (
+                    item.layout()
+                )
+
+                if child_layout is not None:
+                    drain_layout(
+                        child_layout
+                    )
+
+        drain_layout(
+            self.content_row
+        )
+
+        drain_layout(
+            bottom_layout
+        )
+
+        self.studio_workspace = QFrame(
+            self
+        )
+
+        self.studio_workspace.setObjectName(
+            "presenceStudioWorkspace"
+        )
+
+        self.studio_workspace.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+
+        workspace_layout = QVBoxLayout(
+            self.studio_workspace
+        )
+
+        workspace_layout.setContentsMargins(
+            14,
+            14,
+            14,
+            14,
+        )
+
+        workspace_layout.setSpacing(
+            10
+        )
+
+        workspace_header = QHBoxLayout()
+
+        workspace_header.setSpacing(
+            8
+        )
+
+        heading_group = QVBoxLayout()
+
+        heading_group.setSpacing(
+            2
+        )
+
+        self.studio_workspace_heading = QLabel(
+            "CURRENT PRESENCE"
+        )
+
+        self.studio_workspace_heading.setObjectName(
+            "presenceStudioSectionTitle"
+        )
+
+        self.studio_workspace_subtitle = QLabel(
+            "Preview, edit, and publish without leaving the Studio."
+        )
+
+        self.studio_workspace_subtitle.setObjectName(
+            "presenceStudioSubtitle"
+        )
+
+        self.studio_workspace_subtitle.setWordWrap(
+            True
+        )
+
+        heading_group.addWidget(
+            self.studio_workspace_heading
+        )
+
+        heading_group.addWidget(
+            self.studio_workspace_subtitle
+        )
+
+        workspace_header.addLayout(
+            heading_group
+        )
+
+        workspace_header.addStretch()
+
+        self.studio_mode_badge = QLabel(
+            "MUSIC"
+        )
+
+        self.studio_mode_badge.setObjectName(
+            "presenceStudioModeBadge"
+        )
+
+        self.studio_mode_badge.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        workspace_header.addWidget(
+            self.studio_mode_badge,
+            alignment=Qt.AlignmentFlag.AlignTop,
+        )
+
+        workspace_layout.addLayout(
+            workspace_header
+        )
+
+        self.studio_mode_rail = QFrame(
+            self.studio_workspace
+        )
+
+        self.studio_mode_rail.setObjectName(
+            "presenceStudioModeRail"
+        )
+
+        mode_rail_layout = QHBoxLayout(
+            self.studio_mode_rail
+        )
+
+        mode_rail_layout.setContentsMargins(
+            6,
+            6,
+            6,
+            6,
+        )
+
+        mode_rail_layout.setSpacing(
+            5
+        )
+
+        self.studio_mode_buttons = {}
+
+        for mode, display_name in MODE_NAMES.items():
+            button = QPushButton(
+                (
+                    "Off"
+                    if mode == "disabled"
+                    else display_name
+                )
+            )
+
+            button.setObjectName(
+                "presenceStudioModeButton"
+            )
+
+            button.setCheckable(
+                True
+            )
+
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+
+            button.setProperty(
+                "modeKey",
+                mode,
+            )
+
+            button.clicked.connect(
+                lambda checked=False, key=mode:
+                self.select_studio_mode(
+                    key
+                )
+            )
+
+            self.studio_mode_buttons[
+                mode
+            ] = button
+
+            mode_rail_layout.addWidget(
+                button,
+                stretch=1,
+            )
+
+        workspace_layout.addWidget(
+            self.studio_mode_rail
+        )
+
+        # Reuse the original explanatory label so there is
+        # still one source of truth for mode descriptions.
+        self.studio_mode_help = (
+            self.mode_help
+        )
+
+        workspace_layout.addWidget(
+            self.studio_mode_help
+        )
+
+        self.preview_card.setMinimumHeight(
+            170
+        )
+
+        self.preview_card.setMaximumHeight(
+            235
+        )
+
+        self.preview_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+
+        workspace_layout.addWidget(
+            self.preview_card
+        )
+
+        self.studio_context_card = QFrame(
+            self.studio_workspace
+        )
+
+        self.studio_context_card.setObjectName(
+            "presenceStudioContext"
+        )
+
+        context_layout = QVBoxLayout(
+            self.studio_context_card
+        )
+
+        context_layout.setContentsMargins(
+            14,
+            14,
+            14,
+            14,
+        )
+
+        context_layout.setSpacing(
+            5
+        )
+
+        self.studio_context_title = QLabel(
+            "AUTOMATIC MUSIC PRESENCE"
+        )
+
+        self.studio_context_title.setObjectName(
+            "presenceStudioContextTitle"
+        )
+
+        self.studio_context_text = QLabel(
+            "Your music presence follows the active media session automatically."
+        )
+
+        self.studio_context_text.setObjectName(
+            "presenceStudioContextText"
+        )
+
+        self.studio_context_text.setWordWrap(
+            True
+        )
+
+        context_layout.addWidget(
+            self.studio_context_title
+        )
+
+        context_layout.addWidget(
+            self.studio_context_text
+        )
+
+        context_layout.addStretch()
+
+        workspace_layout.addWidget(
+            self.studio_context_card,
+            stretch=1,
+        )
+
+        self.studio_editor_container = QFrame(
+            self.studio_workspace
+        )
+
+        self.studio_editor_container.setObjectName(
+            "presenceStudioEditorContainer"
+        )
+
+        editor_container_layout = QHBoxLayout(
+            self.studio_editor_container
+        )
+
+        editor_container_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        editor_container_layout.setSpacing(
+            10
+        )
+
+        editor_container_layout.addWidget(
+            self.editor_card,
+            stretch=3,
+        )
+
+        editor_container_layout.addWidget(
+            self.image_card,
+            stretch=2,
+        )
+
+        workspace_layout.addWidget(
+            self.studio_editor_container,
+            stretch=1,
+        )
+
+        self.studio_action_bar = QFrame(
+            self.studio_workspace
+        )
+
+        self.studio_action_bar.setObjectName(
+            "presenceStudioActionBar"
+        )
+
+        action_layout = QHBoxLayout(
+            self.studio_action_bar
+        )
+
+        action_layout.setContentsMargins(
+            8,
+            8,
+            8,
+            8,
+        )
+
+        action_layout.setSpacing(
+            8
+        )
+
+        self.library_save_button = QPushButton(
+            "Save to Library"
+        )
+
+        self.library_save_button.setObjectName(
+            "secondaryButton"
+        )
+
+        self.library_save_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        action_layout.addWidget(
+            self.status_label,
+            stretch=1,
+        )
+
+        action_layout.addWidget(
+            self.reset_custom_button
+        )
+
+        action_layout.addWidget(
+            self.music_mode_button
+        )
+
+        action_layout.addWidget(
+            self.library_save_button
+        )
+
+        action_layout.addWidget(
+            self.apply_button
+        )
+
+        workspace_layout.addWidget(
+            self.studio_action_bar
+        )
+
+        self.studio_row = QHBoxLayout()
+
+        self.studio_row.setSpacing(
+            14
+        )
+
+        self.studio_row.addWidget(
+            self.presence_library,
+            stretch=5,
+        )
+
+        self.studio_row.addWidget(
+            self.studio_workspace,
+            stretch=6,
+        )
+
+        self.root_layout.insertLayout(
+            content_index,
+            self.studio_row,
+            1,
+        )
+
+        self.presence_library.preset_selected.connect(
+            self.open_library_preset
+        )
+
+        self.presence_library.preset_apply_requested.connect(
+            self.apply_library_preset
+        )
+
+        self.presence_library.preset_action_requested.connect(
+            self.handle_library_preset_action
+        )
+
+        self.presence_library.create_requested.connect(
+            self.start_new_library_presence
+        )
+
+        self.library_save_button.clicked.connect(
+            self.save_current_as_preset
+        )
+
+        self._refresh_studio_mode_controls()
+
+    def _refresh_studio_mode_controls(
+        self,
+    ):
+        mode = self.current_mode
+
+        mode_buttons = getattr(
+            self,
+            "studio_mode_buttons",
+            {},
+        )
+
+        for mode_key, button in mode_buttons.items():
+            button.setChecked(
+                mode_key == mode
+            )
+
+        badge = getattr(
+            self,
+            "studio_mode_badge",
+            None,
+        )
+
+        if badge is not None:
+            mode_name = MODE_NAMES.get(
+                mode,
+                str(mode).title(),
+            )
+
+            if mode == "disabled":
+                mode_name = "Off"
+
+            badge.setText(
+                mode_name.upper()
+            )
+
+    def select_studio_mode(
+        self,
+        mode,
+    ):
+        mode = str(
+            mode
+            or ""
+        ).strip().lower()
+
+        index = self.mode_box.findData(
+            mode
+        )
+
+        if index < 0:
+            return
+
+        self.mode_box.setCurrentIndex(
+            index
+        )
+
+        self.update_editor_state()
+        self.update_image_preview()
+        self.update_preview()
+
+    def _apply_presence_studio_theme(
+        self,
+        theme,
+    ):
+        workspace = getattr(
+            self,
+            "studio_workspace",
+            None,
+        )
+
+        if workspace is None:
+            return
+
+        text = theme.get(
+            "text",
+            "#ffffff",
+        )
+
+        muted = theme.get(
+            "muted",
+            "#b9aeb8",
+        )
+
+        accent = theme.get(
+            "accent",
+            "#ff6ea9",
+        )
+
+        card = theme.get(
+            "card",
+            "#2a1721",
+        )
+
+        card_alt = theme.get(
+            "card_alt",
+            "#351d2a",
+        )
+
+        background = theme.get(
+            "background",
+            "#160d12",
+        )
+
+        border = theme.get(
+            "border",
+            "#5a3346",
+        )
+
+        workspace.setStyleSheet(
+            f"""
+            QFrame#presenceStudioWorkspace {{
+                background: {card};
+                border: 1px solid {border};
+                border-radius: 16px;
+            }}
+
+            QLabel#presenceStudioSectionTitle {{
+                color: {accent};
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 1.1px;
+            }}
+
+            QLabel#presenceStudioSubtitle,
+            QLabel#modeHelp,
+            QLabel#presenceStudioContextText {{
+                color: {muted};
+                font-size: 10px;
+            }}
+
+            QLabel#presenceStudioModeBadge {{
+                color: {accent};
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 7px;
+                padding: 4px 8px;
+                font-size: 8px;
+                font-weight: 800;
+            }}
+
+            QFrame#presenceStudioModeRail {{
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 10px;
+            }}
+
+            QPushButton#presenceStudioModeButton {{
+                color: {muted};
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 7px;
+                padding: 7px 6px;
+                font-size: 9px;
+                font-weight: 700;
+            }}
+
+            QPushButton#presenceStudioModeButton:hover {{
+                color: {text};
+                border-color: {border};
+                background: {card_alt};
+            }}
+
+            QPushButton#presenceStudioModeButton:checked {{
+                color: {background};
+                background: {accent};
+                border-color: {accent};
+            }}
+
+            QFrame#presenceStudioContext {{
+                background: {card_alt};
+                border: 1px dashed {border};
+                border-radius: 12px;
+            }}
+
+            QLabel#presenceStudioContextTitle {{
+                color: {text};
+                font-size: 12px;
+                font-weight: 750;
+            }}
+
+            QFrame#presenceStudioEditorContainer {{
+                background: transparent;
+                border: none;
+            }}
+
+            QFrame#presenceStudioActionBar {{
+                background: {card_alt};
+                border: 1px solid {border};
+                border-radius: 11px;
+            }}
+            """
+        )
+
+    def refresh_presence_library(
+        self,
+        selected_id="",
+    ):
+        library = getattr(
+            self,
+            "presence_library",
+            None,
+        )
+
+        if library is None:
+            return
+
+        selection = str(
+            selected_id
+            or self.selected_preset_id()
+            or ""
+        ).strip()
+
+        library.set_presets(
+            self.preset_store.load(),
+            selected_id=selection,
+        )
+
+    def _select_library_preset_in_engine(
+        self,
+        preset_id,
+    ) -> bool:
+        preset_id = str(
+            preset_id
+            or ""
+        ).strip()
+
+        index = self.preset_box.findData(
+            preset_id
+        )
+
+        if index < 0:
+            return False
+
+        self.preset_box.blockSignals(
+            True
+        )
+
+        self.preset_box.setCurrentIndex(
+            index
+        )
+
+        self.preset_box.blockSignals(
+            False
+        )
+
+        self.update_preset_buttons()
+
+        library = getattr(
+            self,
+            "presence_library",
+            None,
+        )
+
+        if library is not None:
+            library.set_selected_id(
+                preset_id
+            )
+
+        return True
+
+    def open_library_preset(
+        self,
+        preset_id,
+    ):
+        if not self._select_library_preset_in_engine(
+            preset_id
+        ):
+            self.refresh_presence_library()
+            return
+
+        preset = self.selected_preset()
+
+        if preset is None:
+            return
+
+        presence_mode = preset.to_presence_mode()
+
+        index = self.mode_box.findData(
+            presence_mode.mode
+        )
+
+        if index >= 0:
+            self.mode_box.blockSignals(
+                True
+            )
+
+            self.mode_box.setCurrentIndex(
+                index
+            )
+
+            self.mode_box.blockSignals(
+                False
+            )
+
+        self.title_input.blockSignals(
+            True
+        )
+
+        self.message_input.blockSignals(
+            True
+        )
+
+        self.elapsed_box.blockSignals(
+            True
+        )
+
+        self.title_input.setText(
+            presence_mode.title
+        )
+
+        self.message_input.setText(
+            presence_mode.message
+        )
+
+        self.elapsed_box.setChecked(
+            presence_mode.show_elapsed
+        )
+
+        self.title_input.blockSignals(
+            False
+        )
+
+        self.message_input.blockSignals(
+            False
+        )
+
+        self.elapsed_box.blockSignals(
+            False
+        )
+
+        self.image_path = (
+            presence_mode.image_path
+        )
+
+        self.update_editor_state()
+        self.update_image_preview()
+        self.update_preview()
+
+        self.status_label.setText(
+            f"Opened from Library: {preset.name}"
+        )
+
+    def apply_library_preset(
+        self,
+        preset_id,
+    ):
+        if not self._select_library_preset_in_engine(
+            preset_id
+        ):
+            self.refresh_presence_library()
+            return
+
+        self.apply_selected_preset()
+
+        self.refresh_presence_library(
+            preset_id
+        )
+
+    def handle_library_preset_action(
+        self,
+        preset_id,
+        action,
+    ):
+        preset_id = str(
+            preset_id
+            or ""
+        ).strip()
+
+        action = str(
+            action
+            or ""
+        ).strip().lower()
+
+        if not preset_id:
+            return
+
+        if action == "edit":
+            self.open_library_preset(
+                preset_id
+            )
+            return
+
+        if not self._select_library_preset_in_engine(
+            preset_id
+        ):
+            self.refresh_presence_library()
+            return
+
+        if action == "rename":
+            self.rename_selected_preset()
+
+        elif action == "duplicate":
+            self.duplicate_selected_preset()
+
+        elif action == "pin":
+            self.toggle_selected_preset_pin()
+
+        elif action == "delete":
+            self.delete_selected_preset()
+
+    def start_new_library_presence(
+        self,
+    ):
+        no_preset_index = (
+            self.preset_box.findData(
+                ""
+            )
+        )
+
+        if no_preset_index >= 0:
+            self.preset_box.blockSignals(
+                True
+            )
+
+            self.preset_box.setCurrentIndex(
+                no_preset_index
+            )
+
+            self.preset_box.blockSignals(
+                False
+            )
+
+        custom_index = (
+            self.mode_box.findData(
+                "custom"
+            )
+        )
+
+        if custom_index >= 0:
+            self.mode_box.blockSignals(
+                True
+            )
+
+            self.mode_box.setCurrentIndex(
+                custom_index
+            )
+
+            self.mode_box.blockSignals(
+                False
+            )
+
+        self.title_input.blockSignals(
+            True
+        )
+
+        self.message_input.blockSignals(
+            True
+        )
+
+        self.elapsed_box.blockSignals(
+            True
+        )
+
+        self.title_input.clear()
+        self.message_input.clear()
+
+        self.elapsed_box.setChecked(
+            False
+        )
+
+        self.title_input.blockSignals(
+            False
+        )
+
+        self.message_input.blockSignals(
+            False
+        )
+
+        self.elapsed_box.blockSignals(
+            False
+        )
+
+        self.image_path = ""
+
+        self.update_preset_buttons()
+        self.update_editor_state()
+        self.update_image_preview()
+        self.update_preview()
+
+        library = getattr(
+            self,
+            "presence_library",
+            None,
+        )
+
+        if library is not None:
+            library.set_selected_id(
+                ""
+            )
+
+        self.status_label.setText(
+            "New Presence draft ready. "
+            "Edit it, then choose Save to Library."
+        )
+
     def connect_signals(self):
         self.mode_box.currentIndexChanged.connect(
             self.on_mode_changed
@@ -881,6 +1921,10 @@ class PresencePage(QWidget):
         self._loading_preset_box = False
 
         self.update_preset_buttons()
+
+        self.refresh_presence_library(
+            self.selected_preset_id()
+        )
 
     def selected_preset_id(self) -> str:
         if not hasattr(
@@ -1254,6 +2298,21 @@ class PresencePage(QWidget):
 
     @pyqtSlot(dict)
     def apply_theme(self, theme: dict):
+        library = getattr(
+            self,
+            "presence_library",
+            None,
+        )
+
+        if library is not None:
+            library.apply_theme(
+                theme
+            )
+
+        self._apply_presence_studio_theme(
+            theme
+        )
+
         compact = theme.get(
             "compact",
             True,
@@ -1590,45 +2649,54 @@ class PresencePage(QWidget):
     def update_editor_state(self):
         mode = self.current_mode
 
-        self.editor_card.setVisible(
-            mode not in {
-                "music",
-                "disabled",
-            }
-        )
-
-        self.image_card.setVisible(
-            mode not in {
-                "music",
-                "disabled",
-            }
-        )
-
         editable = mode not in {
             "music",
             "disabled",
         }
 
-        self.title_input.setEnabled(editable)
-        self.message_input.setEnabled(editable)
-        self.elapsed_box.setEnabled(editable)
+        self.editor_card.setVisible(
+            editable
+        )
+
+        self.image_card.setVisible(
+            editable
+        )
+
+        self.title_input.setEnabled(
+            editable
+        )
+
+        self.message_input.setEnabled(
+            editable
+        )
+
+        self.elapsed_box.setEnabled(
+            editable
+        )
 
         has_image = bool(
             self.image_path
-            and Path(self.image_path).exists()
+            and Path(
+                self.image_path
+            ).is_file()
         )
 
         self.choose_image_button.setEnabled(
             editable
         )
+
         self.open_image_button.setEnabled(
-            editable and has_image
+            editable
+            and has_image
         )
+
         self.open_artwork_folder_button.setEnabled(
             editable
         )
+
         self.remove_image_button.setEnabled(
-            editable and has_image
+            editable
+            and has_image
         )
 
         mode_name = self.mode_box.currentText()
@@ -1636,14 +2704,18 @@ class PresencePage(QWidget):
         self.active_badge.setText(
             mode_name.upper()
         )
+
         self.preview_mode.setText(
-            mode_name.upper()
+            (
+                "OFF"
+                if mode == "disabled"
+                else mode_name.upper()
+            )
         )
 
         if mode == "music":
             self.mode_help.setText(
-                "Spotify controls the song title, "
-                "artist, timer, and artwork automatically."
+                "Music follows the active Spotify or Windows media session automatically."
             )
 
         elif mode == "disabled":
@@ -1653,9 +2725,99 @@ class PresencePage(QWidget):
 
         else:
             self.mode_help.setText(
-                "Your title, message, image, and timer "
-                "will be displayed on Discord."
+                "Edit the title, message, artwork, and optional timer before publishing."
             )
+
+        editor_container = getattr(
+            self,
+            "studio_editor_container",
+            None,
+        )
+
+        context_card = getattr(
+            self,
+            "studio_context_card",
+            None,
+        )
+
+        if editor_container is not None:
+            editor_container.setVisible(
+                editable
+            )
+
+        if context_card is not None:
+            context_card.setVisible(
+                not editable
+            )
+
+        context_title = getattr(
+            self,
+            "studio_context_title",
+            None,
+        )
+
+        context_text = getattr(
+            self,
+            "studio_context_text",
+            None,
+        )
+
+        if (
+            context_title is not None
+            and context_text is not None
+        ):
+            if mode == "music":
+                context_title.setText(
+                    "AUTOMATIC MUSIC PRESENCE"
+                )
+
+                context_text.setText(
+                    "Track title, artist, artwork, and playback timing follow your active media session automatically. No Spotify window interaction is required."
+                )
+
+            elif mode == "disabled":
+                context_title.setText(
+                    "RICH PRESENCE IS OFF"
+                )
+
+                context_text.setText(
+                    "Nothing will be published to Discord until another Presence mode is applied."
+                )
+
+        reset_button = getattr(
+            self,
+            "reset_custom_button",
+            None,
+        )
+
+        if reset_button is not None:
+            reset_button.setVisible(
+                mode == "custom"
+            )
+
+        music_button = getattr(
+            self,
+            "music_mode_button",
+            None,
+        )
+
+        if music_button is not None:
+            music_button.setVisible(
+                mode != "music"
+            )
+
+        save_button = getattr(
+            self,
+            "library_save_button",
+            None,
+        )
+
+        if save_button is not None:
+            save_button.setVisible(
+                editable
+            )
+
+        self._refresh_studio_mode_controls()
 
     @pyqtSlot(dict)
     def apply_branding(self, branding: dict):
@@ -1672,25 +2834,33 @@ class PresencePage(QWidget):
         mode_name = self.mode_box.currentText()
 
         self.preview_mode.setText(
-            mode_name.upper()
+            (
+                "OFF"
+                if mode == "disabled"
+                else mode_name.upper()
+            )
         )
 
         if mode == "music":
             self.preview_title.setText(
-                "Current Spotify track"
+                "Current music activity"
             )
+
             self.preview_message.setText(
-                "Artist and album update automatically"
+                "Track details update automatically"
             )
+
             self.preview_timer.setText(
                 "Playback timer"
             )
 
-            if not Path(self.image_path).exists():
-                self.preview_image.clear()
-                self.preview_image.setText(
-                    "Music"
-                )
+            # Music does not use a user-selected custom image.
+            # Always clear stale custom/invalid presentation state.
+            self.preview_image.clear()
+
+            self.preview_image.setText(
+                "MUSIC"
+            )
 
             return
 
@@ -1698,15 +2868,21 @@ class PresencePage(QWidget):
             self.preview_title.setText(
                 "Rich Presence disabled"
             )
+
             self.preview_message.setText(
                 "Nothing will be displayed on Discord"
             )
-            self.preview_timer.setText("")
+
+            self.preview_timer.setText(
+                ""
+            )
 
             self.preview_image.clear()
+
             self.preview_image.setText(
-                "Off"
+                "OFF"
             )
+
             return
 
         title = (
@@ -1719,20 +2895,41 @@ class PresencePage(QWidget):
             or "No message"
         )
 
-        self.preview_title.setText(title)
-        self.preview_message.setText(message)
+        self.preview_title.setText(
+            title
+        )
+
+        self.preview_message.setText(
+            message
+        )
 
         if self.elapsed_box.isChecked():
             self.preview_timer.setText(
                 "00:00 elapsed"
             )
         else:
-            self.preview_timer.setText("")
+            self.preview_timer.setText(
+                ""
+            )
 
-        if not Path(self.image_path).exists():
+        image_path = str(
+            self.image_path
+            or ""
+        ).strip()
+
+        if (
+            not image_path
+            or not Path(
+                image_path
+            ).is_file()
+        ):
             self.preview_image.clear()
+
             self.preview_image.setText(
-                mode_name[:5]
+                (
+                    mode_name[:5]
+                    or "MODE"
+                )
             )
 
     def reset_custom_presence(self):
@@ -1993,7 +3190,10 @@ class PresencePage(QWidget):
     def update_image_preview(self):
         path = Path(self.image_path)
 
-        if not path.exists():
+        if (
+            not self.image_path
+            or not path.is_file()
+        ):
             self.image_preview.clear()
             self.image_preview.setText(
                 "No image selected"
