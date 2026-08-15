@@ -2,18 +2,14 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.0.1 highlights
+## v3.1.0 highlights
 
-- **Updater relaunch hotfix:** the installer now resets inherited PyInstaller runtime state before launching the newly installed app, preventing stale `_MEI` paths and missing Python DLL errors after an in-place update.
-
-- Navigate a reorganized Settings experience with dedicated categories for the app's major feature groups.
-- Optionally use a custom Discord Application ID for a personal Discord Rich Presence application identity while keeping the official identity as the default.
-- See Spotify playlist track artwork for catalogue tracks and supported resolved local playlist entries.
-- Use a real audio-reactive Spotify equalizer driven by process-specific Windows audio capture and live spectrum analysis.
-- Keep raw captured audio ephemeral: only normalized equalizer band levels are exposed to the Dashboard and no captured audio is saved.
-- Recover the Spotify equalizer automatically after Spotify is closed and reopened.
-- Preserve keyboard, mouse, and foreground focus during Spotify playback and remote song changes.
-- Continue using Spotify Search, playlists, Liked Songs, albums, artists, native playback, local-file resolution, and existing privacy-aware Spotify authentication from v2.9.
+- Rebuilt the Presence experience around Presence Studio, with a searchable and filterable Presence Library, pinned cards, editing, renaming, duplication, deletion, and reusable saved Presences.
+- Added a live Discord profile and activity preview that can display the connected Discord identity, avatar, music presentation, and custom Presence state locally inside the app.
+- Added up to two optional Discord Rich Presence Link Buttons to Music, AFK, Sleep, Working, and Custom Presences, with a per-Presence Show on Discord control that preserves saved labels and URLs when hidden.
+- Added live Link Button previews and visibility feedback inside Presence Studio while keeping preview controls inert and separate from browser navigation.
+- Improved Discord music presentation and return-to-music artwork handling while preserving Windows media state as presentation truth.
+- Existing Presence settings and presets remain compatible. Link Buttons default to hidden with no configured links until the user chooses to add them.
 
 ## Core features
 

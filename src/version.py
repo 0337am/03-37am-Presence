@@ -1,5 +1,5 @@
-APP_VERSION = "3.0.1"
-RELEASE_NAME = "Updater Relaunch Fix"
+APP_VERSION = "3.1.0"
+RELEASE_NAME = "Discord Presence Studio"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

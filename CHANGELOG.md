@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.1.0 - Discord Presence Studio
+
+Released 15 August 2026.
+
+### Added
+
+- Added a reusable Discord profile and activity preview with connected Discord identity, avatar presentation, music state, and generic custom Presence rendering.
+- Added Presence Studio with a searchable and filterable Presence Library, pinned-first cards, saved Presence editing, rename, duplicate, pin, and delete actions.
+- Added up to two optional Discord Rich Presence Link Buttons for Music, AFK, Sleep, Working, and Custom Presences.
+- Added a per-Presence `Show on Discord` control so saved Link Button labels and URLs can be retained without publishing them.
+- Added live inert Link Button representations and visibility feedback to the Presence Studio preview.
+
+### Improved
+
+- Discord music presentation now follows the app's established media truth while keeping generic Presence modes and music presentation cleanly separated.
+- Returning from a non-music Presence to Music invalidates stale presentation artwork state so current artwork can be restored correctly.
+- Music Presence can now retain its own saved Link Buttons while track title, artist, artwork, timing, and playback state continue updating automatically.
+- Presence Library presets preserve Link Button configuration through load, save, update, duplication, and settings backup flows.
+- Presence Studio now gives clear feedback when Link Buttons are visible to others, hidden while still saved, or not yet configured.
+
+### Safety, privacy, and upgrade behavior
+
+- Discord preview rendering remains local presentation only and does not require a Discord user token, self-bot behavior, or access to private Discord credentials.
+- Link Buttons are limited to Discord's two-button Rich Presence model and the app accepts browser-safe HTTP or HTTPS URLs only.
+- Preview Link Buttons are inert visual elements and do not open URLs from inside Presence Studio.
+- Discord does not show a user's own Rich Presence buttons to that same user; other users can see published buttons.
+- Existing Presence modes, presets, settings, Dashboard behavior, Spotify integration, and Library data continue using their established upgrade paths.
+- Existing saved Presence data remains compatible. Link Button fields default to hidden and empty when older settings or presets do not contain them.
+- Disabled Presence continues clearing Discord activity and never publishes Link Buttons.
+
 ## v3.0.1 - Updater Relaunch Fix
 
 Released 13 August 2026.
