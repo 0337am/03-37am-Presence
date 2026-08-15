@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 import os
 import subprocess
+import time
 
 from PyQt6.QtCore import (
     Qt,
@@ -127,6 +128,12 @@ from src.ui.launcher_card_images import (
 from src.system.launcher_open import (
     open_prepared_launcher_target,
     prepare_launcher_target,
+)
+from src.ui.discord_avatar_loader import (
+    DiscordAvatarLoader,
+)
+from src.ui.discord_profile_preview import (
+    DiscordProfilePreview,
 )
 from src.ui.theme import ThemeManager
 
@@ -658,6 +665,16 @@ class DashboardPage(QWidget):
         self._quick_access_layout_mode = None
 
         self.build_ui()
+
+        self.discord_avatar_loader = (
+            DiscordAvatarLoader(
+                self
+            )
+        )
+
+        self.discord_avatar_loader.avatar_ready.connect(
+            self.apply_discord_profile_avatar
+        )
 
         self.spotify_audio_spectrum_service = (
             SpotifyAudioSpectrumService()
@@ -8231,195 +8248,584 @@ class DashboardPage(QWidget):
         )
 
     def build_discord_preview_card(self):
-        self.preview_card = QFrame()
+        self.preview_card = DiscordProfilePreview(
+            self
+        )
         self.preview_card.setObjectName(
             "previewCard"
         )
+        self.preview_card.set_compact(True)
 
-        preview_layout = QVBoxLayout(
+        self.preview_card.set_profile(
+            display_name="Your Discord profile",
+            username="",
+            status="Preview",
+        )
+
+        self.discord_profile_preview = (
             self.preview_card
         )
-        preview_layout.setContentsMargins(
-            14,
-            12,
-            14,
-            12,
-        )
-        preview_layout.setSpacing(8)
 
-        preview_top = QHBoxLayout()
-        preview_top.setSpacing(8)
+        self._discord_preview_mode = "music"
+        self._discord_presence_payload = {}
+        self._discord_presence_elapsed_started = None
 
-        preview_heading = QLabel(
-            "🎮  DISCORD PREVIEW"
+        self.discord_presence_preview_timer = QTimer(
+            self
         )
-        preview_heading.setObjectName(
-            "previewHeading"
+        self.discord_presence_preview_timer.setInterval(
+            1000
+        )
+        self.discord_presence_preview_timer.timeout.connect(
+            self.refresh_discord_presence_preview_elapsed
         )
 
-        self.preview_mode = QLabel(
-            "MUSIC"
+        # Preserve the established Dashboard
+        # presentation attributes. Existing media
+        # update paths can feed the richer widget
+        # without owning its layout.
+        self.preview_mode = (
+            self.preview_card.activity_source_badge
         )
-        self.preview_mode.setObjectName(
-            "previewMode"
+        self.preview_app = (
+            self.preview_card.activity_application
         )
-
-        preview_top.addWidget(
-            preview_heading
+        self.preview_artwork = (
+            self.preview_card.activity_artwork
         )
-        preview_top.addStretch()
-        preview_top.addWidget(
-            self.preview_mode
+        self.preview_title = (
+            self.preview_card.activity_title
         )
-
-        preview_layout.addLayout(
-            preview_top
+        self.preview_state = (
+            self.preview_card.activity_artist
         )
-
-        activity_panel = QFrame()
-        activity_panel.setObjectName(
-            "discordActivityPanel"
+        self.preview_album = (
+            self.preview_card.activity_album
         )
-
-        panel_layout = QVBoxLayout(
-            activity_panel
-        )
-        panel_layout.setContentsMargins(
-            12,
-            9,
-            12,
-            9,
-        )
-        panel_layout.setSpacing(7)
-
-        app_row = QHBoxLayout()
-        app_row.setSpacing(6)
-
-        self.preview_app = QLabel(
-            "03:37am Presence"
-        )
-        self.preview_app.setObjectName(
-            "previewApp"
+        self.preview_time = (
+            self.preview_card.activity_time
         )
 
-        app_badge = QLabel("APP")
-        app_badge.setObjectName(
-            "appBadge"
-        )
-
-        app_row.addWidget(
-            self.preview_app
-        )
-        app_row.addWidget(
-            app_badge
-        )
-        app_row.addStretch()
-
-        panel_layout.addLayout(
-            app_row
-        )
-
-        activity_row = QHBoxLayout()
-        activity_row.setSpacing(10)
-
-        self.preview_artwork = QLabel(
-            "Art"
-        )
-        self.preview_artwork.setObjectName(
-            "previewArtwork"
-        )
-        self.preview_artwork.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-        self.preview_artwork.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
-
-        activity_row.addWidget(
-            self.preview_artwork,
-            alignment=Qt.AlignmentFlag.AlignTop,
-        )
-
-        activity_text = QVBoxLayout()
-        activity_text.setSpacing(2)
-
-        self.preview_title = QLabel(
-            "Waiting for media..."
-        )
-        self.preview_title.setObjectName(
-            "previewTitle"
-        )
-        self.preview_title.setWordWrap(True)
-
-        self.preview_state = QLabel("")
-        self.preview_state.setObjectName(
-            "previewState"
-        )
-        self.preview_state.setWordWrap(True)
-
-        self.preview_album = QLabel("")
-        self.preview_album.setObjectName(
-            "previewAlbum"
-        )
-        self.preview_album.setWordWrap(True)
-
-        self.preview_time = QLabel(
-            "Waiting"
-        )
-        self.preview_time.setObjectName(
-            "previewTime"
-        )
-
-        activity_text.addWidget(
-            self.preview_title
-        )
-        activity_text.addWidget(
-            self.preview_state
-        )
-        activity_text.addWidget(
-            self.preview_album
-        )
-        activity_text.addStretch()
-        activity_text.addWidget(
-            self.preview_time
-        )
-
-        activity_row.addLayout(
-            activity_text,
-            stretch=1,
-        )
-
-        panel_layout.addLayout(
-            activity_row
-        )
-
-        preview_layout.addWidget(
-            activity_panel,
-            stretch=1,
-        )
-
-        open_discord = QPushButton(
-            "Open in Discord"
-        )
-        open_discord.setIcon(
+        self.preview_card.open_discord_button.setIcon(
             self.style().standardIcon(
                 QStyle.StandardPixmap.SP_ArrowForward
             )
         )
-        open_discord.setObjectName(
-            "libraryOpenButton"
-        )
-        open_discord.setCursor(
+        self.preview_card.open_discord_button.setCursor(
             Qt.CursorShape.PointingHandCursor
         )
-        open_discord.clicked.connect(
+
+        self.preview_card.open_discord_requested.connect(
             self.open_discord
         )
 
-        preview_layout.addWidget(
-            open_discord
+    def set_discord_profile_identity(
+        self,
+        identity,
+    ):
+        preview = getattr(
+            self,
+            "discord_profile_preview",
+            None,
         )
+
+        if preview is None:
+            return
+
+        source = (
+            identity
+            if isinstance(identity, dict)
+            else {}
+        )
+
+        display_name = str(
+            source.get(
+                "display_name"
+            )
+            or source.get(
+                "username"
+            )
+            or "Your Discord profile"
+        ).strip()
+
+        username = str(
+            source.get(
+                "username"
+            )
+            or ""
+        ).strip()
+
+        user_id = str(
+            source.get(
+                "user_id"
+            )
+            or ""
+        ).strip()
+
+        avatar_hash = str(
+            source.get(
+                "avatar_hash"
+            )
+            or ""
+        ).strip()
+
+        identity_key = (
+            user_id,
+            username,
+            display_name,
+            avatar_hash,
+        )
+
+        if identity_key == getattr(
+            self,
+            "_discord_profile_identity_key",
+            None,
+        ):
+            return
+
+        self._discord_profile_identity_key = (
+            identity_key
+        )
+
+        username_label = (
+            f"@{username}"
+            if username
+            else ""
+        )
+
+        self._discord_profile_identity_values = {
+            "display_name": display_name,
+            "username": username_label,
+        }
+
+        # Render the identity immediately with the
+        # normal initial fallback. The asynchronous
+        # avatar replaces it when available.
+        preview.set_profile(
+            display_name=display_name,
+            username=username_label,
+            status="",
+        )
+
+        self._discord_profile_avatar_key = ""
+
+        loader = getattr(
+            self,
+            "discord_avatar_loader",
+            None,
+        )
+
+        if (
+            loader is not None
+            and user_id
+        ):
+            self._discord_profile_avatar_key = (
+                loader.request_avatar(
+                    user_id,
+                    avatar_hash,
+                )
+            )
+
+    def apply_discord_profile_avatar(
+        self,
+        avatar_key,
+        pixmap,
+    ):
+        if (
+            not avatar_key
+            or avatar_key != getattr(
+                self,
+                "_discord_profile_avatar_key",
+                "",
+            )
+        ):
+            return
+
+        if (
+            pixmap is None
+            or pixmap.isNull()
+        ):
+            return
+
+        preview = getattr(
+            self,
+            "discord_profile_preview",
+            None,
+        )
+
+        values = getattr(
+            self,
+            "_discord_profile_identity_values",
+            {},
+        )
+
+        if (
+            preview is None
+            or not isinstance(values, dict)
+        ):
+            return
+
+        display_name = str(
+            values.get(
+                "display_name"
+            )
+            or "Discord profile"
+        ).strip()
+
+        username = str(
+            values.get(
+                "username"
+            )
+            or ""
+        ).strip()
+
+        preview.set_profile(
+            display_name=display_name,
+            username=username,
+            status="",
+            avatar=pixmap,
+        )
+
+    def _discord_music_preview_active(
+        self,
+    ) -> bool:
+        return (
+            str(
+                getattr(
+                    self,
+                    "_discord_preview_mode",
+                    "music",
+                )
+                or "music"
+            ).strip().lower()
+            == "music"
+        )
+
+    @pyqtSlot(dict)
+    def set_discord_presence_mode(
+        self,
+        payload,
+    ):
+        source = (
+            dict(payload)
+            if isinstance(payload, dict)
+            else {}
+        )
+
+        mode = str(
+            source.get(
+                "mode"
+            )
+            or "music"
+        ).strip().lower()
+
+        if not mode:
+            mode = "music"
+
+        self._discord_preview_mode = mode
+        self._discord_presence_payload = source
+
+        timer = getattr(
+            self,
+            "discord_presence_preview_timer",
+            None,
+        )
+
+        if timer is not None:
+            timer.stop()
+
+        self._discord_presence_elapsed_started = None
+
+        if mode == "music":
+            # A custom Presence mode can replace
+            # only the Discord-preview artwork while
+            # the normal song-artwork signature still
+            # says the current track is already painted.
+            # Force one presentation refresh when
+            # returning to Music.
+            self._last_artwork_signature = None
+
+            song = getattr(
+                self,
+                "song",
+                None,
+            )
+
+            if (
+                song is not None
+                and str(
+                    getattr(
+                        song,
+                        "title",
+                        "",
+                    )
+                    or ""
+                ).strip()
+            ):
+                self.apply_song(
+                    song
+                )
+            else:
+                self.show_nothing_playing()
+
+            return
+
+        if mode == "disabled":
+            self._render_discord_presence_payload()
+            return
+
+        if bool(
+            source.get(
+                "show_elapsed"
+            )
+        ):
+            self._discord_presence_elapsed_started = (
+                time.monotonic()
+            )
+
+        self._render_discord_presence_payload()
+
+    def _render_discord_presence_payload(
+        self,
+    ):
+        if self._discord_music_preview_active():
+            return
+
+        timer = getattr(
+            self,
+            "discord_presence_preview_timer",
+            None,
+        )
+
+        source = getattr(
+            self,
+            "_discord_presence_payload",
+            {},
+        )
+
+        if not isinstance(source, dict):
+            source = {}
+
+        mode = str(
+            source.get(
+                "mode"
+            )
+            or getattr(
+                self,
+                "_discord_preview_mode",
+                "custom",
+            )
+            or "custom"
+        ).strip().lower()
+
+        mode_name = str(
+            MODE_NAMES.get(
+                mode,
+                mode.replace(
+                    "_",
+                    " ",
+                ).title(),
+            )
+            or mode
+            or "Presence"
+        ).strip()
+
+        mode_badge = (
+            "OFF"
+            if mode == "disabled"
+            else mode_name.upper()
+        )
+
+        title = str(
+            source.get(
+                "title"
+            )
+            or (
+                "Rich Presence disabled"
+                if mode == "disabled"
+                else "Custom presence"
+            )
+        ).strip()
+
+        message = str(
+            source.get(
+                "message"
+            )
+            or (
+                "Nothing is being published"
+                if mode == "disabled"
+                else ""
+            )
+        ).strip()
+
+        self.preview_mode.setText(
+            mode_badge
+        )
+
+        self.preview_title.setText(
+            title
+        )
+
+        self.preview_state.setText(
+            message
+        )
+        self.preview_state.setHidden(
+            not bool(message)
+        )
+
+        self.preview_album.setText("")
+        self.preview_album.setHidden(True)
+
+        preview = getattr(
+            self,
+            "discord_profile_preview",
+            None,
+        )
+
+        if preview is not None:
+            preview.activity_progress.setValue(
+                0
+            )
+            preview.activity_progress.setHidden(
+                True
+            )
+
+        image_bytes = source.get(
+            "image_bytes"
+        )
+
+        if isinstance(
+            image_bytes,
+            bytearray,
+        ):
+            image_bytes = bytes(
+                image_bytes
+            )
+
+        pixmap = QPixmap()
+
+        image_loaded = bool(
+            isinstance(
+                image_bytes,
+                bytes,
+            )
+            and image_bytes
+            and pixmap.loadFromData(
+                image_bytes
+            )
+            and not pixmap.isNull()
+        )
+
+        self.preview_artwork.clear()
+
+        if image_loaded:
+            width = max(
+                1,
+                self.preview_artwork.width(),
+            )
+            height = max(
+                1,
+                self.preview_artwork.height(),
+            )
+
+            self.preview_artwork.setPixmap(
+                pixmap.scaled(
+                    width,
+                    height,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            fallback = (
+                "OFF"
+                if mode == "disabled"
+                else mode_name[:5]
+            )
+
+            self.preview_artwork.setText(
+                fallback
+                or "Mode"
+            )
+
+        show_elapsed = bool(
+            source.get(
+                "show_elapsed"
+            )
+        )
+
+        if (
+            show_elapsed
+            and mode != "disabled"
+        ):
+            if (
+                self._discord_presence_elapsed_started
+                is None
+            ):
+                self._discord_presence_elapsed_started = (
+                    time.monotonic()
+                )
+
+            self.refresh_discord_presence_preview_elapsed()
+
+            if timer is not None:
+                timer.start()
+        else:
+            self.preview_time.setText("")
+            self.preview_time.setHidden(True)
+
+            if timer is not None:
+                timer.stop()
+
+    def refresh_discord_presence_preview_elapsed(
+        self,
+    ):
+        if self._discord_music_preview_active():
+            return
+
+        source = getattr(
+            self,
+            "_discord_presence_payload",
+            {},
+        )
+
+        if (
+            not isinstance(source, dict)
+            or not bool(
+                source.get(
+                    "show_elapsed"
+                )
+            )
+        ):
+            return
+
+        started = getattr(
+            self,
+            "_discord_presence_elapsed_started",
+            None,
+        )
+
+        if started is None:
+            return
+
+        elapsed = max(
+            0.0,
+            time.monotonic()
+            - float(started),
+        )
+
+        self.preview_time.setText(
+            format_playback_time(
+                elapsed
+            )
+        )
+        self.preview_time.setHidden(False)
+
+    def _restore_non_music_discord_preview(
+        self,
+    ):
+        if not self._discord_music_preview_active():
+            self._render_discord_presence_payload()
 
     def open_discord(self):
         try:
@@ -9393,6 +9799,24 @@ class DashboardPage(QWidget):
 
     @pyqtSlot(dict)
     def apply_theme(self, theme: dict):
+        discord_preview = getattr(
+            self,
+            "discord_profile_preview",
+            None,
+        )
+
+        if discord_preview is not None:
+            discord_preview.set_compact(
+                bool(
+                    theme.get(
+                        "compact",
+                        True,
+                    )
+                )
+            )
+            discord_preview.apply_theme(
+                theme
+            )
         compact = theme.get(
             "compact",
             True,
@@ -10226,14 +10650,35 @@ class DashboardPage(QWidget):
             song.duration
         )
 
+        preview_artist = (
+            song.artist or "Unknown artist"
+        )
+        preview_album = str(
+            song.album or ""
+        ).strip()
+        preview_title_key = str(
+            song.title or ""
+        ).strip().casefold()
+
+        if (
+            preview_album
+            and preview_album.casefold()
+            == preview_title_key
+        ):
+            preview_album = ""
+
         self.preview_title.setText(
             song.title
         )
         self.preview_state.setText(
-            song.artist or "Unknown artist"
+            preview_artist
         )
+        self.preview_state.setHidden(False)
         self.preview_album.setText(
-            song.album or "No album"
+            preview_album
+        )
+        self.preview_album.setHidden(
+            not bool(preview_album)
         )
 
         source_name = self._display_source(
@@ -10265,6 +10710,7 @@ class DashboardPage(QWidget):
             self.preview_time.setText(
                 f"{song.position} / {song.duration}"
             )
+            self.preview_time.setHidden(False)
         else:
             self.music_status.setText(
                 f"{source_name} • Paused"
@@ -10282,10 +10728,12 @@ class DashboardPage(QWidget):
             self.preview_time.setText(
                 "Paused"
             )
+            self.preview_time.setHidden(False)
 
         self.update_artwork(song)
         self.update_progress(song)
         self.refresh_playback_presentation()
+        self._restore_non_music_discord_preview()
 
         QTimer.singleShot(
             300,
@@ -10756,6 +11204,7 @@ class DashboardPage(QWidget):
             self.artwork_status.setText(
                 "Missing"
             )
+            self._restore_non_music_discord_preview()
             return
 
         pixmap = QPixmap()
@@ -10778,6 +11227,7 @@ class DashboardPage(QWidget):
             self.artwork_status.setText(
                 "Invalid"
             )
+            self._restore_non_music_discord_preview()
             return
 
         main_pixmap = pixmap.scaled(
@@ -10807,6 +11257,8 @@ class DashboardPage(QWidget):
         self.artwork_status.setText(
             "Loaded"
         )
+
+        self._restore_non_music_discord_preview()
 
     def refresh_playback_presentation(
         self,
@@ -10848,6 +11300,7 @@ class DashboardPage(QWidget):
         if (
             state.playing
             and song is not None
+            and self._discord_music_preview_active()
         ):
             self.preview_time.setText(
                 (
@@ -10855,6 +11308,7 @@ class DashboardPage(QWidget):
                     f"{song.duration}"
                 )
             )
+            self.preview_time.setHidden(False)
 
         total = (
             state.duration_seconds
@@ -10887,6 +11341,34 @@ class DashboardPage(QWidget):
         self.progress.setValue(
             progress_value
         )
+
+        discord_preview = getattr(
+            self,
+            "discord_profile_preview",
+            None,
+        )
+
+        if (
+            discord_preview is not None
+            and self._discord_music_preview_active()
+        ):
+            preview_progress = max(
+                0,
+                min(
+                    100,
+                    int(
+                        round(
+                            progress_value / 100
+                        )
+                    ),
+                ),
+            )
+            discord_preview.activity_progress.setValue(
+                preview_progress
+            )
+            discord_preview.activity_progress.setHidden(
+                False
+            )
 
     def update_progress(self, song: Song):
         current = self.time_to_seconds(
@@ -10939,10 +11421,27 @@ class DashboardPage(QWidget):
         self.preview_state.setText(
             "Waiting for Spotify"
         )
+        self.preview_state.setHidden(False)
         self.preview_album.setText("")
+        self.preview_album.setHidden(True)
         self.preview_time.setText(
             "Waiting"
         )
+        self.preview_time.setHidden(False)
+
+        discord_preview = getattr(
+            self,
+            "discord_profile_preview",
+            None,
+        )
+
+        if discord_preview is not None:
+            discord_preview.activity_progress.setValue(
+                0
+            )
+            discord_preview.activity_progress.setHidden(
+                True
+            )
 
         self.music_status.setText(
             "Waiting"
@@ -10963,6 +11462,8 @@ class DashboardPage(QWidget):
         self.preview_artwork.setText(
             "Art"
         )
+
+        self._restore_non_music_discord_preview()
 
         self._last_artwork_signature = None
 
@@ -10987,6 +11488,8 @@ class DashboardPage(QWidget):
         self.preview_time.setText(
             "Media error"
         )
+
+        self._restore_non_music_discord_preview()
 
     def stop_media_worker(self):
         equalizer_timer = getattr(
@@ -11016,6 +11519,15 @@ class DashboardPage(QWidget):
         if playback_presentation_timer is not None:
             playback_presentation_timer.stop()
 
+        discord_presence_preview_timer = getattr(
+            self,
+            "discord_presence_preview_timer",
+            None,
+        )
+
+        if discord_presence_preview_timer is not None:
+            discord_presence_preview_timer.stop()
+
         spectrum_service = getattr(
             self,
             "spotify_audio_spectrum_service",
@@ -11026,6 +11538,15 @@ class DashboardPage(QWidget):
             spectrum_service.shutdown(
                 timeout_seconds=2.0
             )
+
+        avatar_loader = getattr(
+            self,
+            "discord_avatar_loader",
+            None,
+        )
+
+        if avatar_loader is not None:
+            avatar_loader.shutdown()
 
         worker = getattr(
             self,

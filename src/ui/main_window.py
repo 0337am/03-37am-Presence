@@ -974,6 +974,10 @@ class MainWindow(QMainWindow):
             self.theme_manager,
         )
 
+        self.presence_controller.mode_changed.connect(
+            self.dashboard_page.set_discord_presence_mode
+        )
+
         self.library_page = LibraryPage(
             self.theme_manager
         )
@@ -2270,6 +2274,17 @@ class MainWindow(QMainWindow):
             self.presence_controller.leave_auto_afk()
 
     def refresh_discord_status(self):
+        set_profile_identity = getattr(
+            self.dashboard_page,
+            "set_discord_profile_identity",
+            None,
+        )
+
+        if callable(set_profile_identity):
+            set_profile_identity(
+                self.discord.profile_identity
+            )
+
         status_label = getattr(
             self.dashboard_page,
             "discord_status",

@@ -15,12 +15,19 @@ class FakeLabel:
         self,
     ):
         self.value = None
+        self.hidden = False
 
     def setText(
         self,
         value,
     ):
         self.value = value
+
+    def setHidden(
+        self,
+        hidden,
+    ):
+        self.hidden = bool(hidden)
 
 
 class FakeProgress:
@@ -228,6 +235,8 @@ class DashboardSmoothProgressTests(
                 duration="1:40",
             ),
         )
+
+        fake._discord_music_preview_active = lambda: True
 
         DashboardPage.refresh_playback_presentation(
             fake

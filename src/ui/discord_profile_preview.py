@@ -95,32 +95,32 @@ class DiscordProfilePreview(QFrame):
             "discordPreviewBody"
         )
 
-        body_layout = QHBoxLayout(
+        self.preview_body_layout = QHBoxLayout(
             self.preview_body
         )
-        body_layout.setContentsMargins(
+        self.preview_body_layout.setContentsMargins(
             18,
             18,
             18,
             18,
         )
-        body_layout.setSpacing(22)
+        self.preview_body_layout.setSpacing(22)
 
         self.profile_panel = QFrame()
         self.profile_panel.setObjectName(
             "discordProfilePanel"
         )
 
-        profile_layout = QVBoxLayout(
+        self.profile_layout = QVBoxLayout(
             self.profile_panel
         )
-        profile_layout.setContentsMargins(
+        self.profile_layout.setContentsMargins(
             0,
             0,
             0,
             0,
         )
-        profile_layout.setSpacing(8)
+        self.profile_layout.setSpacing(8)
 
         self.profile_avatar = QLabel("?")
         self.profile_avatar.setObjectName(
@@ -154,37 +154,37 @@ class DiscordProfilePreview(QFrame):
             Qt.AlignmentFlag.AlignCenter
         )
 
-        profile_layout.addWidget(
+        self.profile_layout.addWidget(
             self.profile_avatar,
             alignment=Qt.AlignmentFlag.AlignLeft,
         )
-        profile_layout.addWidget(
+        self.profile_layout.addWidget(
             self.profile_name
         )
-        profile_layout.addWidget(
+        self.profile_layout.addWidget(
             self.profile_username
         )
-        profile_layout.addWidget(
+        self.profile_layout.addWidget(
             self.profile_status,
             alignment=Qt.AlignmentFlag.AlignLeft,
         )
-        profile_layout.addStretch()
+        self.profile_layout.addStretch()
 
         self.activity_panel = QFrame()
         self.activity_panel.setObjectName(
             "discordActivityPreviewPanel"
         )
 
-        activity_layout = QVBoxLayout(
+        self.activity_layout = QVBoxLayout(
             self.activity_panel
         )
-        activity_layout.setContentsMargins(
+        self.activity_layout.setContentsMargins(
             16,
             14,
             16,
             14,
         )
-        activity_layout.setSpacing(9)
+        self.activity_layout.setSpacing(9)
 
         activity_header = QHBoxLayout()
         activity_header.setSpacing(8)
@@ -222,8 +222,8 @@ class DiscordProfilePreview(QFrame):
         )
         self.activity_application.setWordWrap(True)
 
-        activity_content = QHBoxLayout()
-        activity_content.setSpacing(14)
+        self.activity_content_layout = QHBoxLayout()
+        self.activity_content_layout.setSpacing(14)
 
         self.activity_artwork = QLabel("?")
         self.activity_artwork.setObjectName(
@@ -233,8 +233,8 @@ class DiscordProfilePreview(QFrame):
             Qt.AlignmentFlag.AlignCenter
         )
 
-        activity_text = QVBoxLayout()
-        activity_text.setSpacing(3)
+        self.activity_text_layout = QVBoxLayout()
+        self.activity_text_layout.setSpacing(3)
 
         self.activity_title = QLabel(
             "Nothing playing"
@@ -276,47 +276,47 @@ class DiscordProfilePreview(QFrame):
             "discordActivityTime"
         )
 
-        activity_text.addWidget(
+        self.activity_text_layout.addWidget(
             self.activity_title
         )
-        activity_text.addWidget(
+        self.activity_text_layout.addWidget(
             self.activity_artist
         )
-        activity_text.addWidget(
+        self.activity_text_layout.addWidget(
             self.activity_album
         )
-        activity_text.addStretch()
-        activity_text.addWidget(
+        self.activity_text_layout.addStretch()
+        self.activity_text_layout.addWidget(
             self.activity_progress
         )
-        activity_text.addWidget(
+        self.activity_text_layout.addWidget(
             self.activity_time
         )
 
-        activity_content.addWidget(
+        self.activity_content_layout.addWidget(
             self.activity_artwork,
             alignment=Qt.AlignmentFlag.AlignTop,
         )
-        activity_content.addLayout(
-            activity_text,
+        self.activity_content_layout.addLayout(
+            self.activity_text_layout,
             stretch=1,
         )
 
-        activity_layout.addLayout(
+        self.activity_layout.addLayout(
             activity_header
         )
-        activity_layout.addWidget(
+        self.activity_layout.addWidget(
             self.activity_application
         )
-        activity_layout.addLayout(
-            activity_content
+        self.activity_layout.addLayout(
+            self.activity_content_layout
         )
 
-        body_layout.addWidget(
+        self.preview_body_layout.addWidget(
             self.profile_panel,
             stretch=2,
         )
-        body_layout.addWidget(
+        self.preview_body_layout.addWidget(
             self.activity_panel,
             stretch=5,
         )
@@ -355,7 +355,7 @@ class DiscordProfilePreview(QFrame):
         )
 
         self.profile_panel.setMinimumWidth(
-            150 if self._compact else 180
+            105 if self._compact else 180
         )
 
     @staticmethod
@@ -429,11 +429,77 @@ class DiscordProfilePreview(QFrame):
         self._compact = bool(compact)
 
         if self._compact:
-            self._avatar_size = 72
-            self._artwork_size = 78
+            self._avatar_size = 52
+            self._artwork_size = 58
+
+            self.root_layout.setContentsMargins(
+                8,
+                7,
+                8,
+                7,
+            )
+            self.root_layout.setSpacing(6)
+
+            self.preview_body_layout.setContentsMargins(
+                8,
+                8,
+                8,
+                8,
+            )
+            self.preview_body_layout.setSpacing(10)
+
+            self.profile_layout.setSpacing(4)
+
+            self.activity_layout.setContentsMargins(
+                9,
+                8,
+                9,
+                8,
+            )
+            self.activity_layout.setSpacing(4)
+
+            self.activity_content_layout.setSpacing(8)
+            self.activity_text_layout.setSpacing(2)
+
+            # The application name is useful in the
+            # larger Designer preview but consumes
+            # valuable vertical room on Dashboard.
+            self.activity_application.setHidden(True)
+
         else:
             self._avatar_size = 88
             self._artwork_size = 96
+
+            self.root_layout.setContentsMargins(
+                18,
+                16,
+                18,
+                16,
+            )
+            self.root_layout.setSpacing(12)
+
+            self.preview_body_layout.setContentsMargins(
+                18,
+                18,
+                18,
+                18,
+            )
+            self.preview_body_layout.setSpacing(22)
+
+            self.profile_layout.setSpacing(8)
+
+            self.activity_layout.setContentsMargins(
+                16,
+                14,
+                16,
+                14,
+            )
+            self.activity_layout.setSpacing(9)
+
+            self.activity_content_layout.setSpacing(14)
+            self.activity_text_layout.setSpacing(3)
+
+            self.activity_application.setHidden(False)
 
         self._apply_sizes()
 
@@ -452,8 +518,7 @@ class DiscordProfilePreview(QFrame):
             username
         )
         status = self._clean_text(
-            status,
-            "Offline",
+            status
         )
 
         self.profile_name.setText(
@@ -467,6 +532,9 @@ class DiscordProfilePreview(QFrame):
         )
         self.profile_status.setText(
             status
+        )
+        self.profile_status.setHidden(
+            not bool(status)
         )
 
         fallback = (

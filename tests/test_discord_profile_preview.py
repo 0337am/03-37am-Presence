@@ -71,6 +71,19 @@ class DiscordProfilePreviewTests(unittest.TestCase):
             "0",
         )
 
+    def test_blank_profile_status_hides_chip(self):
+        preview = DiscordProfilePreview()
+
+        preview.set_profile(
+            display_name="03:37am",
+            username="@03.37am",
+            status="",
+        )
+
+        self.assertTrue(
+            preview.profile_status.isHidden()
+        )
+
     def test_profile_avatar_accepts_pixmap(self):
         preview = DiscordProfilePreview()
 
@@ -190,6 +203,75 @@ class DiscordProfilePreviewTests(unittest.TestCase):
         self.assertEqual(
             preview.activity_progress.value(),
             0,
+        )
+
+    def test_compact_mode_uses_dashboard_geometry(self):
+        preview = DiscordProfilePreview()
+
+        preview.set_compact(True)
+
+        self.assertEqual(
+            preview.profile_avatar.width(),
+            52,
+        )
+        self.assertEqual(
+            preview.activity_artwork.width(),
+            58,
+        )
+        self.assertEqual(
+            preview.profile_panel.minimumWidth(),
+            105,
+        )
+        self.assertTrue(
+            preview.activity_application.isHidden()
+        )
+
+        root_margins = (
+            preview.root_layout.contentsMargins()
+        )
+
+        self.assertEqual(
+            root_margins.left(),
+            8,
+        )
+        self.assertEqual(
+            root_margins.top(),
+            7,
+        )
+
+        body_margins = (
+            preview.preview_body_layout.contentsMargins()
+        )
+
+        self.assertEqual(
+            body_margins.left(),
+            8,
+        )
+        self.assertEqual(
+            body_margins.top(),
+            8,
+        )
+
+    def test_expanded_mode_restores_rich_geometry(self):
+        preview = DiscordProfilePreview()
+
+        preview.set_compact(True)
+        preview.set_compact(False)
+
+        self.assertEqual(
+            preview.profile_avatar.width(),
+            88,
+        )
+        self.assertEqual(
+            preview.activity_artwork.width(),
+            96,
+        )
+        self.assertEqual(
+            preview.profile_panel.minimumWidth(),
+            180,
+        )
+        self.assertFalse(
+            preview.activity_application.isHidden()
         )
 
     def test_open_button_emits_request(self):

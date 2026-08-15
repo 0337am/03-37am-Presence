@@ -3,7 +3,9 @@ import queue
 import threading
 import time
 
-from pypresence import Presence
+from src.discord.ready_identity_presence import (
+    ReadyIdentityPresence as Presence,
+)
 
 from src.artwork.uploader import (
     ArtworkUploader,
@@ -68,6 +70,47 @@ class DiscordPresence:
         self._state_lock = threading.Lock()
         self._connected = False
         self._last_error = ""
+
+        self._profile_identity_lock = (
+            threading.Lock()
+        )
+        self._profile_identity = {}
+
+    @property
+    def profile_identity(self) -> dict:
+        with self._profile_identity_lock:
+            return dict(
+                self._profile_identity
+            )
+
+    def _set_profile_identity(
+        self,
+        identity,
+    ):
+        source = (
+            identity
+            if isinstance(identity, dict)
+            else {}
+        )
+
+        snapshot = {}
+
+        for key in (
+            "user_id",
+            "username",
+            "display_name",
+            "avatar_hash",
+        ):
+            value = str(
+                source.get(key)
+                or ""
+            ).strip()
+
+            if value:
+                snapshot[key] = value
+
+        with self._profile_identity_lock:
+            self._profile_identity = snapshot
 
     @property
     def is_connected(self) -> bool:
@@ -297,6 +340,14 @@ class DiscordPresence:
 
             self.rpc = rpc
 
+            self._set_profile_identity(
+                getattr(
+                    rpc,
+                    "ready_identity",
+                    {},
+                )
+            )
+
             self._set_connection_state(
                 connected=True,
                 error="",
@@ -319,6 +370,76 @@ class DiscordPresence:
             self._print_error_once()
             return False
 
+    @staticmethod
+    def _discord_music_identity(
+        value,
+    ) -> str:
+        normalized = " ".join(
+            str(
+                value
+                or ""
+            ).strip().split()
+        ).casefold()
+
+        for suffix in (
+            " - single",
+            " (single)",
+            " [single]",
+        ):
+            if normalized.endswith(
+                suffix
+            ):
+                normalized = normalized[
+                    :-len(suffix)
+                ].strip()
+                break
+
+        return normalized
+
+    @classmethod
+    def _discord_album_for_track(
+        cls,
+        title,
+        album,
+    ) -> str:
+        raw_album = str(
+            album
+            or ""
+        ).strip()
+
+        if (
+            not raw_album
+            or raw_album.casefold()
+            in {
+                "unknown",
+                "unknown album",
+                "none",
+            }
+        ):
+            return ""
+
+        title_identity = (
+            cls._discord_music_identity(
+                title
+            )
+        )
+
+        album_identity = (
+            cls._discord_music_identity(
+                raw_album
+            )
+        )
+
+        if (
+            title_identity
+            and album_identity
+            and title_identity
+            == album_identity
+        ):
+            return ""
+
+        return raw_album
+
     def _publish_song(self, song):
         if (
             song is None
@@ -338,54 +459,38 @@ class DiscordPresence:
             fallback="Unknown artist",
         )
 
-        raw_album = str(
-            getattr(song, "album", "") or ""
-        ).strip()
+        raw_album = self._discord_album_for_track(
+            getattr(song, "title", ""),
+            getattr(song, "album", ""),
+        )
 
-        album_is_available = (
+        album_is_available = bool(
             raw_album
-            and raw_album.lower()
-            not in {
-                "unknown",
-                "unknown album",
-                "none",
-            }
+        )
+
+        album = (
+            self._discord_text(
+                raw_album,
+                fallback="",
+            )
+            if album_is_available
+            else ""
         )
 
         playing = bool(
             getattr(song, "playing", False)
         )
 
-        if album_is_available:
-            album = self._discord_text(
-                raw_album,
-                fallback="",
+        if playing:
+            state = self._discord_text(
+                f"by {artist}",
+                fallback="Now playing",
             )
-
-            if playing:
-                state = self._discord_text(
-                    f"by {artist} • {album}",
-                    fallback=f"by {artist}",
-                )
-            else:
-                state = self._discord_text(
-                    f"Paused • {artist} • {album}",
-                    fallback=f"Paused • {artist}",
-                )
-
         else:
-            album = ""
-
-            if playing:
-                state = self._discord_text(
-                    f"by {artist}",
-                    fallback="Now playing",
-                )
-            else:
-                state = self._discord_text(
-                    f"Paused • {artist}",
-                    fallback="Paused",
-                )
+            state = self._discord_text(
+                f"Paused \u2022 {artist}",
+                fallback="Paused",
+            )
 
         options = {
             "details": title,
@@ -447,18 +552,17 @@ class DiscordPresence:
                 artwork_url
             )
 
-            options["large_text"] = (
-                self._discord_text(
-                    (
-                        album
-                        if album_is_available
-                        else title
-                    ),
-                    fallback=title,
+            if album_is_available:
+                options["large_text"] = (
+                    self._discord_text(
+                        album,
+                        fallback="",
+                    )
                 )
-            )
 
-        self.rpc.update(**options)
+        self.rpc.update(
+            **options
+        )
 
         status = (
             "Playing"
@@ -484,11 +588,11 @@ class DiscordPresence:
         album_status = (
             f", album: {album}"
             if album_is_available
-            else ", no album supplied"
+            else ", no distinct album supplied"
         )
 
         print(
-            f"Discord updated: {title} — {artist} "
+            f"Discord updated: {title} - {artist} "
             f"({status}, {artwork_status}"
             f"{album_status})"
         )
