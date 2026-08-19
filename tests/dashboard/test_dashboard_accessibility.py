@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 import os
 import unittest
+from tests.repo_paths import REPO_ROOT
 
 os.environ.setdefault(
     "QT_QPA_PLATFORM",
@@ -14,7 +15,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
 from src.ui.dashboard import DashboardPage
-from tests import (
+from tests.dashboard import (
     test_dashboard_toolbar as dashboard_toolbar_tests,
 )
 
@@ -356,8 +357,7 @@ class DashboardAccessibilityTests(
         self,
     ):
         dashboard_source = (
-            Path(__file__)
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "ui"
             / "dashboard.py"
