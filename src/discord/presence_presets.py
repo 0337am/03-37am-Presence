@@ -156,6 +156,7 @@ class PresencePreset:
     pinned: bool = False
     created_at: str = ""
     updated_at: str = ""
+    show_loop_count: bool = False
 
     def normalized(self) -> "PresencePreset":
         now = utc_now_iso()
@@ -197,6 +198,12 @@ class PresencePreset:
                 self.show_elapsed
             )
 
+        show_loop_count = bool(
+            self.show_loop_count
+            if mode == "music"
+            else False
+        )
+
         if mode == "disabled":
             show_buttons = False
             buttons = ()
@@ -228,6 +235,7 @@ class PresencePreset:
             show_buttons=show_buttons,
             buttons=buttons,
             pinned=bool(self.pinned),
+            show_loop_count=show_loop_count,
             created_at=str(
                 self.created_at or now
             ),
@@ -247,6 +255,7 @@ class PresencePreset:
             show_elapsed=preset.show_elapsed,
             show_buttons=preset.show_buttons,
             buttons=preset.buttons,
+            show_loop_count=preset.show_loop_count,
         )
 
     def to_dict(self) -> dict:
@@ -261,6 +270,7 @@ class PresencePreset:
             "image_path": preset.image_path,
             "show_elapsed": preset.show_elapsed,
             "show_buttons": preset.show_buttons,
+            "show_loop_count": preset.show_loop_count,
             "buttons": [
                 button.to_dict()
                 for button in preset.buttons
@@ -321,6 +331,12 @@ def preset_from_dict(data: dict) -> PresencePreset:
         ),
         show_elapsed=bool(
             data.get("show_elapsed", False)
+        ),
+        show_loop_count=bool(
+            data.get(
+                "show_loop_count",
+                False,
+            )
         ),
         show_buttons=bool(
             data.get("show_buttons", False)
@@ -582,6 +598,7 @@ class PresencePresetStore:
             show_elapsed=presence_mode.show_elapsed,
             show_buttons=presence_mode.show_buttons,
             buttons=presence_mode.buttons,
+            show_loop_count=presence_mode.show_loop_count,
             pinned=pinned,
             created_at=now,
             updated_at=now,
@@ -642,6 +659,7 @@ class PresencePresetStore:
             show_elapsed=presence_mode.show_elapsed,
             show_buttons=presence_mode.show_buttons,
             buttons=presence_mode.buttons,
+            show_loop_count=presence_mode.show_loop_count,
             pinned=(
                 existing.pinned
                 if pinned is None
