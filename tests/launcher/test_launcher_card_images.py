@@ -27,6 +27,7 @@ from src.ui.launcher_card_images import (
     launcher_card_image_file,
     prune_launcher_card_images,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class LauncherCardImageTests(
@@ -382,7 +383,7 @@ class LauncherCardImageTests(
 
     def test_dashboard_wires_image_cleanup(self):
         dashboard_path = (
-            Path(__file__).resolve().parents[1]
+            REPO_ROOT
             / "src"
             / "ui"
             / "dashboard.py"
