@@ -485,6 +485,7 @@ class DiscordPresence:
         song,
         *,
         buttons=None,
+        loop_count: int = 0,
     ):
         if (
             song is None
@@ -535,6 +536,27 @@ class DiscordPresence:
             state = self._discord_text(
                 f"Paused \u2022 {artist}",
                 fallback="Paused",
+            )
+
+        try:
+            checked_loop_count = max(
+                0,
+                int(
+                    loop_count
+                    or 0
+                ),
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            checked_loop_count = 0
+
+        if checked_loop_count > 0:
+            state = self._discord_text(
+                f"{state} \u2022 Loop \u00d7{checked_loop_count}",
+                fallback=state,
             )
 
         options = {

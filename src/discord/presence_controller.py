@@ -251,6 +251,21 @@ class PresenceController(QObject):
         )
 
         if mode == "music":
+            loop_count_setter = getattr(
+                self.discord,
+                "set_music_loop_count_enabled",
+                None,
+            )
+
+            if callable(
+                loop_count_setter
+            ):
+                loop_count_setter(
+                    bool(
+                        presence_mode.show_loop_count
+                    )
+                )
+
             latest_song = self._latest_song
 
             if self._has_song(

@@ -23,6 +23,8 @@ class SongPresenceUpdate:
     buttons: tuple[tuple[str, str], ...]
     playback_cycle_index: int = 0
     force_publish: bool = False
+    show_loop_count: bool = False
+    visible_loop_count: int = 0
 
     @property
     def playing(self) -> bool:
@@ -88,6 +90,30 @@ class ExtendedDiscordPresence(DiscordPresence):
         self._playback_cycle_detector = (
             PlaybackCycleDetector()
         )
+
+        self._show_loop_count = False
+        self._visible_loop_count = 0
+        self._music_loop_count_publish_pending = False
+
+    def set_music_loop_count_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        checked = bool(enabled)
+
+        current = bool(
+            getattr(
+                self,
+                "_show_loop_count",
+                False,
+            )
+        )
+
+        if checked == current:
+            return
+
+        self._show_loop_count = checked
+        self._music_loop_count_publish_pending = True
 
     @staticmethod
     def _playback_cycle_identity(
@@ -200,6 +226,8 @@ class ExtendedDiscordPresence(DiscordPresence):
 
         if song is None:
             self._playback_cycle_detector.clear()
+            self._visible_loop_count = 0
+            self._music_loop_count_publish_pending = False
 
             self._replace_queued_item(
                 None
@@ -209,6 +237,60 @@ class ExtendedDiscordPresence(DiscordPresence):
         observation = (
             self._observe_playback_cycle(
                 song
+            )
+        )
+
+        if observation.identity_changed:
+            self._visible_loop_count = 0
+
+        elif (
+            observation.replayed
+            and getattr(
+                song,
+                "repeat_track",
+                None,
+            ) is True
+        ):
+            self._visible_loop_count = (
+                max(
+                    0,
+                    int(
+                        getattr(
+                            self,
+                            "_visible_loop_count",
+                            0,
+                        )
+                        or 0
+                    ),
+                )
+                + 1
+            )
+
+        visible_loop_count = max(
+            0,
+            int(
+                getattr(
+                    self,
+                    "_visible_loop_count",
+                    0,
+                )
+                or 0
+            ),
+        )
+
+        show_loop_count = bool(
+            getattr(
+                self,
+                "_show_loop_count",
+                False,
+            )
+        )
+
+        setting_publish_pending = bool(
+            getattr(
+                self,
+                "_music_loop_count_publish_pending",
+                False,
             )
         )
 
@@ -222,12 +304,19 @@ class ExtendedDiscordPresence(DiscordPresence):
             ),
             force_publish=(
                 observation.replayed
+                or setting_publish_pending
+            ),
+            show_loop_count=show_loop_count,
+            visible_loop_count=(
+                visible_loop_count
             ),
         )
 
         self._replace_queued_item(
             update
         )
+
+        self._music_loop_count_publish_pending = False
 
     def update_custom(
         self,
@@ -292,14 +381,30 @@ class ExtendedDiscordPresence(DiscordPresence):
             item,
             SongPresenceUpdate,
         ):
-            super()._publish_song(
-                item.song,
-                buttons=(
-                    self._rpc_button_payload(
-                        item.buttons
-                    )
-                ),
+            button_payload = (
+                self._rpc_button_payload(
+                    item.buttons
+                )
             )
+
+            if (
+                item.show_loop_count
+                and item.visible_loop_count > 0
+            ):
+                super()._publish_song(
+                    item.song,
+                    buttons=button_payload,
+                    loop_count=(
+                        item.visible_loop_count
+                    ),
+                )
+
+            else:
+                super()._publish_song(
+                    item.song,
+                    buttons=button_payload,
+                )
+
             return
 
         super()._publish_song(
@@ -446,6 +551,12 @@ class ExtendedDiscordPresence(DiscordPresence):
                 "music",
                 *DiscordPresence._make_presence_key(
                     item.song
+                ),
+                item.show_loop_count,
+                (
+                    item.visible_loop_count
+                    if item.show_loop_count
+                    else 0
                 ),
                 item.buttons,
             )
