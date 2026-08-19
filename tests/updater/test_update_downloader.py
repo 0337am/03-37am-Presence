@@ -21,6 +21,7 @@ from src.system.update_downloader import (
     download_update,
     parse_sha256sums,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 RELEASE_BASE = (
@@ -904,9 +905,7 @@ class UpdateDownloaderTests(
 
     def test_module_has_no_installer_launch_code(self):
         source_path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "system"
             / "update_downloader.py"

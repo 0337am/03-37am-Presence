@@ -19,6 +19,7 @@ from src.system.update_installer import (
     launch_prepared_update,
     prepare_update_install,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 VERSION = "2.7.0"
@@ -611,9 +612,7 @@ class UpdateInstallerTests(
 
     def test_module_has_no_command_runner(self):
         source_path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "system"
             / "update_installer.py"
