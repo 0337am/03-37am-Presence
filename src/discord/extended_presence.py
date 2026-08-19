@@ -3,6 +3,9 @@ import time
 from dataclasses import dataclass
 
 from src.discord.presence import DiscordPresence
+from src.music.playback_cycle_detector import (
+    PlaybackCycleDetector,
+)
 
 from src.discord.presence_link_buttons import (
     normalize_presence_buttons,
@@ -18,6 +21,8 @@ except ImportError:
 class SongPresenceUpdate:
     song: object
     buttons: tuple[tuple[str, str], ...]
+    playback_cycle_index: int = 0
+    force_publish: bool = False
 
     @property
     def playing(self) -> bool:
@@ -70,6 +75,121 @@ class ExtendedDiscordPresence(DiscordPresence):
             for label, url in buttons
         ]
 
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(
+            *args,
+            **kwargs,
+        )
+
+        self._playback_cycle_detector = (
+            PlaybackCycleDetector()
+        )
+
+    @staticmethod
+    def _playback_cycle_identity(
+        song,
+    ):
+        title = str(
+            getattr(
+                song,
+                "title",
+                "",
+            )
+            or ""
+        ).strip().casefold()
+
+        if not title:
+            return None
+
+        return (
+            title,
+            str(
+                getattr(
+                    song,
+                    "artist",
+                    "",
+                )
+                or ""
+            ).strip().casefold(),
+            str(
+                getattr(
+                    song,
+                    "album",
+                    "",
+                )
+                or ""
+            ).strip().casefold(),
+            str(
+                getattr(
+                    song,
+                    "source_app",
+                    "",
+                )
+                or ""
+            ).strip().casefold(),
+        )
+
+    def _observe_playback_cycle(
+        self,
+        song,
+    ):
+        repeat_track = getattr(
+            song,
+            "repeat_track",
+            None,
+        )
+
+        if not isinstance(
+            repeat_track,
+            bool,
+        ):
+            repeat_track = None
+
+        return self._playback_cycle_detector.observe(
+            identity=(
+                self._playback_cycle_identity(
+                    song
+                )
+            ),
+            position_seconds=(
+                self._time_to_seconds(
+                    getattr(
+                        song,
+                        "position",
+                        "0:00",
+                    )
+                )
+            ),
+            duration_seconds=(
+                self._time_to_seconds(
+                    getattr(
+                        song,
+                        "duration",
+                        "0:00",
+                    )
+                )
+            ),
+            playing=bool(
+                getattr(
+                    song,
+                    "playing",
+                    False,
+                )
+            ),
+            repeat_track=repeat_track,
+            explicit_seek=bool(
+                getattr(
+                    song,
+                    "explicit_seek",
+                    False,
+                )
+            ),
+        )
+
     def update_song(
         self,
         song,
@@ -79,15 +199,29 @@ class ExtendedDiscordPresence(DiscordPresence):
             return
 
         if song is None:
+            self._playback_cycle_detector.clear()
+
             self._replace_queued_item(
                 None
             )
             return
 
+        observation = (
+            self._observe_playback_cycle(
+                song
+            )
+        )
+
         update = SongPresenceUpdate(
             song=song,
             buttons=self._normalize_rpc_buttons(
                 buttons
+            ),
+            playback_cycle_index=(
+                observation.cycle_index
+            ),
+            force_publish=(
+                observation.replayed
             ),
         )
 

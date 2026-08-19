@@ -200,6 +200,32 @@ class DiscordPresence:
 
         self._thread = None
 
+    def _should_delay_publish(
+        self,
+        *,
+        elapsed: float,
+        playback_state_changed: bool,
+        force_publish: bool,
+    ) -> bool:
+        return (
+            elapsed
+            < self.MIN_UPDATE_INTERVAL_SECONDS
+            and not playback_state_changed
+            and not force_publish
+        )
+
+    @staticmethod
+    def _should_dedupe_publish(
+        *,
+        presence_key,
+        last_presence_key,
+        force_publish: bool,
+    ) -> bool:
+        return (
+            presence_key == last_presence_key
+            and not force_publish
+        )
+
     def _run(self):
         pending_song = _NO_ITEM
         last_published_item = _NO_ITEM
@@ -283,15 +309,25 @@ class DiscordPresence:
                     != last_playing_state
                 )
 
+                force_publish = bool(
+                    getattr(
+                        pending_song,
+                        "force_publish",
+                        False,
+                    )
+                )
+
                 elapsed = (
                     time.monotonic()
                     - last_update_time
                 )
 
-                if (
-                    elapsed
-                    < self.MIN_UPDATE_INTERVAL_SECONDS
-                    and not playback_state_changed
+                if self._should_delay_publish(
+                    elapsed=elapsed,
+                    playback_state_changed=(
+                        playback_state_changed
+                    ),
+                    force_publish=force_publish,
                 ):
                     continue
 
@@ -299,7 +335,11 @@ class DiscordPresence:
                     pending_song
                 )
 
-                if presence_key == last_presence_key:
+                if self._should_dedupe_publish(
+                    presence_key=presence_key,
+                    last_presence_key=last_presence_key,
+                    force_publish=force_publish,
+                ):
                     pending_song = _NO_ITEM
                     continue
 
