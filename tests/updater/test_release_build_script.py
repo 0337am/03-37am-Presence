@@ -1,8 +1,9 @@
 import unittest
 from pathlib import Path
+from tests.repo_paths import REPO_ROOT
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = REPO_ROOT
 
 BUILD_SCRIPT_PATH = (
     REPOSITORY_ROOT
