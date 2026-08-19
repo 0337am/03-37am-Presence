@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import unittest
+from tests.repo_paths import REPO_ROOT
 
 
 os.environ.setdefault(
@@ -23,7 +24,7 @@ from src.ui.cloudinary_setup_guide import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 
 CARD_PATH = (
     ROOT
