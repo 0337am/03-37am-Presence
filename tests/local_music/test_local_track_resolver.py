@@ -14,6 +14,7 @@ from src.media.unified_track import (
     LocalTrackReference,
     UnifiedTrackSource,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class LocalTrackResolverTests(
@@ -602,11 +603,7 @@ class LocalTrackResolverBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (

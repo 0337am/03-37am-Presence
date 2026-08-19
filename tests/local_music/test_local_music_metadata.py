@@ -10,6 +10,7 @@ from src.media.local_music_metadata import (
     SUPPORTED_LOCAL_AUDIO_EXTENSIONS,
     read_local_track_candidate,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class LocalMusicMetadataTests(
@@ -326,11 +327,7 @@ class LocalMusicMetadataTests(
             self,
         ):
             root = (
-                Path(
-                    __file__
-                )
-                .resolve()
-                .parents[1]
+                REPO_ROOT
             )
 
             source = (
@@ -367,11 +364,7 @@ class LocalMusicMetadataTests(
             self,
         ):
             root = (
-                Path(
-                    __file__
-                )
-                .resolve()
-                .parents[1]
+                REPO_ROOT
             )
 
             requirements = (

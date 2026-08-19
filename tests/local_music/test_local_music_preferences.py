@@ -15,6 +15,7 @@ from src.system.local_music_preferences import (
     local_music_preferences_from_payload,
     local_music_preferences_to_payload,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class LocalMusicPreferencesTests(
@@ -527,11 +528,7 @@ class LocalMusicPreferencesBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (
@@ -569,11 +566,7 @@ class LocalMusicPreferencesBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (

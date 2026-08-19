@@ -21,6 +21,7 @@ from src.media.qt_local_music_runtime import (
     LocalMusicQtRuntimeError,
     LocalMusicQtScanRuntime,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 def empty_result(
@@ -75,11 +76,7 @@ class LocalMusicQtRuntimeBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (
@@ -115,11 +112,7 @@ class LocalMusicQtRuntimeBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (
@@ -152,11 +145,7 @@ class LocalMusicQtRuntimeBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (

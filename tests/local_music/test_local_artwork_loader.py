@@ -20,6 +20,7 @@ from src.ui.local_artwork_loader import (
     DEFAULT_LOCAL_ARTWORK_CACHE_ENTRIES,
     LocalArtworkLoader,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class LocalArtworkLoaderTests(
@@ -791,9 +792,7 @@ class LocalArtworkLoaderTests(
         self,
     ):
         source_path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "ui"
             / "local_artwork_loader.py"

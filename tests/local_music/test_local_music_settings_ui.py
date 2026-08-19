@@ -27,6 +27,7 @@ from src.system.local_music_preferences import (
 from src.ui.local_music_settings import (
     LocalMusicSettingsCard,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class FakeRuntime(
@@ -109,11 +110,7 @@ class LocalMusicSettingsBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (
@@ -151,11 +148,7 @@ class LocalMusicSettingsBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (
@@ -189,11 +182,7 @@ class LocalMusicSettingsBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (
@@ -219,11 +208,7 @@ class LocalMusicSettingsBoundaryTests(
         self,
     ):
         root = (
-            Path(
-                __file__
-            )
-            .resolve()
-            .parents[1]
+            REPO_ROOT
         )
 
         source = (

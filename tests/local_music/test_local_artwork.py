@@ -8,6 +8,7 @@ from src.media.local_artwork import (
     MAX_LOCAL_ARTWORK_BYTES,
     read_local_embedded_artwork,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class _FakeImage:
@@ -426,9 +427,7 @@ class LocalArtworkTests(
         self,
     ):
         source_path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "media"
             / "local_artwork.py"

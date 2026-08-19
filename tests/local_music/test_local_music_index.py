@@ -14,6 +14,7 @@ from src.media.local_music_metadata import (
 from src.media.unified_track import (
     LocalTrackCandidate,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class LocalMusicIndexTests(
@@ -419,11 +420,7 @@ class LocalMusicIndexTests(
             self,
         ):
             root = (
-                Path(
-                    __file__
-                )
-                .resolve()
-                .parents[1]
+                REPO_ROOT
             )
 
             source = (
