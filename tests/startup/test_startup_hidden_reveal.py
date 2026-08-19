@@ -1,11 +1,10 @@
 from pathlib import Path
 import unittest
+from tests.repo_paths import REPO_ROOT
 
 
 PROJECT_ROOT = (
-    Path(__file__)
-    .resolve()
-    .parents[1]
+    REPO_ROOT
 )
 
 MAIN_PATH = (

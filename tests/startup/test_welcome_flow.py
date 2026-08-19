@@ -16,6 +16,7 @@ from src.ui.welcome_flow import (
     command_line_starts_minimized,
     should_show_main_window,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class FakeManager:
@@ -433,9 +434,7 @@ class WelcomeFlowTests(
         self,
     ):
         source = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "main.py"
         ).read_text(
             encoding="utf-8-sig"
@@ -468,9 +467,7 @@ class WelcomeFlowTests(
         self,
     ):
         source = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "main.py"
         ).read_text(
             encoding="utf-8-sig"
@@ -602,9 +599,7 @@ class WelcomeFlowTests(
         self,
     ):
         source = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "main.py"
         ).read_text(
             encoding="utf-8-sig"

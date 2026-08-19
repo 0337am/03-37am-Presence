@@ -19,6 +19,7 @@ from src.system.first_run import (
     WELCOME_STATE_PENDING,
     WELCOME_VERSION,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class FirstRunManagerTests(
@@ -570,7 +571,7 @@ class FirstRunManagerTests(
         self,
     ):
         source_path = (
-            Path(__file__).resolve().parents[1]
+            REPO_ROOT
             / "src"
             / "system"
             / "first_run.py"
