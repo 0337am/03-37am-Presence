@@ -1,8 +1,8 @@
 import unittest
 from pathlib import Path
+from tests.repo_paths import REPO_ROOT
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DASHBOARD_PATH = (
     REPO_ROOT

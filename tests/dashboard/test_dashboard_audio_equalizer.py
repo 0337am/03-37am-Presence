@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from src.ui.dashboard import DashboardPage
+from tests.repo_paths import REPO_ROOT
 
 
 class _FakeTimer:
@@ -307,9 +308,7 @@ class DashboardAudioEqualizerTests(
 
     def test_old_fake_equalizer_frames_are_removed(self):
         path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "ui"
             / "dashboard.py"
@@ -341,9 +340,7 @@ class DashboardAudioEqualizerTests(
 
     def test_equalizer_refresh_is_about_30_hz(self):
         path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "ui"
             / "dashboard.py"

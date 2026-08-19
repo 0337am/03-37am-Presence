@@ -1,6 +1,7 @@
 import os
 import unittest
 from pathlib import Path
+from tests.repo_paths import REPO_ROOT
 
 os.environ.setdefault(
     "QT_QPA_PLATFORM",
@@ -291,7 +292,7 @@ class DiscordProfilePreviewTests(unittest.TestCase):
 
     def test_widget_owns_no_discord_network_or_credentials(self):
         source = (
-            Path(__file__).resolve().parents[1]
+            REPO_ROOT
             / "src"
             / "ui"
             / "discord_profile_preview.py"
