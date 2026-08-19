@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import unittest
+from tests.repo_paths import REPO_ROOT
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 
 SETTINGS_PATH = (
     ROOT
