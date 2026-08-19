@@ -93,6 +93,12 @@ class PresenceController(QObject):
             type=bool,
         )
 
+        show_loop_count = self.store.value(
+            f"presence/{normalized}/show_loop_count",
+            False,
+            type=bool,
+        )
+
         show_buttons = self.store.value(
             f"presence/{normalized}/show_buttons",
             False,
@@ -118,6 +124,11 @@ class PresenceController(QObject):
             show_elapsed=show_elapsed,
             show_buttons=show_buttons,
             buttons=buttons,
+            show_loop_count=(
+                bool(show_loop_count)
+                if normalized == "music"
+                else False
+            ),
         )
 
     def save_mode(
@@ -142,6 +153,14 @@ class PresenceController(QObject):
             "presence/active_mode",
             mode,
         )
+
+        if mode == "music":
+            self.store.setValue(
+                f"presence/{mode}/show_loop_count",
+                bool(
+                    presence_mode.show_loop_count
+                ),
+            )
 
         if mode not in {
             "music",

@@ -65,6 +65,7 @@ class PresenceMode:
     show_elapsed: bool = False
     show_buttons: bool = False
     buttons: tuple[PresenceLinkButton, ...] = ()
+    show_loop_count: bool = False
 
     def normalized_mode(self) -> str:
         normalized = str(
@@ -156,6 +157,11 @@ class PresenceMode:
             "image_name": self.image_name(),
             "show_elapsed": bool(
                 self.show_elapsed
+            ),
+            "show_loop_count": bool(
+                self.show_loop_count
+                if self.normalized_mode() == "music"
+                else False
             ),
             "show_buttons": (
                 self.link_buttons_enabled()
