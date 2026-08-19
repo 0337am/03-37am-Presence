@@ -492,6 +492,9 @@ class WindowsMedia:
             source_app=self._source_app(
                 session
             ),
+            repeat_track=self._repeat_track_state(
+                session
+            ),
         )
 
     @staticmethod
@@ -858,6 +861,77 @@ class WindowsMedia:
                 oldest_key,
                 None,
             )
+
+    @staticmethod
+    def _repeat_track_state(
+        session,
+    ) -> bool | None:
+        try:
+            playback_info = (
+                session
+                .get_playback_info()
+            )
+
+        except Exception:
+            return None
+
+        if playback_info is None:
+            return None
+
+        repeat_mode = getattr(
+            playback_info,
+            "auto_repeat_mode",
+            None,
+        )
+
+        if repeat_mode is None:
+            return None
+
+        enum_name = str(
+            getattr(
+                repeat_mode,
+                "name",
+                "",
+            )
+            or ""
+        ).strip().casefold()
+
+        if enum_name == "track":
+            return True
+
+        if enum_name in {
+            "none",
+            "list",
+        }:
+            return False
+
+        mode_text = str(
+            repeat_mode
+        ).strip().casefold()
+
+        if (
+            mode_text == "track"
+            or mode_text.endswith(
+                ".track"
+            )
+        ):
+            return True
+
+        if (
+            mode_text in {
+                "none",
+                "list",
+            }
+            or mode_text.endswith(
+                ".none"
+            )
+            or mode_text.endswith(
+                ".list"
+            )
+        ):
+            return False
+
+        return None
 
     @staticmethod
     def _is_playing(

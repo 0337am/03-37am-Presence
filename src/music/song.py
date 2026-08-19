@@ -17,3 +17,7 @@ class Song:
 
     # The Windows application providing the media session.
     source_app: str = ""
+    # True when the media session explicitly reports Repeat One.
+    # False means a known non-track repeat mode.
+    # None means the source did not expose a trustworthy mode.
+    repeat_track: bool | None = None
