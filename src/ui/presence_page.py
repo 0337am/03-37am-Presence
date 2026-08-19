@@ -1465,6 +1465,28 @@ class PresencePage(QWidget):
         context_layout.addWidget(
             self.studio_context_text
         )
+        self.loop_count_box = QCheckBox(
+            "Show song loop count on Discord"
+        )
+        self.loop_count_box.setObjectName(
+            "loopCountBox"
+        )
+        self.loop_count_box.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.loop_count_box.setToolTip(
+            "Show how many times the current song has "
+            "genuinely replayed in Discord Music Presence."
+        )
+
+        context_layout.addWidget(
+            self.loop_count_box
+        )
+
+        self.loop_count_box.toggled.connect(
+            self.update_preview
+        )
+
 
         context_layout.addStretch()
 
@@ -2130,6 +2152,15 @@ class PresencePage(QWidget):
         self.elapsed_box.blockSignals(
             True
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(
+                True
+            )
 
         self.title_input.setText(
             presence_mode.title
@@ -2142,6 +2173,15 @@ class PresencePage(QWidget):
         self.elapsed_box.setChecked(
             presence_mode.show_elapsed
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.setChecked(
+                presence_mode.show_loop_count
+            )
 
         self.title_input.blockSignals(
             False
@@ -2154,6 +2194,15 @@ class PresencePage(QWidget):
         self.elapsed_box.blockSignals(
             False
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(
+                False
+            )
 
         self._load_link_button_editor(
             presence_mode
@@ -2281,6 +2330,15 @@ class PresencePage(QWidget):
         self.elapsed_box.blockSignals(
             True
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(
+                True
+            )
 
         self.title_input.clear()
         self.message_input.clear()
@@ -2288,6 +2346,15 @@ class PresencePage(QWidget):
         self.elapsed_box.setChecked(
             False
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.setChecked(
+                False
+            )
 
         self.title_input.blockSignals(
             False
@@ -2300,6 +2367,15 @@ class PresencePage(QWidget):
         self.elapsed_box.blockSignals(
             False
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(
+                False
+            )
 
         self._clear_link_button_editor()
 
@@ -2634,6 +2710,18 @@ class PresencePage(QWidget):
                 self._editor_presence_buttons()
             )
 
+        loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+
+        show_loop_count = bool(
+            mode == "music"
+            and loop_count_box is not None
+            and loop_count_box.isChecked()
+        )
+
         return PresenceMode(
             mode=mode,
             title=self.title_input.text().strip(),
@@ -2644,6 +2732,7 @@ class PresencePage(QWidget):
             ),
             show_buttons=show_buttons,
             buttons=buttons,
+            show_loop_count=show_loop_count,
         )
 
     def on_preset_changed(self, *_):
@@ -2786,6 +2875,13 @@ class PresencePage(QWidget):
         self.title_input.blockSignals(True)
         self.message_input.blockSignals(True)
         self.elapsed_box.blockSignals(True)
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(True)
 
         self.title_input.setText(
             presence_mode.title
@@ -2796,10 +2892,26 @@ class PresencePage(QWidget):
         self.elapsed_box.setChecked(
             presence_mode.show_elapsed
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.setChecked(
+                presence_mode.show_loop_count
+            )
 
         self.title_input.blockSignals(False)
         self.message_input.blockSignals(False)
         self.elapsed_box.blockSignals(False)
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(False)
 
         self._load_link_button_editor(
             presence_mode
@@ -3164,14 +3276,14 @@ class PresencePage(QWidget):
                 outline: none;
             }}
 
-            QCheckBox#elapsedBox {{
+            QCheckBox#elapsedBox, QCheckBox#loopCountBox {{
                 color: {theme["text"]};
                 spacing: 8px;
                 font-size: 11px;
                 padding-top: 3px;
             }}
 
-            QCheckBox#elapsedBox::indicator {{
+            QCheckBox#elapsedBox::indicator, QCheckBox#loopCountBox::indicator {{
                 width: 16px;
                 height: 16px;
                 background: {theme["background"]};
@@ -3179,11 +3291,11 @@ class PresencePage(QWidget):
                 border-radius: 4px;
             }}
 
-            QCheckBox#elapsedBox::indicator:hover {{
+            QCheckBox#elapsedBox::indicator:hover, QCheckBox#loopCountBox::indicator:hover {{
                 border: 1px solid {theme["accent"]};
             }}
 
-            QCheckBox#elapsedBox::indicator:checked {{
+            QCheckBox#elapsedBox::indicator:checked, QCheckBox#loopCountBox::indicator:checked {{
                 background: {theme["accent"]};
                 border: 1px solid {theme["accent"]};
             }}
@@ -3330,6 +3442,13 @@ class PresencePage(QWidget):
         self.title_input.blockSignals(True)
         self.message_input.blockSignals(True)
         self.elapsed_box.blockSignals(True)
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(True)
 
         self.title_input.setText(
             presence_mode.title
@@ -3340,10 +3459,26 @@ class PresencePage(QWidget):
         self.elapsed_box.setChecked(
             presence_mode.show_elapsed
         )
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.setChecked(
+                presence_mode.show_loop_count
+            )
 
         self.title_input.blockSignals(False)
         self.message_input.blockSignals(False)
         self.elapsed_box.blockSignals(False)
+        _loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+        if _loop_count_box is not None:
+            _loop_count_box.blockSignals(False)
 
         self._load_link_button_editor(
             presence_mode
@@ -3486,6 +3621,20 @@ class PresencePage(QWidget):
         if context_card is not None:
             context_card.setVisible(
                 not editable
+            )
+
+        loop_count_box = getattr(
+            self,
+            "loop_count_box",
+            None,
+        )
+
+        if loop_count_box is not None:
+            loop_count_box.setVisible(
+                mode == "music"
+            )
+            loop_count_box.setEnabled(
+                mode == "music"
             )
 
         context_title = getattr(
@@ -3820,8 +3969,8 @@ class PresencePage(QWidget):
         store.sync()
 
         self.controller.apply_mode(
-            PresenceMode(
-                mode="music"
+            self.controller.load_mode(
+                "music"
             )
         )
         self.load_active_mode()
@@ -3831,8 +3980,8 @@ class PresencePage(QWidget):
 
     def switch_to_music_presence(self):
         self.controller.apply_mode(
-            PresenceMode(
-                mode="music"
+            self.controller.load_mode(
+                "music"
             )
         )
         self.load_active_mode()
