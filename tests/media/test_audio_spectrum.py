@@ -15,6 +15,7 @@ from src.media.audio_spectrum import (
     SpectrumAnalyzer,
     spectrum_levels_to_text,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 SAMPLE_RATE = 44100
@@ -868,9 +869,7 @@ class SpectrumAnalyzerTests(
         self,
     ):
         path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "media"
             / "audio_spectrum.py"

@@ -14,6 +14,7 @@ from src.media.windows_process_audio import (
     SpotifyAudioSpectrumService,
     select_process_tree_root,
 )
+from tests.repo_paths import REPO_ROOT
 
 
 class ProcessTreeTests(
@@ -648,9 +649,7 @@ class SpectrumServiceTests(
         self,
     ):
         path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "src"
             / "media"
             / "windows_process_audio.py"
@@ -691,9 +690,7 @@ class SpectrumServiceTests(
         self,
     ):
         path = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+            REPO_ROOT
             / "requirements.txt"
         )
 
