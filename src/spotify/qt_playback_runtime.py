@@ -21,6 +21,7 @@ SPOTIFY_PLAYBACK_CONTROL_METHODS = (
     "pause_playback",
     "skip_next",
     "skip_previous",
+    "seek_to_seconds",
 )
 
 
@@ -284,6 +285,8 @@ class _SpotifyPlaybackControlWorker(
         self,
         service_factory: Callable,
         control_name: str,
+        *,
+        control_argument=None,
     ) -> None:
         super().__init__()
 
@@ -293,6 +296,10 @@ class _SpotifyPlaybackControlWorker(
 
         self._control_name = (
             control_name
+        )
+
+        self._control_argument = (
+            control_argument
         )
 
     def _fail(
@@ -344,7 +351,12 @@ class _SpotifyPlaybackControlWorker(
                 return
 
             try:
-                result = control_method()
+                if self._control_argument is None:
+                    result = control_method()
+                else:
+                    result = control_method(
+                        self._control_argument
+                    )
 
             except Exception:
                 self._fail(
@@ -513,9 +525,53 @@ class SpotifyQtPlaybackRuntime(
             "skip_previous"
         )
 
+    def seek_to_seconds(
+        self,
+        seconds,
+    ) -> None:
+        if isinstance(
+            seconds,
+            bool,
+        ):
+            raise TypeError(
+                "seconds must be a number"
+            )
+
+        try:
+            from math import isfinite
+
+            checked_seconds = float(
+                seconds
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise TypeError(
+                "seconds must be a number"
+            ) from error
+
+        if (
+            not isfinite(
+                checked_seconds
+            )
+            or checked_seconds < 0
+        ):
+            raise ValueError(
+                "seconds must be finite and non-negative"
+            )
+
+        self._start_control(
+            "seek_to_seconds",
+            control_argument=checked_seconds,
+        )
+
     def _start_control(
         self,
         control_name: str,
+        *,
+        control_argument=None,
     ) -> None:
         if not isinstance(
             control_name,
@@ -567,6 +623,9 @@ class SpotifyQtPlaybackRuntime(
             _SpotifyPlaybackControlWorker(
                 self._service_factory,
                 checked_control,
+                control_argument=(
+                    control_argument
+                ),
             )
         )
 

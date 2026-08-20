@@ -765,6 +765,7 @@ class SpotifyPlaybackService:
         self,
         api_method_name: str,
         success_message: str,
+        *api_args,
     ) -> SpotifyPlaybackServiceResult:
         api_method = getattr(
             self._api_client,
@@ -833,6 +834,7 @@ class SpotifyPlaybackService:
         try:
             api_method(
                 access_token,
+                *api_args,
                 device_id=device_id,
             )
 
@@ -871,6 +873,57 @@ class SpotifyPlaybackService:
             ),
             message=success_message,
             refreshed=refreshed,
+        )
+
+    def seek_to_seconds(
+        self,
+        seconds,
+    ) -> SpotifyPlaybackServiceResult:
+        if isinstance(
+            seconds,
+            bool,
+        ):
+            return self._error(
+                "invalid_seek_position",
+                "Spotify seek position is invalid.",
+            )
+
+        try:
+            from math import isfinite
+
+            position_seconds = float(
+                seconds
+            )
+
+            if (
+                not isfinite(
+                    position_seconds
+                )
+                or position_seconds < 0
+            ):
+                raise ValueError
+
+            position_ms = int(
+                round(
+                    position_seconds
+                    * 1000.0
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+            OverflowError,
+        ):
+            return self._error(
+                "invalid_seek_position",
+                "Spotify seek position is invalid.",
+            )
+
+        return self._run_transport_control(
+            "seek_to_position",
+            "Spotify playback position updated.",
+            position_ms,
         )
 
     def resume_playback(

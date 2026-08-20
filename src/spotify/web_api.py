@@ -51,6 +51,10 @@ PREVIOUS_PLAYBACK_PATH = (
     "/me/player/previous"
 )
 
+SEEK_PLAYBACK_PATH = (
+    "/me/player/seek"
+)
+
 
 class SpotifyWebApiError(
     RuntimeError
@@ -2044,6 +2048,51 @@ class SpotifyWebApiClient:
             access_token,
             device_id=device_id,
             method="POST",
+        )
+
+    def seek_to_position(
+        self,
+        access_token: str,
+        position_ms: int,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        if isinstance(
+            position_ms,
+            bool,
+        ) or not isinstance(
+            position_ms,
+            int,
+        ):
+            raise TypeError(
+                "position_ms must be an integer"
+            )
+
+        if position_ms < 0:
+            raise ValueError(
+                "position_ms cannot be negative"
+            )
+
+        query = {
+            "position_ms": position_ms,
+        }
+
+        if device_id is not None:
+            query["device_id"] = (
+                _validate_spotify_device_id(
+                    device_id
+                )
+            )
+
+        url = _build_spotify_api_url(
+            SEEK_PLAYBACK_PATH,
+            query,
+        )
+
+        self._request_no_content(
+            url,
+            access_token,
+            method="PUT",
         )
 
     def start_playback(
