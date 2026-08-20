@@ -16,6 +16,7 @@ from src.music.media_controls import (
 ACTION_PREVIOUS = "previous"
 ACTION_TOGGLE_PLAY_PAUSE = "toggle_play_pause"
 ACTION_NEXT = "next"
+ACTION_SEEK = "seek"
 
 PLAYBACK_CONTROL_ACTIONS = (
     ACTION_PREVIOUS,
@@ -27,6 +28,7 @@ MEDIA_CONTROL_METHODS = {
     ACTION_PREVIOUS: "skip_previous",
     ACTION_TOGGLE_PLAY_PAUSE: "toggle_play_pause",
     ACTION_NEXT: "skip_next",
+    ACTION_SEEK: "seek_to_seconds",
 }
 
 SPOTIFY_TRANSPORT_METHODS = {
@@ -54,6 +56,7 @@ class _MediaControlThread(
         self,
         controls_factory: Callable[[], object],
         action: str,
+        control_argument=None,
         parent=None,
     ) -> None:
         super().__init__(
@@ -65,6 +68,10 @@ class _MediaControlThread(
         )
 
         self._action = action
+
+        self._control_argument = (
+            control_argument
+        )
 
     def run(
         self,
@@ -112,9 +119,20 @@ class _MediaControlThread(
             return
 
         try:
-            result = bool(
-                method()
-            )
+            if (
+                self._control_argument
+                is None
+            ):
+                result = bool(
+                    method()
+                )
+
+            else:
+                result = bool(
+                    method(
+                        self._control_argument
+                    )
+                )
 
         except Exception:
             self.failed.emit(
@@ -322,6 +340,100 @@ class PlaybackControlCoordinator(
             )
         )
 
+
+    def request_seek(
+        self,
+        seconds,
+        source_app,
+    ) -> bool:
+        if self._shutting_down:
+            return False
+
+        if isinstance(
+            seconds,
+            bool,
+        ):
+            return False
+
+        try:
+            from math import isfinite
+
+            checked_seconds = float(
+                seconds
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        if (
+            not isfinite(
+                checked_seconds
+            )
+            or checked_seconds < 0
+        ):
+            return False
+
+        if self._is_spotify_source(
+            source_app
+        ):
+            method = getattr(
+                self._spotify_runtime,
+                "seek_to_seconds",
+                None,
+            )
+
+            if not callable(
+                method
+            ):
+                self.control_failed.emit(
+                    ACTION_SEEK,
+                    (
+                        "Spotify seek control "
+                        "is unavailable."
+                    ),
+                )
+                return False
+
+            try:
+                result = method(
+                    checked_seconds
+                )
+
+            except Exception:
+                self.control_failed.emit(
+                    ACTION_SEEK,
+                    (
+                        "Spotify seek control "
+                        "could not be dispatched."
+                    ),
+                )
+                return False
+
+            if result is False:
+                self.control_failed.emit(
+                    ACTION_SEEK,
+                    (
+                        "Spotify seek control "
+                        "was not accepted."
+                    ),
+                )
+                return False
+
+            self.control_dispatched.emit(
+                ACTION_SEEK,
+                "spotify",
+            )
+
+            return True
+
+        return self._dispatch_media(
+            ACTION_SEEK,
+            control_argument=checked_seconds,
+        )
+
     def _dispatch_spotify(
         self,
         action: str,
@@ -398,6 +510,8 @@ class PlaybackControlCoordinator(
     def _dispatch_media(
         self,
         action: str,
+        *,
+        control_argument=None,
     ) -> bool:
         thread = (
             self._media_thread
@@ -419,6 +533,7 @@ class PlaybackControlCoordinator(
         thread = _MediaControlThread(
             self._media_controls_factory,
             action,
+            control_argument=control_argument,
             parent=self,
         )
 
