@@ -312,6 +312,97 @@ class DashboardPlaybackControlTests(
                 Qt.FocusPolicy.StrongFocus,
             )
 
+    def test_transport_glyphs_follow_dashboard_theme(
+        self,
+    ):
+        buttons = (
+            self.page.playback_previous_button,
+            self.page.playback_play_pause_button,
+            self.page.playback_next_button,
+        )
+
+        for button in buttons:
+            self.assertEqual(
+                button.objectName(),
+                "cardIconButton",
+            )
+
+            self.assertTrue(
+                bool(
+                    button.property(
+                        "playbackTransport"
+                    )
+                )
+            )
+
+        self.assertEqual(
+            self.page.playback_previous_button.text(),
+            "│◀",
+        )
+
+        self.assertEqual(
+            self.page.playback_play_pause_button.text(),
+            "▶",
+        )
+
+        self.assertEqual(
+            self.page.playback_next_button.text(),
+            "▶│",
+        )
+
+        theme = dict(
+            self.page.theme_manager.theme()
+        )
+
+        theme["accent"] = "#123456"
+        theme["muted"] = "#654321"
+
+        self.page.apply_theme(
+            theme
+        )
+
+        stylesheet = (
+            self.page.styleSheet()
+        )
+
+        self.assertIn(
+            (
+                'QPushButton#cardIconButton'
+                '[playbackTransport="true"]'
+            ),
+            stylesheet,
+        )
+
+        self.assertIn(
+            "color: #123456;",
+            stylesheet,
+        )
+
+        self.assertIn(
+            (
+                'QPushButton#cardIconButton'
+                '[playbackTransport="true"]'
+                ':disabled'
+            ),
+            stylesheet,
+        )
+
+        self.assertIn(
+            "color: #654321;",
+            stylesheet,
+        )
+
+        self.page.apply_song(
+            self.song(
+                playing=True
+            )
+        )
+
+        self.assertEqual(
+            self.page.playback_play_pause_button.text(),
+            "Ⅱ",
+        )
+
     def test_main_window_owns_transport_coordinator(
         self,
     ):

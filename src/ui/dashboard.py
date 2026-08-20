@@ -8186,10 +8186,8 @@ class DashboardPage(QWidget):
         self.playback_previous_button = (
             QPushButton()
         )
-        self.playback_previous_button.setIcon(
-            self.style().standardIcon(
-                QStyle.StandardPixmap.SP_MediaSkipBackward
-            )
+        self.playback_previous_button.setText(
+            "│◀"
         )
         self.playback_previous_button.setToolTip(
             "Previous track"
@@ -8201,10 +8199,8 @@ class DashboardPage(QWidget):
         self.playback_play_pause_button = (
             QPushButton()
         )
-        self.playback_play_pause_button.setIcon(
-            self.style().standardIcon(
-                QStyle.StandardPixmap.SP_MediaPlay
-            )
+        self.playback_play_pause_button.setText(
+            "▶"
         )
         self.playback_play_pause_button.setToolTip(
             "Play"
@@ -8216,10 +8212,8 @@ class DashboardPage(QWidget):
         self.playback_next_button = (
             QPushButton()
         )
-        self.playback_next_button.setIcon(
-            self.style().standardIcon(
-                QStyle.StandardPixmap.SP_MediaSkipForward
-            )
+        self.playback_next_button.setText(
+            "▶│"
         )
         self.playback_next_button.setToolTip(
             "Next track"
@@ -8241,6 +8235,10 @@ class DashboardPage(QWidget):
         ):
             playback_button.setObjectName(
                 "cardIconButton"
+            )
+            playback_button.setProperty(
+                "playbackTransport",
+                True,
             )
             playback_button.setFixedSize(
                 34,
@@ -8516,10 +8514,8 @@ class DashboardPage(QWidget):
         )
 
         if playing:
-            play_pause_button.setIcon(
-                self.style().standardIcon(
-                    QStyle.StandardPixmap.SP_MediaPause
-                )
+            play_pause_button.setText(
+                "Ⅱ"
             )
             play_pause_button.setToolTip(
                 "Pause"
@@ -8529,10 +8525,8 @@ class DashboardPage(QWidget):
             )
 
         else:
-            play_pause_button.setIcon(
-                self.style().standardIcon(
-                    QStyle.StandardPixmap.SP_MediaPlay
-                )
+            play_pause_button.setText(
+                "▶"
             )
             play_pause_button.setToolTip(
                 "Play"
@@ -10409,6 +10403,14 @@ class DashboardPage(QWidget):
 
             QPushButton#cardIconButton:hover {{
                 border: 1px solid {theme["accent"]};
+            }}
+
+            QPushButton#cardIconButton[playbackTransport="true"] {{
+                color: {theme["accent"]};
+            }}
+
+            QPushButton#cardIconButton[playbackTransport="true"]:disabled {{
+                color: {theme["muted"]};
             }}
 
             QLabel#sourceLine {{
