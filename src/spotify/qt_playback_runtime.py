@@ -16,6 +16,13 @@ from src.spotify.playback_service import (
 
 DEFAULT_SPOTIFY_PLAYBACK_SHUTDOWN_WAIT_MS = 5000
 
+SPOTIFY_PLAYBACK_CONTROL_METHODS = (
+    "resume_playback",
+    "pause_playback",
+    "skip_next",
+    "skip_previous",
+)
+
 
 class SpotifyQtPlaybackRuntimeError(
     RuntimeError
@@ -259,6 +266,117 @@ class _SpotifyPlaybackWorker(
 
 
 
+class _SpotifyPlaybackControlWorker(
+    QObject
+):
+    result_ready = pyqtSignal(
+        object
+    )
+
+    failed = pyqtSignal(
+        str,
+        str,
+    )
+
+    finished = pyqtSignal()
+
+    def __init__(
+        self,
+        service_factory: Callable,
+        control_name: str,
+    ) -> None:
+        super().__init__()
+
+        self._service_factory = (
+            service_factory
+        )
+
+        self._control_name = (
+            control_name
+        )
+
+    def _fail(
+        self,
+        error_code: str,
+        message: str,
+    ) -> None:
+        self.failed.emit(
+            error_code,
+            message,
+        )
+
+    @pyqtSlot()
+    def run(
+        self,
+    ) -> None:
+        try:
+            try:
+                service = (
+                    self._service_factory()
+                )
+
+            except Exception:
+                self._fail(
+                    "runtime_setup_failed",
+                    (
+                        "Spotify playback control "
+                        "could not be prepared."
+                    ),
+                )
+                return
+
+            control_method = getattr(
+                service,
+                self._control_name,
+                None,
+            )
+
+            if not callable(
+                control_method
+            ):
+                self._fail(
+                    "invalid_service",
+                    (
+                        "Spotify playback service "
+                        "controls are unavailable."
+                    ),
+                )
+                return
+
+            try:
+                result = control_method()
+
+            except Exception:
+                self._fail(
+                    "playback_failed",
+                    (
+                        "Spotify playback control "
+                        "failed."
+                    ),
+                )
+                return
+
+            if not isinstance(
+                result,
+                SpotifyPlaybackServiceResult,
+            ):
+                self._fail(
+                    "invalid_service_result",
+                    (
+                        "Spotify playback control "
+                        "returned an invalid result."
+                    ),
+                )
+                return
+
+            self.result_ready.emit(
+                result
+            )
+
+        finally:
+            self.finished.emit()
+
+
 class SpotifyQtPlaybackRuntime(
     QObject
 ):
@@ -280,6 +398,14 @@ class SpotifyQtPlaybackRuntime(
     )
 
     playback_finished = pyqtSignal(
+        str
+    )
+
+    control_started = pyqtSignal(
+        str
+    )
+
+    control_finished = pyqtSignal(
         str
     )
 
@@ -321,6 +447,7 @@ class SpotifyQtPlaybackRuntime(
 
         self._busy = False
         self._active_uri = None
+        self._active_control = None
         self._shutting_down = False
 
     @property
@@ -357,6 +484,160 @@ class SpotifyQtPlaybackRuntime(
         self.busy_changed.emit(
             checked
         )
+
+    def resume_playback(
+        self,
+    ) -> None:
+        self._start_control(
+            "resume_playback"
+        )
+
+    def pause_playback(
+        self,
+    ) -> None:
+        self._start_control(
+            "pause_playback"
+        )
+
+    def skip_next(
+        self,
+    ) -> None:
+        self._start_control(
+            "skip_next"
+        )
+
+    def skip_previous(
+        self,
+    ) -> None:
+        self._start_control(
+            "skip_previous"
+        )
+
+    def _start_control(
+        self,
+        control_name: str,
+    ) -> None:
+        if not isinstance(
+            control_name,
+            str,
+        ):
+            raise TypeError(
+                (
+                    "control_name must "
+                    "be a string"
+                )
+            )
+
+        checked_control = (
+            control_name.strip()
+        )
+
+        if (
+            checked_control
+            not in SPOTIFY_PLAYBACK_CONTROL_METHODS
+        ):
+            raise ValueError(
+                (
+                    "Unsupported Spotify "
+                    "playback control."
+                )
+            )
+
+        if self._shutting_down:
+            raise SpotifyQtPlaybackRuntimeError(
+                "shutting_down",
+                (
+                    "Spotify playback is shutting "
+                    "down."
+                ),
+            )
+
+        if self._busy:
+            raise SpotifyQtPlaybackRuntimeError(
+                "busy",
+                (
+                    "A Spotify playback request "
+                    "is already running."
+                ),
+            )
+
+        thread = QThread()
+
+        worker = (
+            _SpotifyPlaybackControlWorker(
+                self._service_factory,
+                checked_control,
+            )
+        )
+
+        worker.moveToThread(
+            thread
+        )
+
+        thread.started.connect(
+            worker.run
+        )
+
+        worker.result_ready.connect(
+            self._handle_worker_result
+        )
+
+        worker.failed.connect(
+            self._handle_worker_failure
+        )
+
+        worker.finished.connect(
+            thread.quit
+        )
+
+        worker.finished.connect(
+            worker.deleteLater
+        )
+
+        thread.finished.connect(
+            self._handle_thread_finished
+        )
+
+        thread.finished.connect(
+            thread.deleteLater
+        )
+
+        self._thread = thread
+        self._worker = worker
+        self._active_uri = None
+        self._active_control = (
+            checked_control
+        )
+
+        self._set_busy(
+            True
+        )
+
+        self.control_started.emit(
+            checked_control
+        )
+
+        try:
+            thread.start()
+
+        except Exception as error:
+            self._complete_thread(
+                thread
+            )
+
+            try:
+                thread.deleteLater()
+
+            except Exception:
+                pass
+
+            raise SpotifyQtPlaybackRuntimeError(
+                "thread_start_failed",
+                (
+                    "Spotify playback control "
+                    "could not start."
+                ),
+            ) from error
 
     def play_playlist_position(
         self,
@@ -576,6 +857,7 @@ class SpotifyQtPlaybackRuntime(
 
         self._thread = thread
         self._worker = worker
+        self._active_control = None
         self._active_uri = checked_uri
 
         self._set_busy(
@@ -667,13 +949,25 @@ class SpotifyQtPlaybackRuntime(
             or ""
         )
 
+        control_name = (
+            self._active_control
+            or ""
+        )
+
         self._thread = None
         self._worker = None
         self._active_uri = None
+        self._active_control = None
 
         self._set_busy(
             False
         )
+
+        if control_name:
+            self.control_finished.emit(
+                control_name
+            )
+            return
 
         self.playback_finished.emit(
             spotify_uri
@@ -689,6 +983,7 @@ class SpotifyQtPlaybackRuntime(
         if thread is None:
             self._worker = None
             self._active_uri = None
+            self._active_control = None
 
             self._set_busy(
                 False
