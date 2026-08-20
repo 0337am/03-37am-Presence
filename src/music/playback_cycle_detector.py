@@ -6,6 +6,7 @@ from typing import Hashable
 
 
 DEFAULT_NEAR_END_SECONDS = 2.5
+DEFAULT_REPEAT_TRACK_NEAR_END_SECONDS = 6.0
 DEFAULT_NEAR_START_SECONDS = 2.5
 DEFAULT_MINIMUM_BACKWARD_JUMP_SECONDS = 5.0
 
@@ -36,6 +37,9 @@ class PlaybackCycleDetector:
         self,
         *,
         near_end_seconds: float = DEFAULT_NEAR_END_SECONDS,
+        repeat_track_near_end_seconds: float = (
+            DEFAULT_REPEAT_TRACK_NEAR_END_SECONDS
+        ),
         near_start_seconds: float = DEFAULT_NEAR_START_SECONDS,
         minimum_backward_jump_seconds: float = (
             DEFAULT_MINIMUM_BACKWARD_JUMP_SECONDS
@@ -44,6 +48,10 @@ class PlaybackCycleDetector:
         self.near_end_seconds = self._checked_threshold(
             near_end_seconds,
             "near_end_seconds",
+        )
+        self.repeat_track_near_end_seconds = self._checked_threshold(
+            repeat_track_near_end_seconds,
+            "repeat_track_near_end_seconds",
         )
         self.near_start_seconds = self._checked_threshold(
             near_start_seconds,
@@ -93,6 +101,7 @@ class PlaybackCycleDetector:
         self._last_position_seconds: float | None = None
         self._last_duration_seconds: float | None = None
         self._last_playing = False
+        self._last_repeat_track: bool | None = None
 
     @property
     def cycle_index(self) -> int:
@@ -143,6 +152,7 @@ class PlaybackCycleDetector:
             self._last_position_seconds = position
             self._last_duration_seconds = duration
             self._last_playing = playing
+            self._last_repeat_track = repeat_track
 
             return PlaybackCycleObservation(
                 replayed=False,
@@ -155,6 +165,7 @@ class PlaybackCycleDetector:
             duration_seconds=duration,
             playing=playing,
             repeat_track=repeat_track,
+            previous_repeat_track=self._last_repeat_track,
             explicit_seek=bool(
                 explicit_seek
             ),
@@ -166,6 +177,7 @@ class PlaybackCycleDetector:
         self._last_position_seconds = position
         self._last_duration_seconds = duration
         self._last_playing = playing
+        self._last_repeat_track = repeat_track
 
         return PlaybackCycleObservation(
             replayed=replayed,
@@ -180,6 +192,7 @@ class PlaybackCycleDetector:
         duration_seconds: float | None,
         playing: bool,
         repeat_track: bool | None,
+        previous_repeat_track: bool | None,
         explicit_seek: bool,
     ) -> bool:
         if explicit_seek:
@@ -203,8 +216,19 @@ class PlaybackCycleDetector:
             self._last_position_seconds
         )
 
+        end_window_seconds = self.near_end_seconds
+
+        if (
+            repeat_track is True
+            and previous_repeat_track is True
+        ):
+            end_window_seconds = max(
+                end_window_seconds,
+                self.repeat_track_near_end_seconds,
+            )
+
         end_window = min(
-            self.near_end_seconds,
+            end_window_seconds,
             duration_seconds * 0.25,
         )
 
@@ -241,6 +265,7 @@ class PlaybackCycleDetector:
 __all__ = [
     "DEFAULT_MINIMUM_BACKWARD_JUMP_SECONDS",
     "DEFAULT_NEAR_END_SECONDS",
+    "DEFAULT_REPEAT_TRACK_NEAR_END_SECONDS",
     "DEFAULT_NEAR_START_SECONDS",
     "PlaybackCycleDetector",
     "PlaybackCycleObservation",

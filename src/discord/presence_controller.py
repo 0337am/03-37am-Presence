@@ -232,6 +232,56 @@ class PresenceController(QObject):
             )
         ]
 
+    def set_music_loop_count_enabled(
+        self,
+        enabled: bool,
+    ):
+        checked = bool(enabled)
+
+        self.store.setValue(
+            "presence/music/show_loop_count",
+            checked,
+        )
+        self.store.sync()
+
+        loop_count_setter = getattr(
+            self.discord,
+            "set_music_loop_count_enabled",
+            None,
+        )
+
+        if callable(
+            loop_count_setter
+        ):
+            loop_count_setter(
+                checked
+            )
+
+        if self.active_mode != "music":
+            return
+
+        latest_song = self._latest_song
+
+        if not self._has_song(
+            latest_song
+        ):
+            return
+
+        music_mode = self.load_mode(
+            "music"
+        )
+
+        discord_buttons = (
+            self._discord_buttons_for_mode(
+                music_mode
+            )
+        )
+
+        self.discord.update_song(
+            latest_song,
+            buttons=discord_buttons,
+        )
+
     def apply_mode(
         self,
         presence_mode: PresenceMode,

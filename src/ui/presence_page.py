@@ -1486,6 +1486,9 @@ class PresencePage(QWidget):
         self.loop_count_box.toggled.connect(
             self.update_preview
         )
+        self.loop_count_box.toggled.connect(
+            self.apply_music_loop_count_setting
+        )
 
 
         context_layout.addStretch()
@@ -2691,6 +2694,17 @@ class PresencePage(QWidget):
                 control.blockSignals(
                     False
                 )
+
+    def apply_music_loop_count_setting(
+        self,
+        checked: bool,
+    ):
+        if self.current_mode != "music":
+            return
+
+        self.controller.set_music_loop_count_enabled(
+            bool(checked)
+        )
 
     def current_editor_presence_mode(
         self,
