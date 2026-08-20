@@ -312,42 +312,13 @@ class DashboardPlaybackControlTests(
                 Qt.FocusPolicy.StrongFocus,
             )
 
-    def test_transport_glyphs_follow_dashboard_theme(
+    def test_transport_icons_follow_dashboard_theme(
         self,
     ):
         buttons = (
             self.page.playback_previous_button,
             self.page.playback_play_pause_button,
             self.page.playback_next_button,
-        )
-
-        for button in buttons:
-            self.assertEqual(
-                button.objectName(),
-                "cardIconButton",
-            )
-
-            self.assertTrue(
-                bool(
-                    button.property(
-                        "playbackTransport"
-                    )
-                )
-            )
-
-        self.assertEqual(
-            self.page.playback_previous_button.text(),
-            "│◀",
-        )
-
-        self.assertEqual(
-            self.page.playback_play_pause_button.text(),
-            "▶",
-        )
-
-        self.assertEqual(
-            self.page.playback_next_button.text(),
-            "▶│",
         )
 
         theme = dict(
@@ -361,35 +332,139 @@ class DashboardPlaybackControlTests(
             theme
         )
 
-        stylesheet = (
-            self.page.styleSheet()
+        def most_opaque_colour(
+            image,
+        ):
+            strongest = None
+            strongest_alpha = -1
+
+            for y in range(
+                image.height()
+            ):
+                for x in range(
+                    image.width()
+                ):
+                    colour = image.pixelColor(
+                        x,
+                        y,
+                    )
+
+                    if (
+                        colour.alpha()
+                        > strongest_alpha
+                    ):
+                        strongest = colour
+                        strongest_alpha = (
+                            colour.alpha()
+                        )
+
+            return strongest
+
+        def assert_colour_close(
+            colour,
+            expected,
+        ):
+            self.assertIsNotNone(
+                colour
+            )
+
+            self.assertGreater(
+                colour.alpha(),
+                0,
+            )
+
+            self.assertAlmostEqual(
+                colour.red(),
+                expected[0],
+                delta=3,
+            )
+
+            self.assertAlmostEqual(
+                colour.green(),
+                expected[1],
+                delta=3,
+            )
+
+            self.assertAlmostEqual(
+                colour.blue(),
+                expected[2],
+                delta=3,
+            )
+
+        for button in buttons:
+            self.assertEqual(
+                button.objectName(),
+                "cardIconButton",
+            )
+
+            self.assertEqual(
+                button.text(),
+                "",
+            )
+
+            icon = button.icon()
+
+            self.assertFalse(
+                icon.isNull()
+            )
+
+            icon_type = type(
+                icon
+            )
+
+            normal_image = (
+                icon.pixmap(
+                    16,
+                    16,
+                    icon_type.Mode.Normal,
+                    icon_type.State.Off,
+                )
+                .toImage()
+            )
+
+            disabled_image = (
+                icon.pixmap(
+                    16,
+                    16,
+                    icon_type.Mode.Disabled,
+                    icon_type.State.Off,
+                )
+                .toImage()
+            )
+
+            assert_colour_close(
+                most_opaque_colour(
+                    normal_image
+                ),
+                (
+                    0x12,
+                    0x34,
+                    0x56,
+                ),
+            )
+
+            assert_colour_close(
+                most_opaque_colour(
+                    disabled_image
+                ),
+                (
+                    0x65,
+                    0x43,
+                    0x21,
+                ),
+            )
+
+        self.page.apply_song(
+            self.song(
+                playing=False
+            )
         )
 
-        self.assertIn(
-            (
-                'QPushButton#cardIconButton'
-                '[playbackTransport="true"]'
-            ),
-            stylesheet,
-        )
-
-        self.assertIn(
-            "color: #123456;",
-            stylesheet,
-        )
-
-        self.assertIn(
-            (
-                'QPushButton#cardIconButton'
-                '[playbackTransport="true"]'
-                ':disabled'
-            ),
-            stylesheet,
-        )
-
-        self.assertIn(
-            "color: #654321;",
-            stylesheet,
+        play_key = (
+            self.page
+            .playback_play_pause_button
+            .icon()
+            .cacheKey()
         )
 
         self.page.apply_song(
@@ -398,10 +473,39 @@ class DashboardPlaybackControlTests(
             )
         )
 
-        self.assertEqual(
-            self.page.playback_play_pause_button.text(),
-            "Ⅱ",
+        pause_key = (
+            self.page
+            .playback_play_pause_button
+            .icon()
+            .cacheKey()
         )
+
+        self.assertNotEqual(
+            play_key,
+            pause_key,
+        )
+
+        source = (
+            REPO_ROOT
+            / "src"
+            / "ui"
+            / "dashboard.py"
+        ).read_text(
+            encoding="utf-8-sig"
+        )
+
+        for token in (
+            "SP_MediaSkipBackward",
+            "SP_MediaPlay",
+            "SP_MediaPause",
+            "SP_MediaSkipForward",
+            "CompositionMode_SourceIn",
+        ):
+            self.assertIn(
+                token,
+                source,
+            )
+
 
     def test_main_window_owns_transport_coordinator(
         self,

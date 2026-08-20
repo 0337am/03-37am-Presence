@@ -8186,8 +8186,10 @@ class DashboardPage(QWidget):
         self.playback_previous_button = (
             QPushButton()
         )
-        self.playback_previous_button.setText(
-            "│◀"
+        self.playback_previous_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MediaSkipBackward
+            )
         )
         self.playback_previous_button.setToolTip(
             "Previous track"
@@ -8199,8 +8201,10 @@ class DashboardPage(QWidget):
         self.playback_play_pause_button = (
             QPushButton()
         )
-        self.playback_play_pause_button.setText(
-            "▶"
+        self.playback_play_pause_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MediaPlay
+            )
         )
         self.playback_play_pause_button.setToolTip(
             "Play"
@@ -8212,8 +8216,10 @@ class DashboardPage(QWidget):
         self.playback_next_button = (
             QPushButton()
         )
-        self.playback_next_button.setText(
-            "▶│"
+        self.playback_next_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MediaSkipForward
+            )
         )
         self.playback_next_button.setToolTip(
             "Next track"
@@ -8235,10 +8241,6 @@ class DashboardPage(QWidget):
         ):
             playback_button.setObjectName(
                 "cardIconButton"
-            )
-            playback_button.setProperty(
-                "playbackTransport",
-                True,
             )
             playback_button.setFixedSize(
                 34,
@@ -8285,6 +8287,8 @@ class DashboardPage(QWidget):
         info_layout.addLayout(
             playback_row
         )
+
+        self._refresh_playback_transport_icons()
 
         progress_row = QHBoxLayout()
         progress_row.setSpacing(8)
@@ -8442,6 +8446,197 @@ class DashboardPage(QWidget):
             "next"
         )
 
+    def _tinted_playback_standard_icon(
+        self,
+        standard_pixmap,
+        *,
+        accent_color,
+        muted_color,
+    ):
+        from PyQt6.QtGui import (
+            QColor,
+            QIcon,
+            QPainter,
+        )
+
+        source_icon = (
+            self.style().standardIcon(
+                standard_pixmap
+            )
+        )
+
+        themed_icon = QIcon()
+
+        for (
+            mode,
+            color,
+        ) in (
+            (
+                QIcon.Mode.Normal,
+                accent_color,
+            ),
+            (
+                QIcon.Mode.Active,
+                accent_color,
+            ),
+            (
+                QIcon.Mode.Selected,
+                accent_color,
+            ),
+            (
+                QIcon.Mode.Disabled,
+                muted_color,
+            ),
+        ):
+            pixmap = source_icon.pixmap(
+                16,
+                16,
+            )
+
+            if pixmap.isNull():
+                continue
+
+            painter = QPainter(
+                pixmap
+            )
+
+            painter.setCompositionMode(
+                QPainter.CompositionMode.CompositionMode_SourceIn
+            )
+
+            painter.fillRect(
+                pixmap.rect(),
+                QColor(
+                    color
+                ),
+            )
+
+            painter.end()
+
+            themed_icon.addPixmap(
+                pixmap,
+                mode,
+                QIcon.State.Off,
+            )
+
+        return themed_icon
+
+    def _refresh_playback_transport_icons(
+        self,
+        theme=None,
+        *,
+        playing=None,
+    ):
+        previous_button = getattr(
+            self,
+            "playback_previous_button",
+            None,
+        )
+
+        play_pause_button = getattr(
+            self,
+            "playback_play_pause_button",
+            None,
+        )
+
+        next_button = getattr(
+            self,
+            "playback_next_button",
+            None,
+        )
+
+        if (
+            previous_button is None
+            or play_pause_button is None
+            or next_button is None
+        ):
+            return
+
+        if theme is None:
+            theme_manager = getattr(
+                self,
+                "theme_manager",
+                None,
+            )
+
+            if theme_manager is None:
+                return
+
+            theme = dict(
+                theme_manager.theme()
+            )
+
+        accent_color = str(
+            theme.get(
+                "accent",
+                "#ffffff",
+            )
+        )
+
+        muted_color = str(
+            theme.get(
+                "muted",
+                accent_color,
+            )
+        )
+
+        if playing is None:
+            song = getattr(
+                self,
+                "song",
+                None,
+            )
+
+            playing = bool(
+                play_pause_button.isEnabled()
+                and song is not None
+                and getattr(
+                    song,
+                    "playing",
+                    False,
+                )
+            )
+
+        previous_button.setText(
+            ""
+        )
+
+        play_pause_button.setText(
+            ""
+        )
+
+        next_button.setText(
+            ""
+        )
+
+        previous_button.setIcon(
+            self._tinted_playback_standard_icon(
+                QStyle.StandardPixmap.SP_MediaSkipBackward,
+                accent_color=accent_color,
+                muted_color=muted_color,
+            )
+        )
+
+        play_pause_button.setIcon(
+            self._tinted_playback_standard_icon(
+                (
+                    QStyle.StandardPixmap.SP_MediaPause
+                    if playing
+                    else QStyle.StandardPixmap.SP_MediaPlay
+                ),
+                accent_color=accent_color,
+                muted_color=muted_color,
+            )
+        )
+
+        next_button.setIcon(
+            self._tinted_playback_standard_icon(
+                QStyle.StandardPixmap.SP_MediaSkipForward,
+                accent_color=accent_color,
+                muted_color=muted_color,
+            )
+        )
+
     def sync_playback_control_state(
         self,
         *,
@@ -8514,9 +8709,6 @@ class DashboardPage(QWidget):
         )
 
         if playing:
-            play_pause_button.setText(
-                "Ⅱ"
-            )
             play_pause_button.setToolTip(
                 "Pause"
             )
@@ -8525,15 +8717,15 @@ class DashboardPage(QWidget):
             )
 
         else:
-            play_pause_button.setText(
-                "▶"
-            )
             play_pause_button.setToolTip(
                 "Play"
             )
             play_pause_button.setAccessibleName(
                 "Play"
             )
+        self._refresh_playback_transport_icons(
+            playing=playing
+        )
 
     def build_discord_preview_card(self):
         self.preview_card = DiscordProfilePreview(
@@ -10405,14 +10597,6 @@ class DashboardPage(QWidget):
                 border: 1px solid {theme["accent"]};
             }}
 
-            QPushButton#cardIconButton[playbackTransport="true"] {{
-                color: {theme["accent"]};
-            }}
-
-            QPushButton#cardIconButton[playbackTransport="true"]:disabled {{
-                color: {theme["muted"]};
-            }}
-
             QLabel#sourceLine {{
                 color: {theme["text"]};
                 font-size: 10px;
@@ -10780,6 +10964,9 @@ class DashboardPage(QWidget):
         ):
             self._last_artwork_signature = None
             self.update_artwork(self.song)
+        self._refresh_playback_transport_icons(
+            theme
+        )
 
     @pyqtSlot(dict)
     def apply_branding(self, branding: dict):
