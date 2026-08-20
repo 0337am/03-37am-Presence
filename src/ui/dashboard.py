@@ -551,6 +551,12 @@ class DashboardPage(QWidget):
     settings_section_requested = pyqtSignal(str)
     apply_presence_preset_requested = pyqtSignal(str)
 
+    playback_control_requested = pyqtSignal(
+        str,
+        str,
+        bool,
+    )
+
     def __init__(
         self,
         theme_manager=None,
@@ -8168,6 +8174,120 @@ class DashboardPage(QWidget):
         )
         info_layout.addStretch()
 
+        playback_row = QHBoxLayout()
+        playback_row.setSpacing(8)
+        playback_row.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        self.playback_previous_button = (
+            QPushButton()
+        )
+        self.playback_previous_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MediaSkipBackward
+            )
+        )
+        self.playback_previous_button.setToolTip(
+            "Previous track"
+        )
+        self.playback_previous_button.setAccessibleName(
+            "Previous track"
+        )
+
+        self.playback_play_pause_button = (
+            QPushButton()
+        )
+        self.playback_play_pause_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MediaPlay
+            )
+        )
+        self.playback_play_pause_button.setToolTip(
+            "Play"
+        )
+        self.playback_play_pause_button.setAccessibleName(
+            "Play"
+        )
+
+        self.playback_next_button = (
+            QPushButton()
+        )
+        self.playback_next_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MediaSkipForward
+            )
+        )
+        self.playback_next_button.setToolTip(
+            "Next track"
+        )
+        self.playback_next_button.setAccessibleName(
+            "Next track"
+        )
+
+        playback_description = (
+            "Control the current media session "
+            "without bringing another app "
+            "to the foreground."
+        )
+
+        for playback_button in (
+            self.playback_previous_button,
+            self.playback_play_pause_button,
+            self.playback_next_button,
+        ):
+            playback_button.setObjectName(
+                "cardIconButton"
+            )
+            playback_button.setFixedSize(
+                34,
+                34,
+            )
+            playback_button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+            playback_button.setFocusPolicy(
+                Qt.FocusPolicy.StrongFocus
+            )
+            playback_button.setAccessibleDescription(
+                playback_description
+            )
+            playback_button.setStatusTip(
+                playback_description
+            )
+            playback_button.setEnabled(
+                False
+            )
+
+        self.playback_previous_button.clicked.connect(
+            self.request_previous_playback
+        )
+        self.playback_play_pause_button.clicked.connect(
+            self.request_toggle_playback
+        )
+        self.playback_next_button.clicked.connect(
+            self.request_next_playback
+        )
+
+        playback_row.addStretch()
+        playback_row.addWidget(
+            self.playback_previous_button
+        )
+        playback_row.addWidget(
+            self.playback_play_pause_button
+        )
+        playback_row.addWidget(
+            self.playback_next_button
+        )
+        playback_row.addStretch()
+
+        info_layout.addLayout(
+            playback_row
+        )
+
         progress_row = QHBoxLayout()
         progress_row.setSpacing(8)
 
@@ -8246,6 +8366,180 @@ class DashboardPage(QWidget):
             body_layout,
             stretch=1,
         )
+
+    def _emit_playback_control(
+        self,
+        action: str,
+    ) -> bool:
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        play_button = getattr(
+            self,
+            "playback_play_pause_button",
+            None,
+        )
+
+        if (
+            song is None
+            or not str(
+                getattr(
+                    song,
+                    "title",
+                    "",
+                )
+                or ""
+            ).strip()
+            or play_button is None
+            or not play_button.isEnabled()
+        ):
+            return False
+
+        source_app = str(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+            or ""
+        )
+
+        playing = bool(
+            getattr(
+                song,
+                "playing",
+                False,
+            )
+        )
+
+        self.playback_control_requested.emit(
+            action,
+            source_app,
+            playing,
+        )
+
+        return True
+
+    def request_previous_playback(
+        self,
+    ) -> bool:
+        return self._emit_playback_control(
+            "previous"
+        )
+
+    def request_toggle_playback(
+        self,
+    ) -> bool:
+        return self._emit_playback_control(
+            "toggle_play_pause"
+        )
+
+    def request_next_playback(
+        self,
+    ) -> bool:
+        return self._emit_playback_control(
+            "next"
+        )
+
+    def sync_playback_control_state(
+        self,
+        *,
+        available: bool | None = None,
+    ) -> None:
+        previous_button = getattr(
+            self,
+            "playback_previous_button",
+            None,
+        )
+
+        play_pause_button = getattr(
+            self,
+            "playback_play_pause_button",
+            None,
+        )
+
+        next_button = getattr(
+            self,
+            "playback_next_button",
+            None,
+        )
+
+        if (
+            previous_button is None
+            or play_pause_button is None
+            or next_button is None
+        ):
+            return
+
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        if available is None:
+            available = bool(
+                song is not None
+                and str(
+                    getattr(
+                        song,
+                        "title",
+                        "",
+                    )
+                    or ""
+                ).strip()
+            )
+
+        enabled = bool(
+            available
+        )
+
+        for button in (
+            previous_button,
+            play_pause_button,
+            next_button,
+        ):
+            button.setEnabled(
+                enabled
+            )
+
+        playing = bool(
+            enabled
+            and getattr(
+                song,
+                "playing",
+                False,
+            )
+        )
+
+        if playing:
+            play_pause_button.setIcon(
+                self.style().standardIcon(
+                    QStyle.StandardPixmap.SP_MediaPause
+                )
+            )
+            play_pause_button.setToolTip(
+                "Pause"
+            )
+            play_pause_button.setAccessibleName(
+                "Pause"
+            )
+
+        else:
+            play_pause_button.setIcon(
+                self.style().standardIcon(
+                    QStyle.StandardPixmap.SP_MediaPlay
+                )
+            )
+            play_pause_button.setToolTip(
+                "Play"
+            )
+            play_pause_button.setAccessibleName(
+                "Play"
+            )
 
     def build_discord_preview_card(self):
         self.preview_card = DiscordProfilePreview(
@@ -10598,6 +10892,9 @@ class DashboardPage(QWidget):
         )
 
         self.song = song
+        self.sync_playback_control_state(
+            available=True
+        )
 
         self.playback_presentation_clock.observe(
             position_seconds=float(
@@ -11401,6 +11698,9 @@ class DashboardPage(QWidget):
         )
 
     def show_nothing_playing(self):
+        self.sync_playback_control_state(
+            available=False
+        )
         self.song_title.setText(
             "Nothing playing"
         )

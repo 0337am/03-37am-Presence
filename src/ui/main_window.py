@@ -49,6 +49,9 @@ from src.system.afk_preferences import (
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
+from src.music.playback_control_coordinator import (
+    PlaybackControlCoordinator,
+)
 from src.media.local_candidate_snapshot import (
     LocalCandidateSnapshot,
 )
@@ -1160,6 +1163,17 @@ class MainWindow(QMainWindow):
                 parent=self,
             )
         )
+        self.playback_control_coordinator = (
+            PlaybackControlCoordinator(
+                self.spotify_playback_runtime,
+                parent=self,
+            )
+        )
+
+        self.dashboard_page.playback_control_requested.connect(
+            self.playback_control_coordinator.request
+        )
+
 
         self.spotify_page = SpotifyPage(
             search_runtime=(
@@ -2314,6 +2328,28 @@ class MainWindow(QMainWindow):
             return
 
         self._shutting_down = True
+        playback_control_coordinator = getattr(
+            self,
+            "playback_control_coordinator",
+            None,
+        )
+
+        if playback_control_coordinator is not None:
+            shutdown_playback_controls = getattr(
+                playback_control_coordinator,
+                "shutdown",
+                None,
+            )
+
+            if callable(
+                shutdown_playback_controls
+            ):
+                try:
+                    shutdown_playback_controls()
+
+                except Exception:
+                    pass
+
 
         timer = getattr(
             self,
