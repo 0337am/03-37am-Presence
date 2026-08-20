@@ -761,6 +761,150 @@ class SpotifyPlaybackService:
 
         return position
 
+    def _run_transport_control(
+        self,
+        api_method_name: str,
+        success_message: str,
+    ) -> SpotifyPlaybackServiceResult:
+        api_method = getattr(
+            self._api_client,
+            api_method_name,
+            None,
+        )
+
+        if not callable(api_method):
+            return self._error(
+                "invalid_playback_api",
+                (
+                    "Spotify playback controls "
+                    "are unavailable."
+                ),
+            )
+
+        (
+            access_token,
+            refreshed,
+            session_error,
+        ) = self._resolve_session()
+
+        if session_error is not None:
+            return session_error
+
+        device_id = None
+
+        try:
+            device_payload = (
+                self._api_client
+                .get_available_devices(
+                    access_token
+                )
+            )
+
+            device_id = (
+                self._usable_device_id(
+                    device_payload
+                )
+            )
+
+        except SpotifyWebApiError as error:
+            error_code = str(
+                getattr(
+                    error,
+                    "error_code",
+                    "",
+                )
+                or ""
+            )
+
+            if (
+                error_code
+                == "reauthorization_required"
+            ):
+                return self._api_error(
+                    error,
+                    refreshed=refreshed,
+                )
+
+            device_id = None
+
+        except Exception:
+            device_id = None
+
+        try:
+            api_method(
+                access_token,
+                device_id=device_id,
+            )
+
+        except SpotifyWebApiError as error:
+            return self._api_error(
+                error,
+                refreshed=refreshed,
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return self._error(
+                "invalid_playback_request",
+                (
+                    "Spotify playback control "
+                    "request was invalid."
+                ),
+                refreshed=refreshed,
+            )
+
+        except Exception:
+            return self._error(
+                "playback_failed",
+                (
+                    "Spotify playback control "
+                    "failed."
+                ),
+                refreshed=refreshed,
+            )
+
+        return SpotifyPlaybackServiceResult(
+            status=(
+                SpotifyPlaybackServiceStatus.READY
+            ),
+            message=success_message,
+            refreshed=refreshed,
+        )
+
+    def resume_playback(
+        self,
+    ) -> SpotifyPlaybackServiceResult:
+        return self._run_transport_control(
+            "resume_playback",
+            "Spotify playback resumed.",
+        )
+
+    def pause_playback(
+        self,
+    ) -> SpotifyPlaybackServiceResult:
+        return self._run_transport_control(
+            "pause_playback",
+            "Spotify playback paused.",
+        )
+
+    def skip_next(
+        self,
+    ) -> SpotifyPlaybackServiceResult:
+        return self._run_transport_control(
+            "skip_next",
+            "Skipped to the next Spotify item.",
+        )
+
+    def skip_previous(
+        self,
+    ) -> SpotifyPlaybackServiceResult:
+        return self._run_transport_control(
+            "skip_previous",
+            "Skipped to the previous Spotify item.",
+        )
+
     def play_track(
         self,
         spotify_uri,

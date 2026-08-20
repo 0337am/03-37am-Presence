@@ -39,6 +39,18 @@ START_PLAYBACK_PATH = (
     "/me/player/play"
 )
 
+PAUSE_PLAYBACK_PATH = (
+    "/me/player/pause"
+)
+
+NEXT_PLAYBACK_PATH = (
+    "/me/player/next"
+)
+
+PREVIOUS_PLAYBACK_PATH = (
+    "/me/player/previous"
+)
+
 
 class SpotifyWebApiError(
     RuntimeError
@@ -1750,6 +1762,289 @@ class SpotifyWebApiClient:
                 "network_error",
                 "Could not reach Spotify.",
             ) from error
+
+    def _request_no_content(
+        self,
+        url: str,
+        access_token: str,
+        *,
+        method: str,
+    ) -> None:
+        url = (
+            _validate_spotify_api_request_url(
+                url
+            )
+        )
+
+        token = _validate_access_token(
+            access_token
+        )
+
+        if not isinstance(
+            method,
+            str,
+        ):
+            raise TypeError(
+                (
+                    "Spotify request method "
+                    "must be a string."
+                )
+            )
+
+        checked_method = (
+            method.strip().upper()
+        )
+
+        if checked_method not in {
+            "PUT",
+            "POST",
+        }:
+            raise ValueError(
+                (
+                    "Spotify no-content "
+                    "request method must "
+                    "be PUT or POST."
+                )
+            )
+
+        request = Request(
+            url,
+            method=checked_method,
+            headers={
+                "Accept": "application/json",
+                "Authorization": (
+                    f"Bearer {token}"
+                ),
+                "User-Agent": (
+                    SPOTIFY_API_USER_AGENT
+                ),
+            },
+        )
+
+        try:
+            response = self._urlopen(
+                request,
+                timeout=self._timeout_seconds,
+            )
+
+            with response:
+                if (
+                    _response_url(
+                        response,
+                        url,
+                    )
+                    != url
+                ):
+                    raise SpotifyWebApiError(
+                        "untrusted_response",
+                        (
+                            "Spotify API response came "
+                            "from an unexpected URL."
+                        ),
+                    )
+
+                status = _response_status(
+                    response
+                )
+
+                if 200 <= status <= 299:
+                    return
+
+                response_body = (
+                    _read_limited_body(
+                        response
+                    )
+                )
+
+                _raise_http_error(
+                    status,
+                    headers=(
+                        _response_headers(
+                            response
+                        )
+                    ),
+                    payload=(
+                        _safe_error_payload(
+                            response_body
+                        )
+                    ),
+                )
+
+        except HTTPError as error:
+            try:
+                try:
+                    response_body = (
+                        error.read(
+                            MAX_SPOTIFY_API_RESPONSE_BYTES
+                            + 1
+                        )
+                    )
+
+                except Exception:
+                    response_body = b""
+
+                if (
+                    len(
+                        response_body
+                    )
+                    > MAX_SPOTIFY_API_RESPONSE_BYTES
+                ):
+                    response_body = b""
+
+                status = int(
+                    getattr(
+                        error,
+                        "code",
+                        0,
+                    )
+                    or 0
+                )
+
+                headers = getattr(
+                    error,
+                    "headers",
+                    None,
+                )
+
+                payload = (
+                    _safe_error_payload(
+                        response_body
+                    )
+                )
+
+            finally:
+                try:
+                    error.close()
+
+                except Exception:
+                    pass
+
+            _raise_http_error(
+                status,
+                headers=headers,
+                payload=payload,
+            )
+
+        except (
+            socket.timeout,
+            TimeoutError,
+        ) as error:
+            raise SpotifyWebApiError(
+                "timeout",
+                (
+                    "Spotify API request "
+                    "timed out."
+                ),
+            ) from error
+
+        except URLError as error:
+            reason = getattr(
+                error,
+                "reason",
+                None,
+            )
+
+            if isinstance(
+                reason,
+                (
+                    socket.timeout,
+                    TimeoutError,
+                ),
+            ):
+                raise SpotifyWebApiError(
+                    "timeout",
+                    (
+                        "Spotify API request "
+                        "timed out."
+                    ),
+                ) from error
+
+            raise SpotifyWebApiError(
+                "network_error",
+                "Could not reach Spotify.",
+            ) from error
+
+    def _playback_control_no_content(
+        self,
+        path: str,
+        access_token: str,
+        *,
+        device_id: str | None = None,
+        method: str,
+    ) -> None:
+        query = None
+
+        if device_id is not None:
+            query = {
+                "device_id": (
+                    _validate_spotify_device_id(
+                        device_id
+                    )
+                ),
+            }
+
+        url = _build_spotify_api_url(
+            path,
+            query,
+        )
+
+        self._request_no_content(
+            url,
+            access_token,
+            method=method,
+        )
+
+    def resume_playback(
+        self,
+        access_token: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        self._playback_control_no_content(
+            START_PLAYBACK_PATH,
+            access_token,
+            device_id=device_id,
+            method="PUT",
+        )
+
+    def pause_playback(
+        self,
+        access_token: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        self._playback_control_no_content(
+            PAUSE_PLAYBACK_PATH,
+            access_token,
+            device_id=device_id,
+            method="PUT",
+        )
+
+    def skip_next(
+        self,
+        access_token: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        self._playback_control_no_content(
+            NEXT_PLAYBACK_PATH,
+            access_token,
+            device_id=device_id,
+            method="POST",
+        )
+
+    def skip_previous(
+        self,
+        access_token: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        self._playback_control_no_content(
+            PREVIOUS_PLAYBACK_PATH,
+            access_token,
+            device_id=device_id,
+            method="POST",
+        )
 
     def start_playback(
         self,
