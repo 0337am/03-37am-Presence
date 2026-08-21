@@ -797,7 +797,7 @@ class DashboardPlaybackSeekTests(
         )
 
         self.assertIn(
-            "QProgressBar#playbackProgressVisual {{",
+            "QFrame#playbackProgressVisual {{",
             source,
         )
 
@@ -807,12 +807,22 @@ class DashboardPlaybackSeekTests(
         )
 
         self.assertIn(
-            "QProgressBar#playbackProgressVisual::chunk {{",
+            "QFrame#playbackProgressPlayed {{",
             source,
         )
 
         self.assertIn(
             'background: {theme["accent"]};',
+            source,
+        )
+
+        self.assertIn(
+            "self.progress_visual.setFixedHeight(",
+            source,
+        )
+
+        self.assertIn(
+            "            4",
             source,
         )
 
@@ -849,6 +859,26 @@ class DashboardPlaybackSeekTests(
             4321,
         )
 
+        visual_layout = (
+            self.page
+            .progress_visual
+            .layout()
+        )
+
+        self.assertEqual(
+            visual_layout.stretch(
+                0
+            ),
+            4321,
+        )
+
+        self.assertEqual(
+            visual_layout.stretch(
+                1
+            ),
+            5679,
+        )
+
     def test_seek_uses_original_progress_visual_under_input_overlay(
         self,
     ):
@@ -877,7 +907,17 @@ class DashboardPlaybackSeekTests(
         )
 
         self.assertIn(
-            "self.progress_visual = QProgressBar()",
+            "self.progress_visual = PlaybackProgressVisual()",
+            source,
+        )
+
+        self.assertIn(
+            "class PlaybackProgressVisual(",
+            source,
+        )
+
+        self.assertIn(
+            "self.progress_visual.setFixedHeight(",
             source,
         )
 

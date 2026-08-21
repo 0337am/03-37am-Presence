@@ -547,6 +547,158 @@ PLAYBACK_SEEK_CONFIRM_TOLERANCE_SECONDS = 4.0
 PLAYBACK_SEEK_HANDLE_WIDTH_PX = 8
 
 
+class PlaybackProgressVisual(
+    QFrame
+):
+    def __init__(
+        self,
+        parent=None,
+    ) -> None:
+        super().__init__(
+            parent
+        )
+
+        self._minimum = 0
+        self._maximum = 10000
+        self._value = 0
+
+        self.played = QFrame(
+            self
+        )
+        self.played.setObjectName(
+            "playbackProgressPlayed"
+        )
+        self.played.setMinimumWidth(
+            0
+        )
+
+        self.remaining = QFrame(
+            self
+        )
+        self.remaining.setObjectName(
+            "playbackProgressRemaining"
+        )
+        self.remaining.setMinimumWidth(
+            0
+        )
+
+        self._segments_layout = QHBoxLayout(
+            self
+        )
+        self._segments_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        self._segments_layout.setSpacing(
+            0
+        )
+
+        self._segments_layout.addWidget(
+            self.played
+        )
+        self._segments_layout.addWidget(
+            self.remaining
+        )
+
+        self._refresh_segments()
+
+    def setRange(
+        self,
+        minimum,
+        maximum,
+    ) -> None:
+        minimum = int(
+            minimum
+        )
+        maximum = int(
+            maximum
+        )
+
+        if maximum < minimum:
+            maximum = minimum
+
+        self._minimum = minimum
+        self._maximum = maximum
+
+        self.setValue(
+            self._value
+        )
+
+    def setValue(
+        self,
+        value,
+    ) -> None:
+        value = int(
+            value
+        )
+
+        self._value = max(
+            self._minimum,
+            min(
+                self._maximum,
+                value,
+            ),
+        )
+
+        self._refresh_segments()
+
+    def value(
+        self,
+    ) -> int:
+        return self._value
+
+    def _refresh_segments(
+        self,
+    ) -> None:
+        span = max(
+            0,
+            self._maximum
+            - self._minimum,
+        )
+
+        played = max(
+            0,
+            self._value
+            - self._minimum,
+        )
+
+        remaining = max(
+            0,
+            self._maximum
+            - self._value,
+        )
+
+        self.played.setVisible(
+            played > 0
+        )
+
+        self.remaining.setVisible(
+            remaining > 0
+        )
+
+        if span <= 0:
+            self._segments_layout.setStretch(
+                0,
+                0,
+            )
+            self._segments_layout.setStretch(
+                1,
+                1,
+            )
+            return
+
+        self._segments_layout.setStretch(
+            0,
+            played,
+        )
+        self._segments_layout.setStretch(
+            1,
+            remaining,
+        )
+
+
 class PlaybackSeekSlider(
     QSlider
 ):
@@ -8512,7 +8664,7 @@ class DashboardPage(QWidget):
             )
         )
 
-        self.progress_visual = QProgressBar()
+        self.progress_visual = PlaybackProgressVisual()
         self.progress_visual.setObjectName(
             "playbackProgressVisual"
         )
@@ -8522,9 +8674,6 @@ class DashboardPage(QWidget):
         )
         self.progress_visual.setValue(
             0
-        )
-        self.progress_visual.setTextVisible(
-            False
         )
         self.progress_visual.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents,
@@ -8557,6 +8706,7 @@ class DashboardPage(QWidget):
             self.progress_visual,
             0,
             0,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
         )
         progress_stack_layout.addWidget(
             self.progress,
@@ -11040,7 +11190,7 @@ class DashboardPage(QWidget):
             playback_progress_height
         )
         self.progress_visual.setFixedHeight(
-            playback_progress_height
+            4
         )
         self.progress_stack.setFixedHeight(
             playback_progress_height
@@ -11489,15 +11639,21 @@ class DashboardPage(QWidget):
                 border: none;
             }}
 
-            QProgressBar#playbackProgressVisual {{
+            QFrame#playbackProgressVisual {{
                 background: {theme["background"]};
                 border: none;
                 border-radius: 2px;
             }}
 
-            QProgressBar#playbackProgressVisual::chunk {{
+            QFrame#playbackProgressPlayed {{
                 background: {theme["accent"]};
+                border: none;
                 border-radius: 2px;
+            }}
+
+            QFrame#playbackProgressRemaining {{
+                background: transparent;
+                border: none;
             }}
 
             QSlider#playbackProgress {{
