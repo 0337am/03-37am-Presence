@@ -8512,6 +8512,60 @@ class DashboardPage(QWidget):
             )
         )
 
+        self.progress_visual = QProgressBar()
+        self.progress_visual.setObjectName(
+            "playbackProgressVisual"
+        )
+        self.progress_visual.setRange(
+            0,
+            10000,
+        )
+        self.progress_visual.setValue(
+            0
+        )
+        self.progress_visual.setTextVisible(
+            False
+        )
+        self.progress_visual.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+
+        self.progress.valueChanged.connect(
+            self.progress_visual.setValue
+        )
+
+        self.progress_stack = QWidget()
+        self.progress_stack.setObjectName(
+            "playbackProgressStack"
+        )
+
+        progress_stack_layout = QGridLayout(
+            self.progress_stack
+        )
+        progress_stack_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        progress_stack_layout.setSpacing(
+            0
+        )
+
+        progress_stack_layout.addWidget(
+            self.progress_visual,
+            0,
+            0,
+        )
+        progress_stack_layout.addWidget(
+            self.progress,
+            0,
+            0,
+        )
+
+        self.progress.raise_()
+
         self._playback_scrubbing = False
         self._playback_seek_pending = False
         self._playback_seek_target_seconds = None
@@ -8552,7 +8606,7 @@ class DashboardPage(QWidget):
             self.current_time
         )
         progress_row.addWidget(
-            self.progress,
+            self.progress_stack,
             stretch=1,
         )
         progress_row.addWidget(
@@ -10978,8 +11032,18 @@ class DashboardPage(QWidget):
             self._preview_artwork_size,
         )
 
-        self.progress.setFixedHeight(
+        playback_progress_height = (
             14 if compact else 16
+        )
+
+        self.progress.setFixedHeight(
+            playback_progress_height
+        )
+        self.progress_visual.setFixedHeight(
+            playback_progress_height
+        )
+        self.progress_stack.setFixedHeight(
+            playback_progress_height
         )
 
         card_glass = colour_with_alpha(
@@ -11420,32 +11484,45 @@ class DashboardPage(QWidget):
                 font-weight: 700;
             }}
 
+            QWidget#playbackProgressStack {{
+                background: transparent;
+                border: none;
+            }}
+
+            QProgressBar#playbackProgressVisual {{
+                background: {theme["background"]};
+                border: none;
+                border-radius: 2px;
+            }}
+
+            QProgressBar#playbackProgressVisual::chunk {{
+                background: {theme["accent"]};
+                border-radius: 2px;
+            }}
+
             QSlider#playbackProgress {{
                 background: transparent;
                 border: none;
             }}
 
             QSlider#playbackProgress::groove:horizontal {{
-                height: 3px;
-                background: {theme["border"]};
+                height: 4px;
+                background: transparent;
                 border: none;
-                border-radius: 1px;
             }}
 
             QSlider#playbackProgress::sub-page:horizontal {{
-                background: {theme["accent"]};
+                background: transparent;
                 border: none;
-                border-radius: 1px;
             }}
 
             QSlider#playbackProgress::add-page:horizontal {{
-                background: {theme["border"]};
+                background: transparent;
                 border: none;
-                border-radius: 1px;
             }}
 
             QSlider#playbackProgress::handle:horizontal {{
-                background: {theme["accent"]};
+                background: transparent;
                 border: none;
                 width: 8px;
                 height: 8px;
@@ -11453,8 +11530,12 @@ class DashboardPage(QWidget):
                 border-radius: 4px;
             }}
 
-            QSlider#playbackProgress:disabled::handle:horizontal {{
-                background: {theme["muted"]};
+            QSlider#playbackProgress::handle:horizontal:hover {{
+                background: {theme["accent"]};
+            }}
+
+            QSlider#playbackProgress:focus::handle:horizontal {{
+                background: {theme["accent"]};
             }}
 
             QFrame#statusPill {{

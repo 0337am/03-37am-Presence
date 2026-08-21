@@ -797,42 +797,102 @@ class DashboardPlaybackSeekTests(
         )
 
         self.assertIn(
-            "QSlider#playbackProgress {{",
+            "QProgressBar#playbackProgressVisual {{",
             source,
         )
 
         self.assertIn(
-            "background: transparent;",
+            'background: {theme["background"]};',
             source,
         )
 
         self.assertIn(
-            "height: 3px;",
+            "QProgressBar#playbackProgressVisual::chunk {{",
             source,
         )
 
         self.assertIn(
-            'background: {theme["border"]};',
+            'background: {theme["accent"]};',
             source,
         )
 
         self.assertIn(
-            "width: 8px;",
+            "QSlider#playbackProgress::sub-page:horizontal {{",
             source,
         )
 
         self.assertIn(
-            "height: 8px;",
+            "QSlider#playbackProgress::add-page:horizontal {{",
             source,
         )
 
         self.assertIn(
-            "border-radius: 4px;",
+            "QSlider#playbackProgress::handle:horizontal:hover {{",
             source,
         )
 
         self.assertNotIn(
             "self.progress.setToolTip(",
+            source,
+        )
+
+
+    def test_seek_progress_visual_mirrors_slider_value(
+        self,
+    ):
+        self.page.progress.setValue(
+            4321
+        )
+
+        self.assertEqual(
+            self.page.progress_visual.value(),
+            4321,
+        )
+
+    def test_seek_uses_original_progress_visual_under_input_overlay(
+        self,
+    ):
+        self.assertEqual(
+            self.page.progress_visual.objectName(),
+            "playbackProgressVisual",
+        )
+
+        self.assertEqual(
+            self.page.progress_stack.objectName(),
+            "playbackProgressStack",
+        )
+
+        self.assertEqual(
+            self.page.progress_stack.layout().count(),
+            2,
+        )
+
+        source = (
+            REPO_ROOT
+            / "src"
+            / "ui"
+            / "dashboard.py"
+        ).read_text(
+            encoding="utf-8-sig"
+        )
+
+        self.assertIn(
+            "self.progress_visual = QProgressBar()",
+            source,
+        )
+
+        self.assertIn(
+            "self.progress.valueChanged.connect(",
+            source,
+        )
+
+        self.assertIn(
+            "self.progress_visual.setValue",
+            source,
+        )
+
+        self.assertNotIn(
+            "def set_seek_colors(",
             source,
         )
 
