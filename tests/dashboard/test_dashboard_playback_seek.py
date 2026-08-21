@@ -752,7 +752,7 @@ class DashboardPlaybackSeekTests(
 
         self.assertEqual(
             slider._value_from_pointer(
-                5
+                4
             ),
             0,
         )
@@ -764,7 +764,7 @@ class DashboardPlaybackSeekTests(
         )
         self.assertEqual(
             slider._value_from_pointer(
-                195
+                196
             ),
             10000,
         )
@@ -792,7 +792,22 @@ class DashboardPlaybackSeekTests(
         )
 
         self.assertIn(
-            "PLAYBACK_SEEK_HANDLE_WIDTH_PX = 10",
+            "PLAYBACK_SEEK_HANDLE_WIDTH_PX = 8",
+            source,
+        )
+
+        self.assertIn(
+            "QSlider#playbackProgress {{",
+            source,
+        )
+
+        self.assertIn(
+            "background: transparent;",
+            source,
+        )
+
+        self.assertIn(
+            "height: 3px;",
             source,
         )
 
@@ -802,7 +817,17 @@ class DashboardPlaybackSeekTests(
         )
 
         self.assertIn(
-            "width: 10px;",
+            "width: 8px;",
+            source,
+        )
+
+        self.assertIn(
+            "height: 8px;",
+            source,
+        )
+
+        self.assertIn(
+            "border-radius: 4px;",
             source,
         )
 

@@ -544,7 +544,7 @@ class DashboardCanvas(QFrame):
 
 PLAYBACK_SEEK_PENDING_TIMEOUT_MS = 2000
 PLAYBACK_SEEK_CONFIRM_TOLERANCE_SECONDS = 4.0
-PLAYBACK_SEEK_HANDLE_WIDTH_PX = 10
+PLAYBACK_SEEK_HANDLE_WIDTH_PX = 8
 
 
 class PlaybackSeekSlider(
@@ -11420,30 +11420,37 @@ class DashboardPage(QWidget):
                 font-weight: 700;
             }}
 
+            QSlider#playbackProgress {{
+                background: transparent;
+                border: none;
+            }}
+
             QSlider#playbackProgress::groove:horizontal {{
-                height: 4px;
+                height: 3px;
                 background: {theme["border"]};
                 border: none;
-                border-radius: 2px;
+                border-radius: 1px;
             }}
 
             QSlider#playbackProgress::sub-page:horizontal {{
                 background: {theme["accent"]};
-                border-radius: 2px;
+                border: none;
+                border-radius: 1px;
             }}
 
             QSlider#playbackProgress::add-page:horizontal {{
                 background: {theme["border"]};
-                border-radius: 2px;
+                border: none;
+                border-radius: 1px;
             }}
 
             QSlider#playbackProgress::handle:horizontal {{
                 background: {theme["accent"]};
                 border: none;
-                width: 10px;
-                height: 10px;
-                margin: -3px 0;
-                border-radius: 5px;
+                width: 8px;
+                height: 8px;
+                margin: -2px 0;
+                border-radius: 4px;
             }}
 
             QSlider#playbackProgress:disabled::handle:horizontal {{
