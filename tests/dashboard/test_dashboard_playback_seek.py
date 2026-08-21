@@ -499,5 +499,317 @@ class DashboardPlaybackSeekTests(
         )
 
 
+    def test_pending_seek_holds_target_across_stale_snapshot(
+        self,
+    ):
+        self.page.apply_song(
+            self.song(
+                position="0:37"
+            )
+        )
+
+        self.page.progress.setValue(
+            5000
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            5000
+        )
+
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+        self.assertEqual(
+            self.page.current_time.text(),
+            "1:49",
+        )
+
+        self.page.apply_song(
+            self.song(
+                position="0:38"
+            )
+        )
+
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+        self.assertEqual(
+            self.page.progress.value(),
+            5000,
+        )
+        self.assertEqual(
+            self.page.current_time.text(),
+            "1:49",
+        )
+
+    def test_authoritative_seek_snapshot_releases_pending_hold(
+        self,
+    ):
+        self.page.apply_song(
+            self.song(
+                position="0:37"
+            )
+        )
+
+        self.page.progress.setValue(
+            5000
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            5000
+        )
+
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+
+        self.page.apply_song(
+            self.song(
+                position="1:50"
+            )
+        )
+
+        self.assertFalse(
+            self.page._playback_seek_pending
+        )
+        self.assertEqual(
+            self.page.current_time.text(),
+            "1:50",
+        )
+        self.assertGreater(
+            self.page.progress.value(),
+            4900,
+        )
+
+    def test_pending_seek_timeout_releases_hold(
+        self,
+    ):
+        self.page.apply_song(
+            self.song()
+        )
+
+        self.page.progress.setValue(
+            6000
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            6000
+        )
+
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+        self.assertTrue(
+            self.page
+            ._playback_seek_pending_timer
+            .isActive()
+        )
+
+        self.page._expire_playback_seek_pending()
+
+        self.assertFalse(
+            self.page._playback_seek_pending
+        )
+        self.assertFalse(
+            self.page
+            ._playback_seek_pending_timer
+            .isActive()
+        )
+        self.assertIsNone(
+            self.page._playback_seek_target_seconds
+        )
+
+    def test_new_scrub_cancels_previous_pending_hold(
+        self,
+    ):
+        self.page.apply_song(
+            self.song()
+        )
+
+        self.page.progress.setValue(
+            5000
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            5000
+        )
+
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+
+        self.page.progress.setValue(
+            7000
+        )
+        self.page._begin_playback_scrub()
+
+        self.assertFalse(
+            self.page._playback_seek_pending
+        )
+        self.assertTrue(
+            self.page._playback_scrubbing
+        )
+
+    def test_rapid_new_seek_replaces_pending_target_and_restarts_timer(
+        self,
+    ):
+        self.page.apply_song(
+            self.song()
+        )
+
+        self.page.progress.setValue(
+            4000
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            4000
+        )
+
+        first_target = (
+            self.page._playback_seek_target_seconds
+        )
+
+        self.assertTrue(
+            self.page
+            ._playback_seek_pending_timer
+            .isActive()
+        )
+
+        self.page.progress.setValue(
+            7500
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            7500
+        )
+
+        second_target = (
+            self.page._playback_seek_target_seconds
+        )
+
+        self.assertNotEqual(
+            first_target,
+            second_target,
+        )
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+        self.assertTrue(
+            self.page
+            ._playback_seek_pending_timer
+            .isActive()
+        )
+
+    def test_track_change_cancels_pending_seek_hold(
+        self,
+    ):
+        self.page.apply_song(
+            self.song()
+        )
+
+        self.page.progress.setValue(
+            5000
+        )
+        self.page._begin_playback_scrub()
+        self.page._commit_playback_scrub(
+            5000
+        )
+
+        self.assertTrue(
+            self.page._playback_seek_pending
+        )
+
+        different_song = Song(
+            title="Different Track",
+            artist="Example Artist",
+            album="Example Album",
+            duration="3:38",
+            position="0:04",
+            playing=True,
+            source_app="Spotify.exe",
+        )
+
+        self.page.apply_song(
+            different_song
+        )
+
+        self.assertFalse(
+            self.page._playback_seek_pending
+        )
+        self.assertEqual(
+            self.page.current_time.text(),
+            "0:04",
+        )
+
+    def test_pointer_mapping_uses_handle_center_travel_span(
+        self,
+    ):
+        slider = self.page.progress
+
+        slider.setFixedWidth(
+            201
+        )
+
+        self.assertEqual(
+            slider._value_from_pointer(
+                5
+            ),
+            0,
+        )
+        self.assertEqual(
+            slider._value_from_pointer(
+                100
+            ),
+            5000,
+        )
+        self.assertEqual(
+            slider._value_from_pointer(
+                195
+            ),
+            10000,
+        )
+
+    def test_seek_polish_removes_link_cursor_tooltip_and_uses_subtle_theme(
+        self,
+    ):
+        self.assertNotEqual(
+            self.page.progress.cursor().shape(),
+            Qt.CursorShape.PointingHandCursor,
+        )
+
+        self.assertEqual(
+            self.page.progress.toolTip(),
+            "",
+        )
+
+        source = (
+            REPO_ROOT
+            / "src"
+            / "ui"
+            / "dashboard.py"
+        ).read_text(
+            encoding="utf-8-sig"
+        )
+
+        self.assertIn(
+            "PLAYBACK_SEEK_HANDLE_WIDTH_PX = 10",
+            source,
+        )
+
+        self.assertIn(
+            'background: {theme["border"]};',
+            source,
+        )
+
+        self.assertIn(
+            "width: 10px;",
+            source,
+        )
+
+        self.assertNotIn(
+            "self.progress.setToolTip(",
+            source,
+        )
+
 if __name__ == "__main__":
     unittest.main()

@@ -542,6 +542,11 @@ class DashboardCanvas(QFrame):
         painter.end()
 
 
+PLAYBACK_SEEK_PENDING_TIMEOUT_MS = 2000
+PLAYBACK_SEEK_CONFIRM_TOLERANCE_SECONDS = 4.0
+PLAYBACK_SEEK_HANDLE_WIDTH_PX = 10
+
+
 class PlaybackSeekSlider(
     QSlider
 ):
@@ -576,12 +581,22 @@ class PlaybackSeekSlider(
             maximum - minimum,
         )
 
-        pixel_span = max(
-            1.0,
+        half_handle = (
+            PLAYBACK_SEEK_HANDLE_WIDTH_PX
+            / 2.0
+        )
+
+        slider_start = (
+            half_handle
+        )
+
+        slider_end = max(
+            slider_start + 1.0,
             float(
                 self.width()
                 - 1
-            ),
+            )
+            - half_handle,
         )
 
         try:
@@ -593,14 +608,24 @@ class PlaybackSeekSlider(
             TypeError,
             ValueError,
         ):
-            pointer = 0.0
+            pointer = slider_start
+
+        ratio = (
+            (
+                pointer
+                - slider_start
+            )
+            / (
+                slider_end
+                - slider_start
+            )
+        )
 
         ratio = max(
             0.0,
             min(
                 1.0,
-                pointer
-                / pixel_span,
+                ratio,
             ),
         )
 
@@ -8474,9 +8499,6 @@ class DashboardPage(QWidget):
         self.progress.setRange(0, 10000)
         self.progress.setValue(0)
         self.progress.setEnabled(False)
-        self.progress.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
         self.progress.setFocusPolicy(
             Qt.FocusPolicy.StrongFocus
         )
@@ -8489,11 +8511,25 @@ class DashboardPage(QWidget):
                 "the current track."
             )
         )
-        self.progress.setToolTip(
-            "Seek playback"
-        )
 
         self._playback_scrubbing = False
+        self._playback_seek_pending = False
+        self._playback_seek_target_seconds = None
+        self._playback_seek_origin_seconds = None
+        self._playback_seek_target_identity = None
+
+        self._playback_seek_pending_timer = QTimer(
+            self
+        )
+        self._playback_seek_pending_timer.setSingleShot(
+            True
+        )
+        self._playback_seek_pending_timer.setInterval(
+            PLAYBACK_SEEK_PENDING_TIMEOUT_MS
+        )
+        self._playback_seek_pending_timer.timeout.connect(
+            self._expire_playback_seek_pending
+        )
 
         self.progress.scrub_started.connect(
             self._begin_playback_scrub
@@ -8734,6 +8770,214 @@ class DashboardPage(QWidget):
             ),
         )
 
+    @staticmethod
+    def _playback_seek_identity(
+        song,
+    ) -> tuple[str, ...]:
+        return (
+            str(
+                getattr(
+                    song,
+                    "title",
+                    "",
+                )
+                or ""
+            ),
+            str(
+                getattr(
+                    song,
+                    "artist",
+                    "",
+                )
+                or ""
+            ),
+            str(
+                getattr(
+                    song,
+                    "album",
+                    "",
+                )
+                or ""
+            ),
+            str(
+                getattr(
+                    song,
+                    "source_app",
+                    "",
+                )
+                or ""
+            ),
+        )
+
+    def _playback_seek_updates_blocked(
+        self,
+    ) -> bool:
+        return bool(
+            getattr(
+                self,
+                "_playback_scrubbing",
+                False,
+            )
+            or getattr(
+                self,
+                "_playback_seek_pending",
+                False,
+            )
+        )
+
+    def _clear_playback_seek_pending(
+        self,
+    ) -> None:
+        timer = getattr(
+            self,
+            "_playback_seek_pending_timer",
+            None,
+        )
+
+        if (
+            timer is not None
+            and timer.isActive()
+        ):
+            timer.stop()
+
+        self._playback_seek_pending = False
+        self._playback_seek_target_seconds = None
+        self._playback_seek_origin_seconds = None
+        self._playback_seek_target_identity = None
+
+    def _begin_playback_seek_pending(
+        self,
+        seconds: float,
+        song,
+    ) -> None:
+        origin_seconds = float(
+            self.time_to_seconds(
+                getattr(
+                    song,
+                    "position",
+                    "",
+                )
+            )
+        )
+
+        self._playback_seek_pending = True
+        self._playback_seek_target_seconds = float(
+            seconds
+        )
+        self._playback_seek_origin_seconds = (
+            origin_seconds
+        )
+        self._playback_seek_target_identity = (
+            self._playback_seek_identity(
+                song
+            )
+        )
+
+        self._playback_seek_pending_timer.start()
+
+    def _expire_playback_seek_pending(
+        self,
+    ) -> None:
+        if not bool(
+            getattr(
+                self,
+                "_playback_seek_pending",
+                False,
+            )
+        ):
+            return
+
+        self._clear_playback_seek_pending()
+
+        self.refresh_playback_presentation()
+
+    def _sync_playback_seek_pending(
+        self,
+        song,
+    ) -> bool:
+        if not bool(
+            getattr(
+                self,
+                "_playback_seek_pending",
+                False,
+            )
+        ):
+            return False
+
+        identity = (
+            self._playback_seek_identity(
+                song
+            )
+        )
+
+        if (
+            identity
+            != getattr(
+                self,
+                "_playback_seek_target_identity",
+                None,
+            )
+        ):
+            self._clear_playback_seek_pending()
+            return False
+
+        target = getattr(
+            self,
+            "_playback_seek_target_seconds",
+            None,
+        )
+
+        origin = getattr(
+            self,
+            "_playback_seek_origin_seconds",
+            None,
+        )
+
+        if (
+            target is None
+            or origin is None
+        ):
+            self._clear_playback_seek_pending()
+            return False
+
+        current = float(
+            self.time_to_seconds(
+                getattr(
+                    song,
+                    "position",
+                    "",
+                )
+            )
+        )
+
+        tolerance = (
+            PLAYBACK_SEEK_CONFIRM_TOLERANCE_SECONDS
+        )
+
+        if target >= origin:
+            confirmed = (
+                current
+                >= (
+                    target
+                    - tolerance
+                )
+            )
+
+        else:
+            confirmed = (
+                current
+                <= (
+                    target
+                    + tolerance
+                )
+            )
+
+        if confirmed:
+            self._clear_playback_seek_pending()
+            return False
+
+        return True
+
     def _begin_playback_scrub(
         self,
     ) -> None:
@@ -8749,6 +8993,8 @@ class DashboardPage(QWidget):
         ):
             self._playback_scrubbing = False
             return
+
+        self._clear_playback_seek_pending()
 
         self._playback_scrubbing = True
 
@@ -8822,6 +9068,13 @@ class DashboardPage(QWidget):
                 "",
             )
             or ""
+        )
+
+        self._begin_playback_seek_pending(
+            float(
+                seconds
+            ),
+            song,
         )
 
         self.current_time.setText(
@@ -11168,8 +11421,8 @@ class DashboardPage(QWidget):
             }}
 
             QSlider#playbackProgress::groove:horizontal {{
-                height: 5px;
-                background: {theme["background"]};
+                height: 4px;
+                background: {theme["border"]};
                 border: none;
                 border-radius: 2px;
             }}
@@ -11180,16 +11433,17 @@ class DashboardPage(QWidget):
             }}
 
             QSlider#playbackProgress::add-page:horizontal {{
-                background: {theme["background"]};
+                background: {theme["border"]};
                 border-radius: 2px;
             }}
 
             QSlider#playbackProgress::handle:horizontal {{
                 background: {theme["accent"]};
                 border: none;
-                width: 12px;
-                margin: -4px 0;
-                border-radius: 6px;
+                width: 10px;
+                height: 10px;
+                margin: -3px 0;
+                border-radius: 5px;
             }}
 
             QSlider#playbackProgress:disabled::handle:horizontal {{
@@ -11491,6 +11745,10 @@ class DashboardPage(QWidget):
 
         self.song = song
 
+        self._sync_playback_seek_pending(
+            song
+        )
+
         self.progress.setEnabled(
             self.time_to_seconds(
                 song.duration
@@ -11546,13 +11804,7 @@ class DashboardPage(QWidget):
         self.artist.setText(song.artist)
         self.album.setText(song.album)
 
-        if not bool(
-            getattr(
-                self,
-                "_playback_scrubbing",
-                False,
-            )
-        ):
+        if not DashboardPage._playback_seek_updates_blocked(self):
             self.current_time.setText(
                 song.position
             )
@@ -12174,13 +12426,7 @@ class DashboardPage(QWidget):
     def refresh_playback_presentation(
         self,
     ):
-        if bool(
-            getattr(
-                self,
-                "_playback_scrubbing",
-                False,
-            )
-        ):
+        if DashboardPage._playback_seek_updates_blocked(self):
             return
 
         clock = getattr(
@@ -12291,13 +12537,7 @@ class DashboardPage(QWidget):
             )
 
     def update_progress(self, song: Song):
-        if bool(
-            getattr(
-                self,
-                "_playback_scrubbing",
-                False,
-            )
-        ):
+        if DashboardPage._playback_seek_updates_blocked(self):
             return
 
         current = self.time_to_seconds(
@@ -12331,6 +12571,7 @@ class DashboardPage(QWidget):
 
     def show_nothing_playing(self):
         self._playback_scrubbing = False
+        self._clear_playback_seek_pending()
 
         self.progress.setEnabled(
             False
