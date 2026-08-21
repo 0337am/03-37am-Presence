@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSlider,
     QSizePolicy,
     QStyle,
     QVBoxLayout,
@@ -541,6 +542,167 @@ class DashboardCanvas(QFrame):
         painter.end()
 
 
+class PlaybackSeekSlider(
+    QSlider
+):
+    scrub_started = pyqtSignal()
+    scrub_moved = pyqtSignal(
+        int
+    )
+    scrub_committed = pyqtSignal(
+        int
+    )
+
+    def __init__(
+        self,
+        parent=None,
+    ) -> None:
+        super().__init__(
+            Qt.Orientation.Horizontal,
+            parent,
+        )
+
+        self._pointer_scrubbing = False
+
+    def _value_from_pointer(
+        self,
+        x,
+    ) -> int:
+        minimum = self.minimum()
+        maximum = self.maximum()
+
+        value_span = max(
+            0,
+            maximum - minimum,
+        )
+
+        pixel_span = max(
+            1.0,
+            float(
+                self.width()
+                - 1
+            ),
+        )
+
+        try:
+            pointer = float(
+                x
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            pointer = 0.0
+
+        ratio = max(
+            0.0,
+            min(
+                1.0,
+                pointer
+                / pixel_span,
+            ),
+        )
+
+        return int(
+            round(
+                minimum
+                + (
+                    value_span
+                    * ratio
+                )
+            )
+        )
+
+    def _apply_pointer_position(
+        self,
+        x,
+    ) -> int:
+        value = (
+            self._value_from_pointer(
+                x
+            )
+        )
+
+        self.setValue(
+            value
+        )
+
+        self.scrub_moved.emit(
+            value
+        )
+
+        return value
+
+    def mousePressEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            self.isEnabled()
+            and event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            self._pointer_scrubbing = True
+
+            self.scrub_started.emit()
+
+            self._apply_pointer_position(
+                event.position().x()
+            )
+
+            event.accept()
+            return
+
+        super().mousePressEvent(
+            event
+        )
+
+    def mouseMoveEvent(
+        self,
+        event,
+    ) -> None:
+        if self._pointer_scrubbing:
+            self._apply_pointer_position(
+                event.position().x()
+            )
+
+            event.accept()
+            return
+
+        super().mouseMoveEvent(
+            event
+        )
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            self._pointer_scrubbing
+            and event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            value = (
+                self._apply_pointer_position(
+                    event.position().x()
+                )
+            )
+
+            self._pointer_scrubbing = False
+
+            self.scrub_committed.emit(
+                value
+            )
+
+            event.accept()
+            return
+
+        super().mouseReleaseEvent(
+            event
+        )
+
+
 class DashboardPage(QWidget):
     # ANIMATED_EQUALIZER
     # FINAL_GUIDE_DETAILS
@@ -555,6 +717,11 @@ class DashboardPage(QWidget):
         str,
         str,
         bool,
+    )
+
+    playback_seek_requested = pyqtSignal(
+        float,
+        str,
     )
 
     def __init__(
@@ -8300,13 +8467,43 @@ class DashboardPage(QWidget):
             "timeLabel"
         )
 
-        self.progress = QProgressBar()
+        self.progress = PlaybackSeekSlider()
         self.progress.setObjectName(
             "playbackProgress"
         )
         self.progress.setRange(0, 10000)
         self.progress.setValue(0)
-        self.progress.setTextVisible(False)
+        self.progress.setEnabled(False)
+        self.progress.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.progress.setFocusPolicy(
+            Qt.FocusPolicy.StrongFocus
+        )
+        self.progress.setAccessibleName(
+            "Playback position"
+        )
+        self.progress.setAccessibleDescription(
+            (
+                "Drag or click to seek within "
+                "the current track."
+            )
+        )
+        self.progress.setToolTip(
+            "Seek playback"
+        )
+
+        self._playback_scrubbing = False
+
+        self.progress.scrub_started.connect(
+            self._begin_playback_scrub
+        )
+        self.progress.scrub_moved.connect(
+            self._preview_playback_scrub
+        )
+        self.progress.scrub_committed.connect(
+            self._commit_playback_scrub
+        )
 
         self.total_time = QLabel(
             self.song.duration
@@ -8444,6 +8641,200 @@ class DashboardPage(QWidget):
     ) -> bool:
         return self._emit_playback_control(
             "next"
+        )
+
+    def _playback_seek_seconds_for_value(
+        self,
+        value,
+    ) -> float | None:
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        if song is None:
+            return None
+
+        total_seconds = (
+            self.time_to_seconds(
+                getattr(
+                    song,
+                    "duration",
+                    "",
+                )
+            )
+        )
+
+        if total_seconds <= 0:
+            return None
+
+        progress = getattr(
+            self,
+            "progress",
+            None,
+        )
+
+        if progress is None:
+            return None
+
+        minimum = int(
+            progress.minimum()
+        )
+
+        maximum = int(
+            progress.maximum()
+        )
+
+        span = (
+            maximum
+            - minimum
+        )
+
+        if span <= 0:
+            return None
+
+        try:
+            checked_value = int(
+                value
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return None
+
+        checked_value = max(
+            minimum,
+            min(
+                maximum,
+                checked_value,
+            ),
+        )
+
+        ratio = (
+            (
+                checked_value
+                - minimum
+            )
+            / span
+        )
+
+        return max(
+            0.0,
+            min(
+                float(
+                    total_seconds
+                ),
+                float(
+                    total_seconds
+                )
+                * ratio,
+            ),
+        )
+
+    def _begin_playback_scrub(
+        self,
+    ) -> None:
+        progress = getattr(
+            self,
+            "progress",
+            None,
+        )
+
+        if (
+            progress is None
+            or not progress.isEnabled()
+        ):
+            self._playback_scrubbing = False
+            return
+
+        self._playback_scrubbing = True
+
+        self._preview_playback_scrub(
+            progress.value()
+        )
+
+    def _preview_playback_scrub(
+        self,
+        value,
+    ) -> None:
+        if not bool(
+            getattr(
+                self,
+                "_playback_scrubbing",
+                False,
+            )
+        ):
+            return
+
+        seconds = (
+            self._playback_seek_seconds_for_value(
+                value
+            )
+        )
+
+        if seconds is None:
+            return
+
+        self.current_time.setText(
+            format_playback_time(
+                seconds
+            )
+        )
+
+    def _commit_playback_scrub(
+        self,
+        value,
+    ) -> None:
+        if not bool(
+            getattr(
+                self,
+                "_playback_scrubbing",
+                False,
+            )
+        ):
+            return
+
+        seconds = (
+            self._playback_seek_seconds_for_value(
+                value
+            )
+        )
+
+        self._playback_scrubbing = False
+
+        if seconds is None:
+            self.refresh_playback_presentation()
+            return
+
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        source_app = str(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+            or ""
+        )
+
+        self.current_time.setText(
+            format_playback_time(
+                seconds
+            )
+        )
+
+        self.playback_seek_requested.emit(
+            float(
+                seconds
+            ),
+            source_app,
         )
 
     def _tinted_playback_standard_icon(
@@ -10335,7 +10726,7 @@ class DashboardPage(QWidget):
         )
 
         self.progress.setFixedHeight(
-            5 if compact else 7
+            14 if compact else 16
         )
 
         card_glass = colour_with_alpha(
@@ -10776,15 +11167,33 @@ class DashboardPage(QWidget):
                 font-weight: 700;
             }}
 
-            QProgressBar#playbackProgress {{
+            QSlider#playbackProgress::groove:horizontal {{
+                height: 5px;
                 background: {theme["background"]};
                 border: none;
                 border-radius: 2px;
             }}
 
-            QProgressBar#playbackProgress::chunk {{
+            QSlider#playbackProgress::sub-page:horizontal {{
                 background: {theme["accent"]};
                 border-radius: 2px;
+            }}
+
+            QSlider#playbackProgress::add-page:horizontal {{
+                background: {theme["background"]};
+                border-radius: 2px;
+            }}
+
+            QSlider#playbackProgress::handle:horizontal {{
+                background: {theme["accent"]};
+                border: none;
+                width: 12px;
+                margin: -4px 0;
+                border-radius: 6px;
+            }}
+
+            QSlider#playbackProgress:disabled::handle:horizontal {{
+                background: {theme["muted"]};
             }}
 
             QFrame#statusPill {{
@@ -11081,6 +11490,14 @@ class DashboardPage(QWidget):
         )
 
         self.song = song
+
+        self.progress.setEnabled(
+            self.time_to_seconds(
+                song.duration
+            )
+            > 0
+        )
+
         self.sync_playback_control_state(
             available=True
         )
@@ -11129,9 +11546,17 @@ class DashboardPage(QWidget):
         self.artist.setText(song.artist)
         self.album.setText(song.album)
 
-        self.current_time.setText(
-            song.position
-        )
+        if not bool(
+            getattr(
+                self,
+                "_playback_scrubbing",
+                False,
+            )
+        ):
+            self.current_time.setText(
+                song.position
+            )
+
         self.total_time.setText(
             song.duration
         )
@@ -11749,6 +12174,15 @@ class DashboardPage(QWidget):
     def refresh_playback_presentation(
         self,
     ):
+        if bool(
+            getattr(
+                self,
+                "_playback_scrubbing",
+                False,
+            )
+        ):
+            return
+
         clock = getattr(
             self,
             "playback_presentation_clock",
@@ -11857,6 +12291,15 @@ class DashboardPage(QWidget):
             )
 
     def update_progress(self, song: Song):
+        if bool(
+            getattr(
+                self,
+                "_playback_scrubbing",
+                False,
+            )
+        ):
+            return
+
         current = self.time_to_seconds(
             song.position
         )
@@ -11887,6 +12330,12 @@ class DashboardPage(QWidget):
         )
 
     def show_nothing_playing(self):
+        self._playback_scrubbing = False
+
+        self.progress.setEnabled(
+            False
+        )
+
         self.sync_playback_control_state(
             available=False
         )

@@ -1174,6 +1174,10 @@ class MainWindow(QMainWindow):
             self.playback_control_coordinator.request
         )
 
+        self.dashboard_page.playback_seek_requested.connect(
+            self.playback_control_coordinator.request_seek
+        )
+
 
         self.spotify_page = SpotifyPage(
             search_runtime=(
