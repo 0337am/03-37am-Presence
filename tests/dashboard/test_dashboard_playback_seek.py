@@ -826,18 +826,37 @@ class DashboardPlaybackSeekTests(
             source,
         )
 
+        slider_class_start = source.index(
+            "class PlaybackSeekSlider("
+        )
+
+        slider_class_end = source.index(
+            "class DashboardPage(",
+            slider_class_start,
+        )
+
+        slider_source = source[
+            slider_class_start:
+            slider_class_end
+        ]
+
         self.assertIn(
-            "QSlider#playbackProgress::sub-page:horizontal {{",
-            source,
+            "def paintEvent(",
+            slider_source,
         )
 
         self.assertIn(
-            "QSlider#playbackProgress::add-page:horizontal {{",
-            source,
+            "event.accept()",
+            slider_source,
         )
 
-        self.assertIn(
-            "QSlider#playbackProgress::handle:horizontal:hover {{",
+        self.assertNotIn(
+            "super().paintEvent(",
+            slider_source,
+        )
+
+        self.assertNotIn(
+            "QSlider#playbackProgress",
             source,
         )
 

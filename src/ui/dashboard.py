@@ -721,6 +721,18 @@ class PlaybackSeekSlider(
 
         self._pointer_scrubbing = False
 
+        self.setAutoFillBackground(
+            False
+        )
+
+    def paintEvent(
+        self,
+        event,
+    ) -> None:
+        # This slider is input-only. The visible
+        # playback rail is rendered underneath it.
+        event.accept()
+
     def _value_from_pointer(
         self,
         x,
@@ -11656,43 +11668,6 @@ class DashboardPage(QWidget):
                 border: none;
             }}
 
-            QSlider#playbackProgress {{
-                background: transparent;
-                border: none;
-            }}
-
-            QSlider#playbackProgress::groove:horizontal {{
-                height: 4px;
-                background: transparent;
-                border: none;
-            }}
-
-            QSlider#playbackProgress::sub-page:horizontal {{
-                background: transparent;
-                border: none;
-            }}
-
-            QSlider#playbackProgress::add-page:horizontal {{
-                background: transparent;
-                border: none;
-            }}
-
-            QSlider#playbackProgress::handle:horizontal {{
-                background: transparent;
-                border: none;
-                width: 8px;
-                height: 8px;
-                margin: -2px 0;
-                border-radius: 4px;
-            }}
-
-            QSlider#playbackProgress::handle:horizontal:hover {{
-                background: {theme["accent"]};
-            }}
-
-            QSlider#playbackProgress:focus::handle:horizontal {{
-                background: {theme["accent"]};
-            }}
 
             QFrame#statusPill {{
                 background: {card_alt_glass};
