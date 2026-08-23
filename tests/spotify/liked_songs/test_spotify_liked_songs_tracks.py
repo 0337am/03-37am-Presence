@@ -5,10 +5,12 @@ import unittest
 from types import SimpleNamespace
 
 from PyQt6.QtCore import (
-    QCoreApplication,
     QEventLoop,
     QThread,
     QTimer,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
 )
 
 from src.spotify.liked_songs_service import (
@@ -196,8 +198,8 @@ class SpotifyLikedSongsTracksTests(
         cls,
     ):
         cls.app = (
-            QCoreApplication.instance()
-            or QCoreApplication(
+            QApplication.instance()
+            or QApplication(
                 []
             )
         )
