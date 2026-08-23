@@ -8,6 +8,10 @@ from PyQt6.QtCore import (
     pyqtSignal,
 )
 
+from winsdk.windows.media import (
+    MediaPlaybackAutoRepeatMode,
+)
+
 from src.music.media_controls import (
     MediaControls,
 )
@@ -17,6 +21,8 @@ ACTION_PREVIOUS = "previous"
 ACTION_TOGGLE_PLAY_PAUSE = "toggle_play_pause"
 ACTION_NEXT = "next"
 ACTION_SEEK = "seek"
+ACTION_SHUFFLE = "shuffle"
+ACTION_REPEAT = "repeat"
 
 PLAYBACK_CONTROL_ACTIONS = (
     ACTION_PREVIOUS,
@@ -29,12 +35,20 @@ MEDIA_CONTROL_METHODS = {
     ACTION_TOGGLE_PLAY_PAUSE: "toggle_play_pause",
     ACTION_NEXT: "skip_next",
     ACTION_SEEK: "seek_to_seconds",
+    ACTION_SHUFFLE: "set_shuffle",
+    ACTION_REPEAT: "set_repeat_mode",
 }
 
 SPOTIFY_TRANSPORT_METHODS = {
     ACTION_PREVIOUS: "skip_previous",
     ACTION_NEXT: "skip_next",
 }
+MEDIA_REPEAT_MODES = {
+    "off": MediaPlaybackAutoRepeatMode.NONE,
+    "context": MediaPlaybackAutoRepeatMode.LIST,
+    "track": MediaPlaybackAutoRepeatMode.TRACK,
+}
+
 
 DEFAULT_PLAYBACK_CONTROL_SHUTDOWN_WAIT_MS = 5000
 
@@ -433,6 +447,145 @@ class PlaybackControlCoordinator(
             ACTION_SEEK,
             control_argument=checked_seconds,
         )
+
+    def request_shuffle(
+        self,
+        enabled,
+        source_app,
+    ) -> bool:
+        if self._shutting_down:
+            return False
+
+        if not isinstance(
+            enabled,
+            bool,
+        ):
+            return False
+
+        if self._is_spotify_source(
+            source_app
+        ):
+            return (
+                self._dispatch_spotify_argument(
+                    ACTION_SHUFFLE,
+                    "set_shuffle",
+                    enabled,
+                )
+            )
+
+        return self._dispatch_media(
+            ACTION_SHUFFLE,
+            control_argument=enabled,
+        )
+
+    def request_repeat_mode(
+        self,
+        mode,
+        source_app,
+    ) -> bool:
+        if self._shutting_down:
+            return False
+
+        if not isinstance(
+            mode,
+            str,
+        ):
+            return False
+
+        checked_mode = mode.strip()
+
+        if (
+            checked_mode != mode
+            or checked_mode
+            not in MEDIA_REPEAT_MODES
+        ):
+            return False
+
+        if self._is_spotify_source(
+            source_app
+        ):
+            return (
+                self._dispatch_spotify_argument(
+                    ACTION_REPEAT,
+                    "set_repeat_mode",
+                    checked_mode,
+                )
+            )
+
+        return self._dispatch_media(
+            ACTION_REPEAT,
+            control_argument=(
+                MEDIA_REPEAT_MODES[
+                    checked_mode
+                ]
+            ),
+        )
+
+    def _dispatch_spotify_argument(
+        self,
+        action: str,
+        method_name: str,
+        control_argument,
+    ) -> bool:
+        method = getattr(
+            self._spotify_runtime,
+            method_name,
+            None,
+        )
+
+        if not callable(
+            method
+        ):
+            self.control_failed.emit(
+                action,
+                (
+                    "Spotify "
+                    + action
+                    + " control is unavailable."
+                ),
+            )
+
+            return False
+
+        try:
+            result = method(
+                control_argument
+            )
+
+        except Exception:
+            self.control_failed.emit(
+                action,
+                (
+                    "Spotify "
+                    + action
+                    + " control could not "
+                    + "be dispatched."
+                ),
+            )
+
+            return False
+
+        # Spotify Qt request methods normally
+        # return None after successful dispatch.
+        # Only an explicit False means rejection.
+        if result is False:
+            self.control_failed.emit(
+                action,
+                (
+                    "Spotify "
+                    + action
+                    + " control was not accepted."
+                ),
+            )
+
+            return False
+
+        self.control_dispatched.emit(
+            action,
+            "spotify",
+        )
+
+        return True
 
     def _dispatch_spotify(
         self,
