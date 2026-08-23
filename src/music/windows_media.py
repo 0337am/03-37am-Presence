@@ -469,6 +469,13 @@ class WindowsMedia:
             )
         )
 
+        (
+            shuffle_active,
+            repeat_mode,
+        ) = self._playback_control_state(
+            session
+        )
+
         return Song(
             title=title,
             artist=(
@@ -495,6 +502,8 @@ class WindowsMedia:
             repeat_track=self._repeat_track_state(
                 session
             ),
+            shuffle_active=shuffle_active,
+            repeat_mode=repeat_mode,
         )
 
     @staticmethod
@@ -859,6 +868,106 @@ class WindowsMedia:
 
             self._artwork_cache_checked_at.pop(
                 oldest_key,
+                None,
+            )
+
+    @staticmethod
+    def _normalize_repeat_mode_state(
+        repeat_mode,
+    ) -> str | None:
+        if repeat_mode is None:
+            return None
+
+        name = getattr(
+            repeat_mode,
+            "name",
+            None,
+        )
+
+        if isinstance(
+            name,
+            str,
+        ):
+            token = name.strip().casefold()
+
+        elif isinstance(
+            repeat_mode,
+            str,
+        ):
+            token = (
+                repeat_mode
+                .strip()
+                .casefold()
+            )
+
+        else:
+            return None
+
+        mapping = {
+            "none": "off",
+            "off": "off",
+            "list": "context",
+            "context": "context",
+            "track": "track",
+        }
+
+        return mapping.get(
+            token
+        )
+
+    def _playback_control_state(
+        self,
+        session,
+    ) -> tuple[
+        bool | None,
+        str | None,
+    ]:
+        try:
+            playback_info = (
+                session
+                .get_playback_info()
+            )
+
+            if playback_info is None:
+                return (
+                    None,
+                    None,
+                )
+
+            shuffle_value = getattr(
+                playback_info,
+                "is_shuffle_active",
+                None,
+            )
+
+            shuffle_active = (
+                shuffle_value
+                if isinstance(
+                    shuffle_value,
+                    bool,
+                )
+                else None
+            )
+
+            repeat_mode = (
+                self
+                ._normalize_repeat_mode_state(
+                    getattr(
+                        playback_info,
+                        "auto_repeat_mode",
+                        None,
+                    )
+                )
+            )
+
+            return (
+                shuffle_active,
+                repeat_mode,
+            )
+
+        except Exception:
+            return (
+                None,
                 None,
             )
 
