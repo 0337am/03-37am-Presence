@@ -56,6 +56,15 @@ SEEK_PLAYBACK_PATH = (
 )
 
 
+SHUFFLE_PLAYBACK_PATH = (
+    "/me/player/shuffle"
+)
+
+REPEAT_PLAYBACK_PATH = (
+    "/me/player/repeat"
+)
+
+
 class SpotifyWebApiError(
     RuntimeError
 ):
@@ -2048,6 +2057,105 @@ class SpotifyWebApiClient:
             access_token,
             device_id=device_id,
             method="POST",
+        )
+
+    def set_shuffle(
+        self,
+        access_token: str,
+        state: bool,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        if not isinstance(
+            state,
+            bool,
+        ):
+            raise TypeError(
+                (
+                    "Spotify shuffle state "
+                    "must be a boolean."
+                )
+            )
+
+        query = {
+            "state": (
+                "true"
+                if state
+                else "false"
+            ),
+        }
+
+        if device_id is not None:
+            query["device_id"] = (
+                _validate_spotify_device_id(
+                    device_id
+                )
+            )
+
+        url = _build_spotify_api_url(
+            SHUFFLE_PLAYBACK_PATH,
+            query,
+        )
+
+        self._request_no_content(
+            url,
+            access_token,
+            method="PUT",
+        )
+
+    def set_repeat_mode(
+        self,
+        access_token: str,
+        state: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        if not isinstance(
+            state,
+            str,
+        ):
+            raise TypeError(
+                (
+                    "Spotify repeat state "
+                    "must be a string."
+                )
+            )
+
+        checked = state.strip()
+
+        if (
+            checked != state
+            or checked
+            not in {
+                "off",
+                "context",
+                "track",
+            }
+        ):
+            raise ValueError(
+                "Spotify repeat state is invalid."
+            )
+
+        query = {
+            "state": checked,
+        }
+
+        if device_id is not None:
+            query["device_id"] = (
+                _validate_spotify_device_id(
+                    device_id
+                )
+            )
+
+        url = _build_spotify_api_url(
+            REPEAT_PLAYBACK_PATH,
+            query,
+        )
+
+        self._request_no_content(
+            url,
+            access_token,
+            method="PUT",
         )
 
     def seek_to_position(

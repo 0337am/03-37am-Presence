@@ -875,6 +875,60 @@ class SpotifyPlaybackService:
             refreshed=refreshed,
         )
 
+    def set_shuffle(
+        self,
+        enabled,
+    ) -> SpotifyPlaybackServiceResult:
+        if not isinstance(
+            enabled,
+            bool,
+        ):
+            return self._error(
+                "invalid_shuffle_state",
+                "Spotify shuffle state is invalid.",
+            )
+
+        return self._run_transport_control(
+            "set_shuffle",
+            "Spotify shuffle was updated.",
+            enabled,
+        )
+
+    def set_repeat_mode(
+        self,
+        mode,
+    ) -> SpotifyPlaybackServiceResult:
+        if not isinstance(
+            mode,
+            str,
+        ):
+            return self._error(
+                "invalid_repeat_mode",
+                "Spotify repeat mode is invalid.",
+            )
+
+        checked = mode.strip()
+
+        if (
+            checked != mode
+            or checked
+            not in {
+                "off",
+                "context",
+                "track",
+            }
+        ):
+            return self._error(
+                "invalid_repeat_mode",
+                "Spotify repeat mode is invalid.",
+            )
+
+        return self._run_transport_control(
+            "set_repeat_mode",
+            "Spotify repeat mode was updated.",
+            checked,
+        )
+
     def seek_to_seconds(
         self,
         seconds,

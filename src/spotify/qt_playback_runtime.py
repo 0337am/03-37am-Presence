@@ -22,6 +22,8 @@ SPOTIFY_PLAYBACK_CONTROL_METHODS = (
     "skip_next",
     "skip_previous",
     "seek_to_seconds",
+    "set_shuffle",
+    "set_repeat_mode",
 )
 
 
@@ -565,6 +567,58 @@ class SpotifyQtPlaybackRuntime(
         self._start_control(
             "seek_to_seconds",
             control_argument=checked_seconds,
+        )
+
+    def set_shuffle(
+        self,
+        enabled,
+    ) -> None:
+        if not isinstance(
+            enabled,
+            bool,
+        ):
+            raise TypeError(
+                "enabled must be a boolean"
+            )
+
+        self._start_control(
+            "set_shuffle",
+            control_argument=enabled,
+        )
+
+    def set_repeat_mode(
+        self,
+        mode,
+    ) -> None:
+        if not isinstance(
+            mode,
+            str,
+        ):
+            raise TypeError(
+                "mode must be a string"
+            )
+
+        checked = mode.strip()
+
+        if (
+            checked != mode
+            or checked
+            not in {
+                "off",
+                "context",
+                "track",
+            }
+        ):
+            raise ValueError(
+                (
+                    "mode must be off, "
+                    "context, or track"
+                )
+            )
+
+        self._start_control(
+            "set_repeat_mode",
+            control_argument=checked,
         )
 
     def _start_control(
