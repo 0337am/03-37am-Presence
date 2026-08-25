@@ -980,6 +980,16 @@ class SpotifyPlaybackService:
             position_ms,
         )
 
+    def add_to_queue(
+        self,
+        spotify_uri,
+    ) -> SpotifyPlaybackServiceResult:
+        return self._run_transport_control(
+            "add_to_queue",
+            "Spotify item added to Queue.",
+            spotify_uri,
+        )
+
     def resume_playback(
         self,
     ) -> SpotifyPlaybackServiceResult:
