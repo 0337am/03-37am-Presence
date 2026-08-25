@@ -142,6 +142,11 @@ from src.ui.discord_profile_preview import (
 )
 from src.ui.theme import ThemeManager
 
+from src.spotify.queue_service import (
+    SpotifyQueueServiceResult,
+    SpotifyQueueServiceStatus,
+)
+
 
 def colour_with_alpha(
     colour: str,
@@ -8253,6 +8258,14 @@ class DashboardPage(QWidget):
                 f"{error}"
             )
             self.sync_dashboard_layout_controls()
+        if (
+            card_id == "queue"
+            and visible
+        ):
+            DashboardPage.refresh_spotify_queue(
+                self,
+                force=True,
+            )
 
     def sync_dashboard_add_queue_action(
         self,
@@ -11676,10 +11689,930 @@ class DashboardPage(QWidget):
                 )
             )
 
+        existing = getattr(
+            self,
+            "spotify_queue_runtime",
+            None,
+        )
+
+        if existing is runtime:
+            return
+
         self.spotify_queue_runtime = (
             runtime
         )
 
+        queue_ready = getattr(
+            runtime,
+            "queue_ready",
+            None,
+        )
+
+        connect_ready = getattr(
+            queue_ready,
+            "connect",
+            None,
+        )
+
+        if callable(
+            connect_ready
+        ):
+            connect_ready(
+                lambda result:
+                DashboardPage.show_spotify_queue_result(
+                    self,
+                    result,
+                )
+            )
+
+        failed = getattr(
+            runtime,
+            "failed",
+            None,
+        )
+
+        connect_failed = getattr(
+            failed,
+            "connect",
+            None,
+        )
+
+        if callable(
+            connect_failed
+        ):
+            connect_failed(
+                lambda error_code, message:
+                DashboardPage.show_spotify_queue_runtime_failure(
+                    self,
+                    error_code,
+                    message,
+                )
+            )
+
+        busy_changed = getattr(
+            runtime,
+            "busy_changed",
+            None,
+        )
+
+        connect_busy = getattr(
+            busy_changed,
+            "connect",
+            None,
+        )
+
+        if callable(
+            connect_busy
+        ):
+            connect_busy(
+                lambda busy:
+                DashboardPage.set_spotify_queue_busy(
+                    self,
+                    busy,
+                )
+            )
+
+
+
+
+    def _spotify_queue_card_visible(
+        self,
+    ) -> bool:
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if layout is None:
+            return False
+
+        try:
+            queue_layout = layout.card(
+                "queue"
+            )
+
+        except (
+            AttributeError,
+            KeyError,
+        ):
+            return False
+
+        return bool(
+            queue_layout.visible
+        )
+
+    def _spotify_queue_item_detail(
+        self,
+        item,
+    ) -> str:
+        creator = str(
+            getattr(
+                item,
+                "creator",
+                "",
+            )
+            or ""
+        ).strip()
+
+        collection = str(
+            getattr(
+                item,
+                "collection",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            creator
+            and collection
+            and creator.casefold()
+            != collection.casefold()
+        ):
+            return (
+                f"{creator} - {collection}"
+            )
+
+        if creator:
+            return creator
+
+        if collection:
+            return collection
+
+        if bool(
+            getattr(
+                item,
+                "is_local",
+                False,
+            )
+        ):
+            return "Local file"
+
+        return "Spotify"
+
+    def _spotify_queue_item_duration(
+        self,
+        item,
+    ) -> str:
+        duration_ms = getattr(
+            item,
+            "duration_ms",
+            None,
+        )
+
+        if (
+            isinstance(
+                duration_ms,
+                bool,
+            )
+            or not isinstance(
+                duration_ms,
+                int,
+            )
+            or duration_ms <= 0
+        ):
+            return ""
+
+        return format_playback_time(
+            duration_ms / 1000.0
+        )
+
+    def _set_spotify_queue_row(
+        self,
+        row,
+        item,
+        *,
+        marker: str,
+        badge: str,
+    ) -> None:
+        row["icon"].setText(
+            marker
+        )
+
+        row["title"].setText(
+            str(
+                getattr(
+                    item,
+                    "name",
+                    "",
+                )
+                or "Unknown item"
+            )
+        )
+
+        row["artist"].setText(
+            DashboardPage
+            ._spotify_queue_item_detail(
+                self,
+                item,
+            )
+        )
+
+        row["source"].setText(
+            badge
+        )
+
+        row["source"].setVisible(
+            bool(badge)
+        )
+
+        row["time"].setText(
+            DashboardPage
+            ._spotify_queue_item_duration(
+                self,
+                item,
+            )
+        )
+
+        row["card"].setVisible(
+            True
+        )
+
+    def _show_spotify_queue_message(
+        self,
+        message: str,
+        *,
+        status_text: str | None = None,
+    ) -> None:
+        placeholder = getattr(
+            self,
+            "queue_placeholder",
+            None,
+        )
+
+        if placeholder is not None:
+            placeholder.setText(
+                str(
+                    message
+                    or (
+                        "Spotify Queue is "
+                        "unavailable."
+                    )
+                )
+            )
+            placeholder.setVisible(
+                True
+            )
+
+        current_row = getattr(
+            self,
+            "queue_current_row",
+            None,
+        )
+
+        if current_row is not None:
+            current_row[
+                "card"
+            ].setVisible(
+                False
+            )
+
+        up_next = getattr(
+            self,
+            "queue_up_next_label",
+            None,
+        )
+
+        if up_next is not None:
+            up_next.setVisible(
+                False
+            )
+
+        for row in getattr(
+            self,
+            "queue_rows",
+            (),
+        ):
+            row[
+                "card"
+            ].setVisible(
+                False
+            )
+
+        more = getattr(
+            self,
+            "queue_more",
+            None,
+        )
+
+        if more is not None:
+            more.setVisible(
+                False
+            )
+
+        status = getattr(
+            self,
+            "queue_status",
+            None,
+        )
+
+        if status is not None:
+            status.setText(
+                str(
+                    status_text
+                    or message
+                    or ""
+                )
+            )
+
+    def set_spotify_queue_busy(
+        self,
+        busy,
+    ) -> None:
+        busy = bool(
+            busy
+        )
+
+        button = getattr(
+            self,
+            "queue_refresh_button",
+            None,
+        )
+
+        if button is not None:
+            button.setEnabled(
+                not busy
+            )
+
+        if not busy:
+            return
+
+        status = getattr(
+            self,
+            "queue_status",
+            None,
+        )
+
+        if status is None:
+            return
+
+        if bool(
+            getattr(
+                self,
+                "_spotify_queue_has_result",
+                False,
+            )
+        ):
+            status.setText(
+                "Refreshing Spotify Queue..."
+            )
+
+        else:
+            status.setText(
+                "Loading Spotify Queue..."
+            )
+
+    def refresh_spotify_queue(
+        self,
+        force: bool = False,
+    ) -> bool:
+        if not DashboardPage._spotify_queue_card_visible(
+            self
+        ):
+            return False
+
+        runtime = getattr(
+            self,
+            "spotify_queue_runtime",
+            None,
+        )
+
+        if runtime is None:
+            if force:
+                DashboardPage._show_spotify_queue_message(
+                    self,
+                    "Spotify Queue is unavailable.",
+                )
+
+            return False
+
+        if bool(
+            getattr(
+                runtime,
+                "busy",
+                False,
+            )
+        ):
+            return False
+
+        now = time.monotonic()
+
+        next_refresh = float(
+            getattr(
+                self,
+                "_spotify_queue_next_refresh_at",
+                0.0,
+            )
+            or 0.0
+        )
+
+        if (
+            not force
+            and now < next_refresh
+        ):
+            return False
+
+        self._spotify_queue_next_refresh_at = (
+            now + 15.0
+        )
+
+        if bool(
+            getattr(
+                self,
+                "_spotify_queue_has_result",
+                False,
+            )
+        ):
+            status = getattr(
+                self,
+                "queue_status",
+                None,
+            )
+
+            if status is not None:
+                status.setText(
+                    "Refreshing Spotify Queue..."
+                )
+
+        else:
+            DashboardPage._show_spotify_queue_message(
+                self,
+                "Loading Spotify Queue...",
+            )
+
+        loader = getattr(
+            runtime,
+            "load_queue",
+            None,
+        )
+
+        if not callable(
+            loader
+        ):
+            DashboardPage._show_spotify_queue_message(
+                self,
+                "Spotify Queue is unavailable.",
+            )
+            return False
+
+        try:
+            loader()
+
+        except Exception as error:
+            error_code = str(
+                getattr(
+                    error,
+                    "error_code",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if error_code in {
+                "busy",
+                "shutting_down",
+            }:
+                return False
+
+            DashboardPage.show_spotify_queue_runtime_failure(
+                self,
+                error_code,
+                str(
+                    error
+                    or ""
+                ),
+            )
+            return False
+
+        return True
+
+    def show_spotify_queue_runtime_failure(
+        self,
+        error_code,
+        message,
+    ) -> None:
+        del error_code
+
+        self._spotify_queue_has_result = (
+            True
+        )
+
+        self._spotify_queue_next_refresh_at = (
+            time.monotonic()
+            + 15.0
+        )
+
+        DashboardPage._show_spotify_queue_message(
+            self,
+            (
+                str(
+                    message
+                    or ""
+                ).strip()
+                or (
+                    "Spotify Queue could not "
+                    "be loaded."
+                )
+            ),
+            status_text="Queue unavailable",
+        )
+
+    def show_spotify_queue_result(
+        self,
+        result,
+    ) -> None:
+        if not isinstance(
+            result,
+            SpotifyQueueServiceResult,
+        ):
+            DashboardPage.show_spotify_queue_runtime_failure(
+                self,
+                "invalid_result",
+                (
+                    "Spotify Queue returned "
+                    "an invalid result."
+                ),
+            )
+            return
+
+        self._spotify_queue_has_result = (
+            True
+        )
+
+        if (
+            result.retry_after_seconds
+            is not None
+        ):
+            self._spotify_queue_next_refresh_at = max(
+                float(
+                    getattr(
+                        self,
+                        "_spotify_queue_next_refresh_at",
+                        0.0,
+                    )
+                    or 0.0
+                ),
+                (
+                    time.monotonic()
+                    + float(
+                        result.retry_after_seconds
+                    )
+                ),
+            )
+
+        if (
+            result.status
+            is SpotifyQueueServiceStatus.READY
+        ):
+            snapshot = result.queue
+
+            if snapshot is None:
+                DashboardPage.show_spotify_queue_runtime_failure(
+                    self,
+                    "invalid_result",
+                    (
+                        "Spotify Queue returned "
+                        "an invalid result."
+                    ),
+                )
+                return
+
+            DashboardPage.populate_spotify_queue(
+                self,
+                snapshot,
+            )
+            return
+
+        message = str(
+            result.message
+            or ""
+        ).strip()
+
+        if (
+            result.status
+            is SpotifyQueueServiceStatus
+            .DISCONNECTED
+        ):
+            DashboardPage._show_spotify_queue_message(
+                self,
+                (
+                    message
+                    or (
+                        "Connect Spotify to view "
+                        "the Queue."
+                    )
+                ),
+                status_text="Spotify disconnected",
+            )
+            return
+
+        if (
+            result.status
+            is SpotifyQueueServiceStatus
+            .REAUTHORIZATION_REQUIRED
+        ):
+            DashboardPage._show_spotify_queue_message(
+                self,
+                (
+                    message
+                    or (
+                        "Reconnect Spotify to "
+                        "view the Queue."
+                    )
+                ),
+                status_text="Reconnect Spotify",
+            )
+            return
+
+        if (
+            result.status
+            is SpotifyQueueServiceStatus.ERROR
+        ):
+            if (
+                result.retry_after_seconds
+                is not None
+                and result.retry_after_seconds > 0
+            ):
+                retry_text = (
+                    " Try again in "
+                    f"{result.retry_after_seconds}s."
+                )
+
+            else:
+                retry_text = ""
+
+            DashboardPage._show_spotify_queue_message(
+                self,
+                (
+                    message
+                    or (
+                        "Spotify Queue could not "
+                        "be loaded."
+                    )
+                )
+                + retry_text,
+                status_text="Queue unavailable",
+            )
+            return
+
+        DashboardPage.show_spotify_queue_runtime_failure(
+            self,
+            "invalid_status",
+            (
+                "Spotify Queue returned "
+                "an invalid status."
+            ),
+        )
+
+    def populate_spotify_queue(
+        self,
+        snapshot,
+    ) -> None:
+        current = getattr(
+            snapshot,
+            "currently_playing",
+            None,
+        )
+
+        items = tuple(
+            getattr(
+                snapshot,
+                "items",
+                (),
+            )
+            or ()
+        )
+
+        self._spotify_queue_has_result = (
+            True
+        )
+
+        current_row = getattr(
+            self,
+            "queue_current_row",
+            None,
+        )
+
+        if (
+            current is not None
+            and current_row is not None
+        ):
+            badges = [
+                "NOW",
+            ]
+
+            if bool(
+                getattr(
+                    current,
+                    "is_local",
+                    False,
+                )
+            ):
+                badges.append(
+                    "LOCAL"
+                )
+
+            elif (
+                str(
+                    getattr(
+                        current,
+                        "item_type",
+                        "",
+                    )
+                )
+                == "episode"
+            ):
+                badges.append(
+                    "EPISODE"
+                )
+
+            DashboardPage._set_spotify_queue_row(
+                self,
+                current_row,
+                current,
+                marker="♪",
+                badge=" / ".join(
+                    badges
+                ),
+            )
+
+        elif current_row is not None:
+            current_row[
+                "card"
+            ].setVisible(
+                False
+            )
+
+        capacity = int(
+            getattr(
+                self,
+                "_spotify_queue_row_limit",
+                3,
+            )
+            or 3
+        )
+
+        visible_items = items[
+            :capacity
+        ]
+
+        for index, row in enumerate(
+            getattr(
+                self,
+                "queue_rows",
+                (),
+            )
+        ):
+            if index >= len(
+                visible_items
+            ):
+                row[
+                    "card"
+                ].setVisible(
+                    False
+                )
+                continue
+
+            item = visible_items[
+                index
+            ]
+
+            if bool(
+                getattr(
+                    item,
+                    "is_local",
+                    False,
+                )
+            ):
+                badge = "LOCAL"
+
+            elif (
+                str(
+                    getattr(
+                        item,
+                        "item_type",
+                        "",
+                    )
+                )
+                == "episode"
+            ):
+                badge = "EPISODE"
+
+            else:
+                badge = ""
+
+            DashboardPage._set_spotify_queue_row(
+                self,
+                row,
+                item,
+                marker=str(
+                    index + 1
+                ),
+                badge=badge,
+            )
+
+        placeholder = getattr(
+            self,
+            "queue_placeholder",
+            None,
+        )
+
+        up_next = getattr(
+            self,
+            "queue_up_next_label",
+            None,
+        )
+
+        more = getattr(
+            self,
+            "queue_more",
+            None,
+        )
+
+        if items:
+            if placeholder is not None:
+                placeholder.setVisible(
+                    False
+                )
+
+            if up_next is not None:
+                up_next.setVisible(
+                    True
+                )
+
+        else:
+            if up_next is not None:
+                up_next.setVisible(
+                    False
+                )
+
+            if placeholder is not None:
+                placeholder.setText(
+                    (
+                        "Nothing else is queued."
+                        if current is not None
+                        else "Spotify Queue is empty."
+                    )
+                )
+                placeholder.setVisible(
+                    True
+                )
+
+        remaining = max(
+            0,
+            len(items)
+            - capacity,
+        )
+
+        if more is not None:
+            if remaining:
+                more.setText(
+                    (
+                        "+"
+                        f"{remaining} more in Queue"
+                    )
+                )
+                more.setVisible(
+                    True
+                )
+
+            else:
+                more.setVisible(
+                    False
+                )
+
+        status = getattr(
+            self,
+            "queue_status",
+            None,
+        )
+
+        if status is not None:
+            count = len(items)
+
+            if count:
+                status.setText(
+                    (
+                        f"{count} item"
+                        + (
+                            ""
+                            if count == 1
+                            else "s"
+                        )
+                        + " up next"
+                    )
+                )
+
+            elif current is not None:
+                status.setText(
+                    "Nothing else queued"
+                )
+
+            else:
+                status.setText(
+                    "Queue is empty"
+                )
 
     def build_queue_card(
         self,
@@ -11699,8 +12632,10 @@ class DashboardPage(QWidget):
             12,
         )
         layout.setSpacing(
-            8
+            6
         )
+
+        heading_row = QHBoxLayout()
 
         heading = QLabel(
             "SPOTIFY QUEUE"
@@ -11709,8 +12644,47 @@ class DashboardPage(QWidget):
             "sectionLabel"
         )
 
-        layout.addWidget(
+        self.queue_refresh_button = QPushButton(
+            "Refresh"
+        )
+        self.queue_refresh_button.setObjectName(
+            "textButton"
+        )
+        self.queue_refresh_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.queue_refresh_button.setToolTip(
+            "Refresh Spotify Queue"
+        )
+        self.queue_refresh_button.clicked.connect(
+            lambda _checked=False:
+            DashboardPage.refresh_spotify_queue(
+                self,
+                force=True,
+            )
+        )
+
+        heading_row.addWidget(
             heading
+        )
+        heading_row.addStretch()
+        heading_row.addWidget(
+            self.queue_refresh_button
+        )
+
+        layout.addLayout(
+            heading_row
+        )
+
+        self.queue_status = QLabel(
+            "Queue content will appear here."
+        )
+        self.queue_status.setObjectName(
+            "recentArtist"
+        )
+
+        layout.addWidget(
+            self.queue_status
         )
 
         self.queue_placeholder = QLabel(
@@ -11731,9 +12705,167 @@ class DashboardPage(QWidget):
             1,
         )
 
+        def make_queue_row(
+            marker,
+        ):
+            row_card = QFrame()
+            row_card.setObjectName(
+                "recentRow"
+            )
+            row_card.setFixedHeight(
+                42
+            )
+            row_card.hide()
+
+            row_layout = QHBoxLayout(
+                row_card
+            )
+            row_layout.setContentsMargins(
+                10,
+                5,
+                10,
+                5,
+            )
+            row_layout.setSpacing(
+                10
+            )
+
+            icon = QLabel(
+                str(
+                    marker
+                )
+            )
+            icon.setObjectName(
+                "recentIcon"
+            )
+            icon.setFixedSize(
+                34,
+                30,
+            )
+            icon.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+
+            text_layout = QVBoxLayout()
+            text_layout.setSpacing(
+                0
+            )
+
+            title = QLabel("")
+            title.setObjectName(
+                "recentTitle"
+            )
+
+            artist = QLabel("")
+            artist.setObjectName(
+                "recentArtist"
+            )
+
+            text_layout.addWidget(
+                title
+            )
+            text_layout.addWidget(
+                artist
+            )
+
+            source = QLabel("")
+            source.setObjectName(
+                "recentSource"
+            )
+            source.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+
+            duration = QLabel("")
+            duration.setObjectName(
+                "recentTime"
+            )
+            duration.setAlignment(
+                Qt.AlignmentFlag.AlignRight
+                | Qt.AlignmentFlag.AlignVCenter
+            )
+
+            row_layout.addWidget(
+                icon
+            )
+            row_layout.addLayout(
+                text_layout,
+                stretch=1,
+            )
+            row_layout.addWidget(
+                source
+            )
+            row_layout.addWidget(
+                duration
+            )
+
+            layout.addWidget(
+                row_card
+            )
+
+            return {
+                "card": row_card,
+                "icon": icon,
+                "title": title,
+                "artist": artist,
+                "source": source,
+                "time": duration,
+            }
+
+        self.queue_current_row = (
+            make_queue_row("♪")
+        )
+
+        self.queue_up_next_label = QLabel(
+            "UP NEXT"
+        )
+        self.queue_up_next_label.setObjectName(
+            "recentSource"
+        )
+        self.queue_up_next_label.hide()
+
+        layout.addWidget(
+            self.queue_up_next_label
+        )
+
+        self._spotify_queue_row_limit = 3
+
+        self.queue_rows = [
+            make_queue_row(
+                index + 1
+            )
+            for index in range(
+                self._spotify_queue_row_limit
+            )
+        ]
+
+        self.queue_more = QLabel("")
+        self.queue_more.setObjectName(
+            "recentArtist"
+        )
+        self.queue_more.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.queue_more.hide()
+
+        layout.addWidget(
+            self.queue_more
+        )
+
+        self._spotify_queue_has_result = (
+            False
+        )
+
+        self._spotify_queue_next_refresh_at = (
+            0.0
+        )
+
         self.queue_card.setMinimumHeight(
             270
         )
+
+
 
 
     def build_library_status_card(self):
@@ -13162,6 +14294,9 @@ class DashboardPage(QWidget):
 
         self.discord_status_detail.setText(
             strip_detail
+        )
+        DashboardPage.refresh_spotify_queue(
+            self
         )
 
     @staticmethod
