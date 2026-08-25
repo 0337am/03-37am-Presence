@@ -9738,22 +9738,22 @@ class DashboardPage(QWidget):
             top_path = QPainterPath()
 
             top_path.moveTo(
-                4.1,
-                8.1,
+                3.0,
+                8.2,
             )
 
             top_path.cubicTo(
-                4.1,
-                5.8,
-                5.9,
-                4.5,
-                8.1,
-                4.5,
+                3.0,
+                5.5,
+                5.0,
+                4.0,
+                7.5,
+                4.0,
             )
 
             top_path.lineTo(
-                14.8,
-                4.5,
+                15.1,
+                4.0,
             )
 
             painter.drawPath(
@@ -9763,18 +9763,18 @@ class DashboardPage(QWidget):
             top_arrow = QPainterPath()
 
             top_arrow.moveTo(
-                13.8,
-                1.3,
+                14.5,
+                1.2,
             )
 
             top_arrow.lineTo(
-                17.7,
-                4.5,
+                18.4,
+                4.0,
             )
 
             top_arrow.lineTo(
-                13.8,
-                7.7,
+                14.5,
+                6.8,
             )
 
             top_arrow.closeSubpath()
@@ -9787,22 +9787,22 @@ class DashboardPage(QWidget):
             bottom_path = QPainterPath()
 
             bottom_path.moveTo(
-                15.9,
-                11.9,
+                17.0,
+                11.8,
             )
 
             bottom_path.cubicTo(
-                15.9,
-                14.2,
-                14.1,
-                15.5,
-                11.9,
-                15.5,
+                17.0,
+                14.5,
+                15.0,
+                16.0,
+                12.5,
+                16.0,
             )
 
             bottom_path.lineTo(
-                5.2,
-                15.5,
+                4.9,
+                16.0,
             )
 
             painter.drawPath(
@@ -9812,18 +9812,18 @@ class DashboardPage(QWidget):
             bottom_arrow = QPainterPath()
 
             bottom_arrow.moveTo(
-                6.2,
-                12.3,
+                5.5,
+                13.2,
             )
 
             bottom_arrow.lineTo(
-                2.3,
-                15.5,
+                1.6,
+                16.0,
             )
 
             bottom_arrow.lineTo(
-                6.2,
-                18.7,
+                5.5,
+                18.8,
             )
 
             bottom_arrow.closeSubpath()
@@ -9851,7 +9851,7 @@ class DashboardPage(QWidget):
                 font = painter.font()
 
                 font.setPixelSize(
-                    8
+                    7
                 )
 
                 font.setBold(
