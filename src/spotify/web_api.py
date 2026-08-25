@@ -1245,6 +1245,52 @@ def _validate_spotify_track_uri(
     return spotify_uri
 
 
+def _validate_spotify_queue_item_uri(
+    spotify_uri: str,
+) -> str:
+    if not isinstance(
+        spotify_uri,
+        str,
+    ):
+        raise TypeError(
+            "Spotify queue item URI must be a string."
+        )
+
+    checked = spotify_uri.strip()
+
+    if checked != spotify_uri:
+        raise ValueError(
+            "Spotify queue item URI is invalid."
+        )
+
+    for prefix in (
+        "spotify:track:",
+        "spotify:episode:",
+    ):
+        if not checked.startswith(
+            prefix
+        ):
+            continue
+
+        item_id = checked[
+            len(prefix):
+        ]
+
+        if (
+            item_id
+            and item_id.isascii()
+            and item_id.isalnum()
+        ):
+            return checked
+
+        break
+
+    raise ValueError(
+        "Spotify queue item URI is invalid."
+    )
+
+
+
 def _validate_spotify_album_uri(
     spotify_uri: str,
 ) -> str:
@@ -2005,6 +2051,50 @@ class SpotifyWebApiClient:
             url,
             access_token,
             method=method,
+        )
+
+    def get_queue(
+        self,
+        access_token: str,
+    ):
+        return self.get_json(
+            access_token,
+            "/me/player/queue",
+        )
+
+    def add_to_queue(
+        self,
+        access_token: str,
+        spotify_uri: str,
+        *,
+        device_id: str | None = None,
+    ) -> None:
+        checked_uri = (
+            _validate_spotify_queue_item_uri(
+                spotify_uri
+            )
+        )
+
+        query = {
+            "uri": checked_uri,
+        }
+
+        if device_id is not None:
+            query["device_id"] = (
+                _validate_spotify_device_id(
+                    device_id
+                )
+            )
+
+        url = _build_spotify_api_url(
+            "/me/player/queue",
+            query,
+        )
+
+        self._request_no_content(
+            url,
+            access_token,
+            method="POST",
         )
 
     def resume_playback(
