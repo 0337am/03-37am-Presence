@@ -5,6 +5,10 @@ from src.spotify.playback_service import (
 from src.spotify.queue_service import (
     SpotifyQueueService,
 )
+
+from src.spotify.effective_queue_service import (
+    SpotifyEffectiveQueueService,
+)
 from src.spotify.qt_playback_runtime import (
     SpotifyQtPlaybackRuntime,
 )
@@ -1017,8 +1021,22 @@ class MainWindow(QMainWindow):
             SpotifyQtQueueRuntime(
                 (
                     lambda manager=spotify_session_manager:
-                    SpotifyQueueService(
-                        manager
+                    SpotifyEffectiveQueueService(
+                        SpotifyQueueService(
+                            manager
+                        ),
+                        manager,
+                        (
+                            lambda:
+                            getattr(
+                                self,
+                                (
+                                    "spotify_"
+                                    "resolved_playlist_service"
+                                ),
+                                None,
+                            )
+                        ),
                     )
                 ),
                 parent=self,
