@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.spotify.queue_models import (
+    QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
     SpotifyQueueItem,
     SpotifyQueueSnapshot,
 )
@@ -657,6 +658,118 @@ class DashboardQueuePresentationTests(
             harness
             .queue_refresh_button
             .isEnabled()
+        )
+
+    def test_shuffle_partial_queue_avoids_exact_position_claims(
+        self,
+    ):
+        harness = self.make_harness()
+
+        def item(
+            name,
+            *,
+            local=False,
+        ):
+            return SpotifyQueueItem(
+                item_type="track",
+                name=name,
+                uri=(
+                    (
+                        "spotify:local:"
+                        + name.replace(
+                            " ",
+                            "+",
+                        )
+                        + ":180"
+                    )
+                    if local
+                    else (
+                        "spotify:track:"
+                        + name.replace(
+                            " ",
+                            "",
+                        )
+                        + "123"
+                    )
+                ),
+                creator="Juice WRLD",
+                collection="Sessions",
+                artwork_url="",
+                is_local=bool(
+                    local
+                ),
+                duration_ms=180000,
+            )
+
+        snapshot = SpotifyQueueSnapshot(
+            currently_playing=(
+                item(
+                    "Red Moonlight",
+                    local=True,
+                )
+            ),
+            items=(
+                item(
+                    "Cuffed"
+                ),
+                item(
+                    "Lace It"
+                ),
+                item(
+                    "Barbarian"
+                ),
+                item(
+                    "Used To"
+                ),
+            ),
+            partial_reason=(
+                QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER
+            ),
+        )
+
+        DashboardPage.populate_spotify_queue(
+            harness,
+            snapshot,
+        )
+
+        self.assertEqual(
+            harness.queue_status.text(),
+            (
+                "Shuffle on | "
+                "local-file order hidden"
+            ),
+        )
+
+        self.assertEqual(
+            harness.queue_up_next_label.text(),
+            "SPOTIFY-VISIBLE QUEUE",
+        )
+
+        self.assertEqual(
+            [
+                row[
+                    "icon"
+                ].text()
+                for row
+                in harness.queue_rows
+            ],
+            [
+                "♪",
+                "♪",
+                "♪",
+            ],
+        )
+
+        self.assertEqual(
+            harness.queue_more.text(),
+            "+1 more Spotify-visible",
+        )
+
+        self.assertEqual(
+            harness.queue_current_row[
+                "source"
+            ].text(),
+            "NOW / LOCAL",
         )
 
 

@@ -8,6 +8,7 @@ from urllib.parse import unquote_plus
 
 from src.spotify.queue_models import (
     QUEUE_ITEM_TRACK,
+    QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
     SpotifyQueueItem,
     SpotifyQueueSnapshot,
     spotify_queue_item_from_payload,
@@ -1491,12 +1492,27 @@ class SpotifyEffectiveQueueService:
                 current_changed = True
 
         if _shuffle_enabled(player):
-            if not current_changed:
+            has_local_playlist_items = any(
+                _resolved_is_local(
+                    item
+                )
+                for item in resolved_items
+            )
+
+            if (
+                not current_changed
+                and not has_local_playlist_items
+            ):
                 return snapshot
 
             return SpotifyQueueSnapshot(
                 currently_playing=current,
                 items=snapshot.items,
+                partial_reason=(
+                    QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER
+                    if has_local_playlist_items
+                    else ""
+                ),
             )
 
         merged = self._merge_local_gaps(

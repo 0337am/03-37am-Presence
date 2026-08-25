@@ -147,6 +147,10 @@ from src.spotify.queue_service import (
     SpotifyQueueServiceStatus,
 )
 
+from src.spotify.queue_models import (
+    QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
+)
+
 
 def colour_with_alpha(
     colour: str,
@@ -12384,6 +12388,20 @@ class DashboardPage(QWidget):
             or ()
         )
 
+        partial_reason = str(
+            getattr(
+                snapshot,
+                "partial_reason",
+                "",
+            )
+            or ""
+        ).strip()
+
+        shuffle_local_partial = (
+            partial_reason
+            == QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER
+        )
+
         self._spotify_queue_has_result = (
             True
         )
@@ -12506,8 +12524,12 @@ class DashboardPage(QWidget):
                 self,
                 row,
                 item,
-                marker=str(
-                    index + 1
+                marker=(
+                    "♪"
+                    if shuffle_local_partial
+                    else str(
+                        index + 1
+                    )
                 ),
                 badge=badge,
             )
@@ -12530,6 +12552,15 @@ class DashboardPage(QWidget):
             None,
         )
 
+        if up_next is not None:
+            up_next.setText(
+                (
+                    "SPOTIFY-VISIBLE QUEUE"
+                    if shuffle_local_partial
+                    else "UP NEXT"
+                )
+            )
+
         if items:
             if placeholder is not None:
                 placeholder.setVisible(
@@ -12548,13 +12579,27 @@ class DashboardPage(QWidget):
                 )
 
             if placeholder is not None:
-                placeholder.setText(
-                    (
-                        "Nothing else is queued."
-                        if current is not None
-                        else "Spotify Queue is empty."
+                if shuffle_local_partial:
+                    placeholder.setText(
+                        (
+                            "Spotify does not expose "
+                            "shuffled local-file "
+                            "positions."
+                        )
                     )
-                )
+
+                else:
+                    placeholder.setText(
+                        (
+                            "Nothing else is queued."
+                            if current is not None
+                            else (
+                                "Spotify Queue is "
+                                "empty."
+                            )
+                        )
+                    )
+
                 placeholder.setVisible(
                     True
                 )
@@ -12567,12 +12612,23 @@ class DashboardPage(QWidget):
 
         if more is not None:
             if remaining:
-                more.setText(
-                    (
-                        "+"
-                        f"{remaining} more in Queue"
+                if shuffle_local_partial:
+                    more.setText(
+                        (
+                            "+"
+                            f"{remaining} more "
+                            "Spotify-visible"
+                        )
                     )
-                )
+
+                else:
+                    more.setText(
+                        (
+                            "+"
+                            f"{remaining} more in Queue"
+                        )
+                    )
+
                 more.setVisible(
                     True
                 )
@@ -12591,7 +12647,15 @@ class DashboardPage(QWidget):
         if status is not None:
             count = len(items)
 
-            if count:
+            if shuffle_local_partial:
+                status.setText(
+                    (
+                        "Shuffle on | "
+                        "local-file order hidden"
+                    )
+                )
+
+            elif count:
                 status.setText(
                     (
                         f"{count} item"

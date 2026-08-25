@@ -8,6 +8,7 @@ from src.spotify.effective_queue_service import (
     SpotifyEffectiveQueueService,
 )
 from src.spotify.queue_models import (
+    QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
     SpotifyQueueItem,
     SpotifyQueueSnapshot,
 )
@@ -1525,6 +1526,165 @@ class SpotifyEffectiveQueueServiceTests(
             result,
             base,
         )
+
+    def test_shuffle_local_playlist_marks_queue_partial(
+        self,
+    ):
+        current_uri = (
+            "spotify:track:Current123"
+        )
+
+        visible_uri = (
+            "spotify:track:Visible123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "Current",
+                current_uri,
+            ),
+            queue_item(
+                "Visible Next",
+                visible_uri,
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                ),
+                resolved_item(
+                    1,
+                    "Hidden Local",
+                    (
+                        "spotify:local:"
+                        "artist:album:hidden:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Visible Next",
+                    visible_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                    ),
+                    shuffle=True,
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            result.queue.partial_reason,
+            QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Visible Next",
+            ],
+        )
+
+    def test_shuffle_catalogue_only_playlist_stays_complete(
+        self,
+    ):
+        current_uri = (
+            "spotify:track:Current123"
+        )
+
+        next_uri = (
+            "spotify:track:Next123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "Current",
+                current_uri,
+            ),
+            queue_item(
+                "Next",
+                next_uri,
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                ),
+                resolved_item(
+                    1,
+                    "Next",
+                    next_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                    ),
+                    shuffle=True,
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            result.queue.partial_reason,
+            "",
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Next",
+            ],
+        )
+
+    def test_snapshot_rejects_unknown_partial_reason(
+        self,
+    ):
+        with self.assertRaises(
+            ValueError
+        ):
+            SpotifyQueueSnapshot(
+                currently_playing=None,
+                items=(),
+                partial_reason=(
+                    "made_up_partial_reason"
+                ),
+            )
 
 
 if __name__ == "__main__":

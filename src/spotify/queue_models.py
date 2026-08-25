@@ -205,6 +205,9 @@ class SpotifyQueueItem:
         )
 
 
+
+QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER = 'shuffle_local_order'
+
 @dataclass(
     frozen=True,
     slots=True,
@@ -219,6 +222,8 @@ class SpotifyQueueSnapshot:
         SpotifyQueueItem,
         ...,
     ]
+
+    partial_reason: str = ""
 
     def __post_init__(
         self,
@@ -264,6 +269,25 @@ class SpotifyQueueSnapshot:
                         "SpotifyQueueItem instances"
                     )
                 )
+
+        if not isinstance(
+            self.partial_reason,
+            str,
+        ):
+            raise TypeError(
+                "partial_reason must be a string"
+            )
+
+        if self.partial_reason not in {
+            "",
+            QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
+        }:
+            raise ValueError(
+                (
+                    "Unsupported Spotify Queue "
+                    "partial reason."
+                )
+            )
 
 
 def spotify_queue_item_from_payload(
