@@ -699,10 +699,7 @@ class PlaybackControlCoordinator(
         )
 
         thread.finished.connect(
-            lambda current=thread:
-            self._media_thread_finished(
-                current
-            )
+            self._media_thread_finished
         )
 
         thread.finished.connect(
@@ -764,8 +761,9 @@ class PlaybackControlCoordinator(
 
     def _media_thread_finished(
         self,
-        thread,
     ) -> None:
+        thread = self.sender()
+
         if (
             self._media_thread
             is thread
