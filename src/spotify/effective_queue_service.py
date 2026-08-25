@@ -677,6 +677,80 @@ def _local_queue_item(
         ),
     )
 
+def _catalogue_queue_item(
+    resolved_item,
+) -> SpotifyQueueItem | None:
+    if resolved_item is None:
+        return None
+
+    if _resolved_is_local(
+        resolved_item
+    ):
+        return None
+
+    track = _resolved_track(
+        resolved_item
+    )
+
+    if track is None:
+        return None
+
+    name = _text(
+        getattr(
+            track,
+            "title",
+            "",
+        )
+    )
+
+    uri = _resolved_uri(
+        resolved_item
+    )
+
+    if (
+        not name
+        or not uri
+        or not uri.casefold().startswith(
+            "spotify:track:"
+        )
+    ):
+        return None
+
+    return SpotifyQueueItem(
+        item_type=QUEUE_ITEM_TRACK,
+        name=name,
+        uri=uri,
+        creator=_text(
+            getattr(
+                track,
+                "artist",
+                "",
+            )
+        ),
+        collection=_text(
+            getattr(
+                track,
+                "album",
+                "",
+            )
+        ),
+        artwork_url=_text(
+            getattr(
+                track,
+                "artwork_reference",
+                "",
+            )
+        ),
+        is_local=False,
+        duration_ms=_duration(
+            getattr(
+                track,
+                "duration_ms",
+                None,
+            )
+        ),
+    )
+
 
 def _same_current(
     first,
@@ -1359,65 +1433,216 @@ class SpotifyEffectiveQueueService:
 
         rebuilt = []
 
-        if anchor_start:
-            first_skipped_position = (
+        verified_skipped_catalogue = None
+
+        if (
+            anchor_start == 1
+            and matched
+            and future
+        ):
+            skipped_anchor = (
+                playlist_anchors[
+                    0
+                ]
+            )
+
+            first_matched_anchor = (
+                matched[
+                    0
+                ][
+                    1
+                ]
+            )
+
+            skipped_position = (
                 _resolved_position(
-                    playlist_anchors[
-                        0
-                    ]
+                    skipped_anchor
                 )
             )
 
-            if first_skipped_position is None:
-                return None
-
-            for item in remaining_playlist:
-                position = (
-                    _resolved_position(
-                        item
-                    )
+            first_matched_position = (
+                _resolved_position(
+                    first_matched_anchor
                 )
+            )
 
+            stale_current = (
+                snapshot.currently_playing
+            )
+
+            stale_current_uri = (
+                stale_current.uri
                 if (
-                    position is None
-                    or position
-                    <= current_position
-                    or position
-                    >= first_skipped_position
-                ):
-                    continue
+                    stale_current
+                    is not None
+                    and stale_current.item_type
+                    == QUEUE_ITEM_TRACK
+                    and not stale_current.is_local
+                )
+                else ""
+            )
 
-                if not _resolved_is_local(
-                    item
-                ):
-                    return None
+            player_uri = (
+                _player_uri(
+                    player_payload
+                )
+            )
 
-                local_item = (
-                    _local_queue_item(
-                        item
+            if (
+                skipped_position is not None
+                and first_matched_position
+                is not None
+                and first_matched_position
+                == skipped_position + 1
+                and stale_current_uri
+                and player_uri
+                and not _uris_equal(
+                    player_uri,
+                    stale_current_uri,
+                )
+                and _uris_equal(
+                    stale_current_uri,
+                    _resolved_uri(
+                        first_matched_anchor
+                    ),
+                )
+                and _uris_equal(
+                    future[
+                        0
+                    ].uri,
+                    stale_current_uri,
+                )
+            ):
+                skipped_queue_item = (
+                    _catalogue_queue_item(
+                        skipped_anchor
                     )
                 )
 
-                if local_item is None:
-                    return None
+                if skipped_queue_item is not None:
+                    verified_skipped_catalogue = (
+                        skipped_anchor,
+                        skipped_queue_item,
+                        first_matched_position,
+                    )
 
-                rebuilt.append(
-                    local_item
+        if anchor_start:
+            if (
+                verified_skipped_catalogue
+                is not None
+            ):
+                (
+                    skipped_anchor,
+                    skipped_queue_item,
+                    first_matched_position,
+                ) = verified_skipped_catalogue
+
+                skipped_position = (
+                    _resolved_position(
+                        skipped_anchor
+                    )
                 )
 
-            previous_position = None
+                for item in remaining_playlist:
+                    position = (
+                        _resolved_position(
+                            item
+                        )
+                    )
+
+                    if position is None:
+                        return None
+
+                    if position >= first_matched_position:
+                        continue
+
+                    if _resolved_is_local(
+                        item
+                    ):
+                        local_item = (
+                            _local_queue_item(
+                                item
+                            )
+                        )
+
+                        if local_item is None:
+                            return None
+
+                        rebuilt.append(
+                            local_item
+                        )
+                        continue
+
+                    if (
+                        position
+                        != skipped_position
+                        or item is not skipped_anchor
+                    ):
+                        return None
+
+                    rebuilt.append(
+                        skipped_queue_item
+                    )
+
+                previous_position = None
+
+            else:
+                first_skipped_position = (
+                    _resolved_position(
+                        playlist_anchors[
+                            0
+                        ]
+                    )
+                )
+
+                if first_skipped_position is None:
+                    return None
+
+                for item in remaining_playlist:
+                    position = (
+                        _resolved_position(
+                            item
+                        )
+                    )
+
+                    if (
+                        position is None
+                        or position
+                        <= current_position
+                        or position
+                        >= first_skipped_position
+                    ):
+                        continue
+
+                    if not _resolved_is_local(
+                        item
+                    ):
+                        return None
+
+                    local_item = (
+                        _local_queue_item(
+                            item
+                        )
+                    )
+
+                    if local_item is None:
+                        return None
+
+                    rebuilt.append(
+                        local_item
+                    )
+
+                previous_position = None
 
         else:
             previous_position = (
                 current_position
             )
 
-        for index, (
+        for (
             api_item,
             anchor,
-        ) in enumerate(
-            matched
-        ):
+        ) in matched:
             target_position = (
                 _resolved_position(
                     anchor

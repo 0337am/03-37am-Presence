@@ -2010,6 +2010,261 @@ class SpotifyEffectiveQueueServiceTests(
             ],
         )
 
+    def test_adjacent_skipped_catalogue_before_verified_suffix_is_restored(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        skipped_uri = (
+            "spotify:track:Skipped123"
+        )
+
+        first_uri = (
+            "spotify:track:First123"
+        )
+
+        second_uri = (
+            "spotify:track:Second123"
+        )
+
+        third_uri = (
+            "spotify:track:Third123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "First",
+                first_uri,
+            ),
+            queue_item(
+                "Second",
+                second_uri,
+            ),
+            queue_item(
+                "Third",
+                third_uri,
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Local Before",
+                    (
+                        "spotify:local:"
+                        "artist:album:before:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Skipped Catalogue",
+                    skipped_uri,
+                ),
+                resolved_item(
+                    3,
+                    "First",
+                    first_uri,
+                ),
+                resolved_item(
+                    4,
+                    "Second",
+                    second_uri,
+                ),
+                resolved_item(
+                    5,
+                    "Local Gap",
+                    (
+                        "spotify:local:"
+                        "artist:album:gap:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    6,
+                    "Third",
+                    third_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Local Before",
+                "Skipped Catalogue",
+                "First",
+                "Second",
+                "Local Gap",
+                "Third",
+            ],
+        )
+
+        skipped = (
+            result.queue.items[
+                1
+            ]
+        )
+
+        self.assertEqual(
+            skipped.uri,
+            skipped_uri,
+        )
+
+        self.assertFalse(
+            skipped.is_local
+        )
+
+    def test_multiple_skipped_catalogue_anchors_are_not_reconstructed(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        first_skipped_uri = (
+            "spotify:track:SkippedA123"
+        )
+
+        second_skipped_uri = (
+            "spotify:track:SkippedB123"
+        )
+
+        first_uri = (
+            "spotify:track:First123"
+        )
+
+        second_uri = (
+            "spotify:track:Second123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "First",
+                first_uri,
+            ),
+            queue_item(
+                "Second",
+                second_uri,
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Safe Local",
+                    (
+                        "spotify:local:"
+                        "artist:album:safe:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Skipped A",
+                    first_skipped_uri,
+                ),
+                resolved_item(
+                    3,
+                    "Skipped B",
+                    second_skipped_uri,
+                ),
+                resolved_item(
+                    4,
+                    "First",
+                    first_uri,
+                ),
+                resolved_item(
+                    5,
+                    "Second",
+                    second_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Safe Local",
+                "First",
+                "Second",
+            ],
+        )
+
+        self.assertNotIn(
+            "Skipped A",
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+        )
+
+        self.assertNotIn(
+            "Skipped B",
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
