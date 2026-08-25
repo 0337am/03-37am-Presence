@@ -9576,6 +9576,10 @@ class DashboardPage(QWidget):
                 "#777777",
             )
 
+        icon_colour = QColor(
+            str(colour)
+        )
+
         pixmap = QPixmap(
             20,
             20,
@@ -9597,13 +9601,11 @@ class DashboardPage(QWidget):
         pen = painter.pen()
 
         pen.setColor(
-            QColor(
-                str(colour)
-            )
+            icon_colour
         )
 
         pen.setWidthF(
-            1.9
+            2.65
         )
 
         pen.setCapStyle(
@@ -9627,27 +9629,27 @@ class DashboardPage(QWidget):
             upper_path = QPainterPath()
 
             upper_path.moveTo(
-                3.0,
-                5.0,
+                2.8,
+                5.2,
             )
 
             upper_path.lineTo(
-                5.5,
                 5.0,
+                5.2,
             )
 
             upper_path.cubicTo(
-                8.0,
-                5.0,
-                10.5,
-                14.0,
+                7.7,
+                5.2,
+                10.2,
+                14.8,
                 14.5,
-                14.0,
+                14.8,
             )
 
             upper_path.lineTo(
-                16.5,
-                14.0,
+                15.1,
+                14.8,
             )
 
             painter.drawPath(
@@ -9657,95 +9659,101 @@ class DashboardPage(QWidget):
             lower_path = QPainterPath()
 
             lower_path.moveTo(
-                3.0,
-                14.0,
+                2.8,
+                14.8,
             )
 
             lower_path.lineTo(
-                5.5,
-                14.0,
+                5.0,
+                14.8,
             )
 
             lower_path.cubicTo(
-                8.0,
-                14.0,
-                10.5,
-                5.0,
+                7.7,
+                14.8,
+                10.2,
+                5.2,
                 14.5,
-                5.0,
+                5.2,
             )
 
             lower_path.lineTo(
-                16.5,
-                5.0,
+                15.1,
+                5.2,
             )
 
             painter.drawPath(
                 lower_path
             )
 
-            upper_arrow = QPainterPath()
+            top_arrow = QPainterPath()
 
-            upper_arrow.moveTo(
-                14.0,
+            top_arrow.moveTo(
+                14.2,
+                1.9,
+            )
+
+            top_arrow.lineTo(
+                18.0,
+                5.2,
+            )
+
+            top_arrow.lineTo(
+                14.2,
+                8.5,
+            )
+
+            top_arrow.closeSubpath()
+
+            painter.fillPath(
+                top_arrow,
+                icon_colour,
+            )
+
+            bottom_arrow = QPainterPath()
+
+            bottom_arrow.moveTo(
+                14.2,
                 11.5,
             )
 
-            upper_arrow.lineTo(
-                16.5,
-                14.0,
+            bottom_arrow.lineTo(
+                18.0,
+                14.8,
             )
 
-            upper_arrow.lineTo(
-                14.0,
-                16.5,
+            bottom_arrow.lineTo(
+                14.2,
+                18.1,
             )
 
-            painter.drawPath(
-                upper_arrow
-            )
+            bottom_arrow.closeSubpath()
 
-            lower_arrow = QPainterPath()
-
-            lower_arrow.moveTo(
-                14.0,
-                2.5,
-            )
-
-            lower_arrow.lineTo(
-                16.5,
-                5.0,
-            )
-
-            lower_arrow.lineTo(
-                14.0,
-                7.5,
-            )
-
-            painter.drawPath(
-                lower_arrow
+            painter.fillPath(
+                bottom_arrow,
+                icon_colour,
             )
 
         else:
             top_path = QPainterPath()
 
             top_path.moveTo(
-                4.0,
-                8.0,
+                4.1,
+                8.1,
             )
 
             top_path.cubicTo(
-                4.0,
-                6.0,
-                5.5,
-                5.0,
-                7.5,
-                5.0,
+                4.1,
+                5.8,
+                5.9,
+                4.5,
+                8.1,
+                4.5,
             )
 
             top_path.lineTo(
-                16.0,
-                5.0,
+                14.8,
+                4.5,
             )
 
             painter.drawPath(
@@ -9755,43 +9763,46 @@ class DashboardPage(QWidget):
             top_arrow = QPainterPath()
 
             top_arrow.moveTo(
-                13.5,
-                2.5,
+                13.8,
+                1.3,
             )
 
             top_arrow.lineTo(
-                16.0,
-                5.0,
+                17.7,
+                4.5,
             )
 
             top_arrow.lineTo(
-                13.5,
-                7.5,
+                13.8,
+                7.7,
             )
 
-            painter.drawPath(
-                top_arrow
+            top_arrow.closeSubpath()
+
+            painter.fillPath(
+                top_arrow,
+                icon_colour,
             )
 
             bottom_path = QPainterPath()
 
             bottom_path.moveTo(
-                16.0,
-                11.0,
+                15.9,
+                11.9,
             )
 
             bottom_path.cubicTo(
-                16.0,
-                13.0,
-                14.5,
-                15.0,
-                12.5,
-                15.0,
+                15.9,
+                14.2,
+                14.1,
+                15.5,
+                11.9,
+                15.5,
             )
 
             bottom_path.lineTo(
-                4.0,
-                15.0,
+                5.2,
+                15.5,
             )
 
             painter.drawPath(
@@ -9801,29 +9812,46 @@ class DashboardPage(QWidget):
             bottom_arrow = QPainterPath()
 
             bottom_arrow.moveTo(
-                6.5,
-                12.5,
+                6.2,
+                12.3,
             )
 
             bottom_arrow.lineTo(
-                4.0,
-                15.0,
+                2.3,
+                15.5,
             )
 
             bottom_arrow.lineTo(
-                6.5,
-                17.5,
+                6.2,
+                18.7,
             )
 
-            painter.drawPath(
-                bottom_arrow
+            bottom_arrow.closeSubpath()
+
+            painter.fillPath(
+                bottom_arrow,
+                icon_colour,
             )
 
             if normalized == "track":
+                text_pen = painter.pen()
+
+                text_pen.setWidthF(
+                    1.0
+                )
+
+                text_pen.setColor(
+                    icon_colour
+                )
+
+                painter.setPen(
+                    text_pen
+                )
+
                 font = painter.font()
 
                 font.setPixelSize(
-                    7
+                    8
                 )
 
                 font.setBold(
