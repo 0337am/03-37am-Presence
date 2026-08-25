@@ -24,6 +24,7 @@ SPOTIFY_PLAYBACK_CONTROL_METHODS = (
     "seek_to_seconds",
     "set_shuffle",
     "set_repeat_mode",
+    "add_to_queue",
 )
 
 
@@ -98,6 +99,51 @@ def _validate_playback_uri(
         )
 
     return checked
+
+def _validate_queue_item_uri(
+    value,
+) -> str:
+    if not isinstance(
+        value,
+        str,
+    ):
+        raise TypeError(
+            "spotify_uri must be a string"
+        )
+
+    checked = value.strip()
+
+    if checked != value:
+        raise ValueError(
+            "Spotify queue item URI is invalid."
+        )
+
+    for prefix in (
+        "spotify:track:",
+        "spotify:episode:",
+    ):
+        if not checked.startswith(
+            prefix
+        ):
+            continue
+
+        item_id = checked[
+            len(prefix):
+        ]
+
+        if (
+            item_id
+            and item_id.isascii()
+            and item_id.isalnum()
+        ):
+            return checked
+
+        break
+
+    raise ValueError(
+        "Spotify queue item URI is invalid."
+    )
+
 
 
 class _SpotifyPlaybackWorker(
@@ -620,6 +666,22 @@ class SpotifyQtPlaybackRuntime(
             "set_repeat_mode",
             control_argument=checked,
         )
+
+    def add_to_queue(
+        self,
+        spotify_uri,
+    ) -> None:
+        checked_uri = (
+            _validate_queue_item_uri(
+                spotify_uri
+            )
+        )
+
+        self._start_control(
+            "add_to_queue",
+            control_argument=checked_uri,
+        )
+
 
     def _start_control(
         self,
