@@ -1,8 +1,16 @@
 from src.spotify.playback_service import (
     SpotifyPlaybackService,
 )
+
+from src.spotify.queue_service import (
+    SpotifyQueueService,
+)
 from src.spotify.qt_playback_runtime import (
     SpotifyQtPlaybackRuntime,
+)
+
+from src.spotify.qt_queue_runtime import (
+    SpotifyQtQueueRuntime,
 )
 
 from pathlib import Path
@@ -1004,6 +1012,24 @@ class MainWindow(QMainWindow):
         spotify_session_manager = (
             self.spotify_session_manager
         )
+
+        self.spotify_queue_runtime = (
+            SpotifyQtQueueRuntime(
+                (
+                    lambda manager=spotify_session_manager:
+                    SpotifyQueueService(
+                        manager
+                    )
+                ),
+                parent=self,
+            )
+        )
+
+        DashboardPage.set_spotify_queue_runtime(
+            self.dashboard_page,
+            self.spotify_queue_runtime,
+        )
+
 
         self.spotify_search_runtime = (
             SpotifyQtSearchRuntime(
@@ -2401,6 +2427,7 @@ class MainWindow(QMainWindow):
                     pass
 
         for spotify_runtime_name in (
+            "spotify_queue_runtime",
             "spotify_playback_runtime",
             "spotify_album_runtime",
             "spotify_artist_runtime",

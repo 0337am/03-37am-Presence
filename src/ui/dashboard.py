@@ -11656,6 +11656,31 @@ class DashboardPage(QWidget):
         ):
             self.update_quick_access_layout()
 
+    def set_spotify_queue_runtime(
+        self,
+        runtime,
+    ) -> None:
+        loader = getattr(
+            runtime,
+            "load_queue",
+            None,
+        )
+
+        if not callable(
+            loader
+        ):
+            raise TypeError(
+                (
+                    "runtime must expose a callable "
+                    "load_queue() method"
+                )
+            )
+
+        self.spotify_queue_runtime = (
+            runtime
+        )
+
+
     def build_queue_card(
         self,
     ):
