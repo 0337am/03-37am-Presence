@@ -24,6 +24,9 @@ from PyQt6.QtGui import (
     QPixmap,
     QKeySequence,
     QShortcut,
+    QColor,
+    QIcon,
+    QPainter,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -912,6 +915,8 @@ class DashboardPage(QWidget):
         float,
         str,
     )
+    playback_shuffle_requested = pyqtSignal(bool, str)
+    playback_repeat_requested = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -8629,6 +8634,75 @@ class DashboardPage(QWidget):
         )
 
         playback_row.addStretch()
+        self.playback_shuffle_button = QPushButton()
+        self.playback_shuffle_button.setObjectName(
+            self.playback_previous_button.objectName()
+        )
+        self.playback_shuffle_button.setFixedSize(
+            self.playback_previous_button.size()
+        )
+        self.playback_shuffle_button.setIconSize(
+            self.playback_previous_button.iconSize()
+        )
+        self.playback_shuffle_button.setCursor(
+            self.playback_previous_button.cursor()
+        )
+        self.playback_shuffle_button.setFocusPolicy(
+            self.playback_previous_button.focusPolicy()
+        )
+        self.playback_shuffle_button.setAccessibleName(
+            "Shuffle"
+        )
+        self.playback_shuffle_button.setAccessibleDescription(
+            "Shuffle unavailable"
+        )
+        self.playback_shuffle_button.setStatusTip(
+            "Toggle Spotify shuffle"
+        )
+        self.playback_shuffle_button.setToolTip(
+            "Shuffle unavailable"
+        )
+        self.playback_shuffle_button.setEnabled(False)
+        self.playback_shuffle_button.clicked.connect(
+            self.request_shuffle_playback
+        )
+
+        self.playback_repeat_button = QPushButton()
+        self.playback_repeat_button.setObjectName(
+            self.playback_next_button.objectName()
+        )
+        self.playback_repeat_button.setFixedSize(
+            self.playback_next_button.size()
+        )
+        self.playback_repeat_button.setIconSize(
+            self.playback_next_button.iconSize()
+        )
+        self.playback_repeat_button.setCursor(
+            self.playback_next_button.cursor()
+        )
+        self.playback_repeat_button.setFocusPolicy(
+            self.playback_next_button.focusPolicy()
+        )
+        self.playback_repeat_button.setAccessibleName(
+            "Repeat"
+        )
+        self.playback_repeat_button.setAccessibleDescription(
+            "Repeat unavailable"
+        )
+        self.playback_repeat_button.setStatusTip(
+            "Cycle Spotify repeat mode"
+        )
+        self.playback_repeat_button.setToolTip(
+            "Repeat unavailable"
+        )
+        self.playback_repeat_button.setEnabled(False)
+        self.playback_repeat_button.clicked.connect(
+            self.request_repeat_playback
+        )
+
+        playback_row.addWidget(
+            self.playback_shuffle_button
+        )
         playback_row.addWidget(
             self.playback_previous_button
         )
@@ -8637,6 +8711,9 @@ class DashboardPage(QWidget):
         )
         playback_row.addWidget(
             self.playback_next_button
+        )
+        playback_row.addWidget(
+            self.playback_repeat_button
         )
         playback_row.addStretch()
 
@@ -8893,6 +8970,80 @@ class DashboardPage(QWidget):
     ) -> bool:
         return self._emit_playback_control(
             "next"
+        )
+
+    def request_shuffle_playback(self):
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        shuffle_active = getattr(
+            song,
+            "shuffle_active",
+            None,
+        )
+
+        if not isinstance(
+            shuffle_active,
+            bool,
+        ):
+            return
+
+        source_app = str(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+            or ""
+        )
+
+        self.playback_shuffle_requested.emit(
+            not shuffle_active,
+            source_app,
+        )
+
+    def request_repeat_playback(self):
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        repeat_mode = str(
+            getattr(
+                song,
+                "repeat_mode",
+                "",
+            )
+            or ""
+        ).strip().casefold()
+
+        desired_mode = {
+            "off": "context",
+            "context": "track",
+            "track": "off",
+        }.get(
+            repeat_mode
+        )
+
+        if desired_mode is None:
+            return
+
+        source_app = str(
+            getattr(
+                song,
+                "source_app",
+                "",
+            )
+            or ""
+        )
+
+        self.playback_repeat_requested.emit(
+            desired_mode,
+            source_app,
         )
 
     def _playback_seek_seconds_for_value(
@@ -9381,6 +9532,227 @@ class DashboardPage(QWidget):
 
         return themed_icon
 
+    def _playback_mode_icon(
+        self,
+        mode,
+        *,
+        active=False,
+        enabled=True,
+        theme=None,
+    ):
+        resolved_theme = (
+            theme
+            if isinstance(
+                theme,
+                dict,
+            )
+            else getattr(
+                self,
+                "_playback_control_theme",
+                {},
+            )
+        )
+
+        if not isinstance(
+            resolved_theme,
+            dict,
+        ):
+            resolved_theme = {}
+
+        if active:
+            colour = resolved_theme.get(
+                "accent",
+                "#ff6fbd",
+            )
+        elif enabled:
+            colour = resolved_theme.get(
+                "text",
+                "#f2f2f2",
+            )
+        else:
+            colour = resolved_theme.get(
+                "muted",
+                "#777777",
+            )
+
+        pixmap = QPixmap(
+            20,
+            20,
+        )
+
+        pixmap.fill(
+            Qt.GlobalColor.transparent
+        )
+
+        painter = QPainter(
+            pixmap
+        )
+
+        painter.setRenderHint(
+            QPainter.RenderHint.Antialiasing,
+            True,
+        )
+
+        pen = painter.pen()
+
+        pen.setColor(
+            QColor(
+                str(colour)
+            )
+        )
+
+        pen.setWidth(2)
+
+        painter.setPen(pen)
+
+        normalized = str(
+            mode or ""
+        ).strip().casefold()
+
+        if normalized == "shuffle":
+            painter.drawLine(
+                3, 5, 7, 5
+            )
+            painter.drawLine(
+                7, 5, 13, 14
+            )
+            painter.drawLine(
+                13, 14, 17, 14
+            )
+            painter.drawLine(
+                14, 11, 17, 14
+            )
+            painter.drawLine(
+                14, 17, 17, 14
+            )
+
+            painter.drawLine(
+                3, 14, 7, 14
+            )
+            painter.drawLine(
+                7, 14, 13, 5
+            )
+            painter.drawLine(
+                13, 5, 17, 5
+            )
+            painter.drawLine(
+                14, 2, 17, 5
+            )
+            painter.drawLine(
+                14, 8, 17, 5
+            )
+
+        else:
+            painter.drawLine(
+                4, 6, 15, 6
+            )
+            painter.drawLine(
+                15, 6, 17, 8
+            )
+            painter.drawLine(
+                17, 8, 15, 10
+            )
+            painter.drawLine(
+                16, 13, 5, 13
+            )
+            painter.drawLine(
+                5, 13, 3, 11
+            )
+            painter.drawLine(
+                3, 11, 5, 9
+            )
+
+            if normalized == "track":
+                font = painter.font()
+                font.setPointSize(6)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.drawText(
+                    9,
+                    12,
+                    "1",
+                )
+
+        painter.end()
+
+        return QIcon(pixmap)
+
+    def _refresh_playback_mode_icons(
+        self,
+        theme=None,
+    ):
+        if isinstance(
+            theme,
+            dict,
+        ):
+            self._playback_control_theme = dict(
+                theme
+            )
+
+        resolved_theme = getattr(
+            self,
+            "_playback_control_theme",
+            {},
+        )
+
+        shuffle_button = getattr(
+            self,
+            "playback_shuffle_button",
+            None,
+        )
+
+        repeat_button = getattr(
+            self,
+            "playback_repeat_button",
+            None,
+        )
+
+        if shuffle_button is not None:
+            shuffle_button.setIcon(
+                self._playback_mode_icon(
+                    "shuffle",
+                    active=bool(
+                        shuffle_button.property(
+                            "playbackModeActive"
+                        )
+                    ),
+                    enabled=(
+                        shuffle_button.isEnabled()
+                    ),
+                    theme=resolved_theme,
+                )
+            )
+
+        if repeat_button is not None:
+            repeat_mode = str(
+                repeat_button.property(
+                    "playbackRepeatMode"
+                )
+                or "off"
+            ).strip().casefold()
+
+            repeat_button.setIcon(
+                self._playback_mode_icon(
+                    (
+                        "track"
+                        if repeat_mode
+                        == "track"
+                        else "repeat"
+                    ),
+                    active=(
+                        repeat_mode
+                        in {
+                            "context",
+                            "track",
+                        }
+                    ),
+                    enabled=(
+                        repeat_button.isEnabled()
+                    ),
+                    theme=resolved_theme,
+                )
+            )
+
     def _refresh_playback_transport_icons(
         self,
         theme=None,
@@ -9497,6 +9869,10 @@ class DashboardPage(QWidget):
             )
         )
 
+        self._refresh_playback_mode_icons(
+            theme
+        )
+
     def sync_playback_control_state(
         self,
         *,
@@ -9586,6 +9962,136 @@ class DashboardPage(QWidget):
         self._refresh_playback_transport_icons(
             playing=playing
         )
+
+        song = getattr(
+            self,
+            "song",
+            None,
+        )
+
+        shuffle_state = (
+            getattr(
+                song,
+                "shuffle_active",
+                None,
+            )
+            if available
+            else None
+        )
+
+        repeat_mode = (
+            str(
+                getattr(
+                    song,
+                    "repeat_mode",
+                    "",
+                )
+                or ""
+            ).strip().casefold()
+            if available
+            else ""
+        )
+
+        shuffle_known = isinstance(
+            shuffle_state,
+            bool,
+        )
+
+        repeat_known = (
+            repeat_mode
+            in {
+                "off",
+                "context",
+                "track",
+            }
+        )
+
+        self.playback_shuffle_button.setEnabled(
+            bool(
+                available
+                and shuffle_known
+            )
+        )
+
+        self.playback_repeat_button.setEnabled(
+            bool(
+                available
+                and repeat_known
+            )
+        )
+
+        self.playback_shuffle_button.setProperty(
+            "playbackModeActive",
+            (
+                bool(shuffle_state)
+                if shuffle_known
+                else False
+            ),
+        )
+
+        self.playback_repeat_button.setProperty(
+            "playbackModeActive",
+            (
+                repeat_mode
+                in {
+                    "context",
+                    "track",
+                }
+            )
+            if repeat_known
+            else False,
+        )
+
+        self.playback_repeat_button.setProperty(
+            "playbackRepeatMode",
+            (
+                repeat_mode
+                if repeat_known
+                else ""
+            ),
+        )
+
+        if shuffle_known:
+            shuffle_label = (
+                "Shuffle on"
+                if shuffle_state
+                else "Shuffle off"
+            )
+        else:
+            shuffle_label = (
+                "Shuffle unavailable"
+            )
+
+        if repeat_known:
+            repeat_label = {
+                "off": "Repeat off",
+                "context": (
+                    "Repeat context"
+                ),
+                "track": "Repeat track",
+            }[repeat_mode]
+        else:
+            repeat_label = (
+                "Repeat unavailable"
+            )
+
+        self.playback_shuffle_button.setToolTip(
+            shuffle_label
+        )
+
+        self.playback_shuffle_button.setAccessibleDescription(
+            shuffle_label
+        )
+
+        self.playback_repeat_button.setToolTip(
+            repeat_label
+        )
+
+        self.playback_repeat_button.setAccessibleDescription(
+            repeat_label
+        )
+
+        self._refresh_playback_mode_icons()
 
     def build_discord_preview_card(self):
         self.preview_card = DiscordProfilePreview(

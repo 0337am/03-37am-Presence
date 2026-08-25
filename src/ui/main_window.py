@@ -1177,6 +1177,12 @@ class MainWindow(QMainWindow):
         self.dashboard_page.playback_seek_requested.connect(
             self.playback_control_coordinator.request_seek
         )
+        self.dashboard_page.playback_shuffle_requested.connect(
+            self.playback_control_coordinator.request_shuffle
+        )
+        self.dashboard_page.playback_repeat_requested.connect(
+            self.playback_control_coordinator.request_repeat_mode
+        )
 
 
         self.spotify_page = SpotifyPage(

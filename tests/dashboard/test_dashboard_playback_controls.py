@@ -99,6 +99,8 @@ class DashboardPlaybackControlTests(
     def tearDown(
         self,
     ):
+        self.page.stop_media_worker()
+
         for timer in self.page.findChildren(
             QTimer
         ):
@@ -547,6 +549,275 @@ class DashboardPlaybackControlTests(
 
         self.assertIn(
             "shutdown_playback_controls",
+            source,
+        )
+
+    def test_shuffle_repeat_buttons_exist_and_start_disabled(self):
+        self.assertIsNotNone(
+            self.page.playback_shuffle_button
+        )
+
+        self.assertIsNotNone(
+            self.page.playback_repeat_button
+        )
+
+        self.assertFalse(
+            self.page.playback_shuffle_button.isEnabled()
+        )
+
+        self.assertFalse(
+            self.page.playback_repeat_button.isEnabled()
+        )
+
+    def test_authoritative_shuffle_repeat_state_controls_buttons(self):
+        song = type(
+            "PlaybackModeSong",
+            (),
+            {},
+        )()
+
+        song.playing = True
+        song.source_app = "Spotify"
+        song.shuffle_active = True
+        song.repeat_mode = "context"
+
+        self.page.song = song
+
+        self.page.sync_playback_control_state(
+            available=True
+        )
+
+        self.assertTrue(
+            self.page.playback_shuffle_button.isEnabled()
+        )
+
+        self.assertTrue(
+            self.page.playback_repeat_button.isEnabled()
+        )
+
+        self.assertTrue(
+            bool(
+                self.page.playback_shuffle_button.property(
+                    "playbackModeActive"
+                )
+            )
+        )
+
+        self.assertTrue(
+            bool(
+                self.page.playback_repeat_button.property(
+                    "playbackModeActive"
+                )
+            )
+        )
+
+        self.assertEqual(
+            self.page.playback_repeat_button.property(
+                "playbackRepeatMode"
+            ),
+            "context",
+        )
+
+    def test_shuffle_repeat_clicks_do_not_optimistically_mutate_truth(self):
+        song = type(
+            "PlaybackModeSong",
+            (),
+            {},
+        )()
+
+        song.playing = True
+        song.source_app = "Spotify"
+        song.shuffle_active = True
+        song.repeat_mode = "off"
+
+        shuffle_requests = []
+        repeat_requests = []
+
+        self.page.playback_shuffle_requested.connect(
+            lambda enabled, source:
+            shuffle_requests.append(
+                (
+                    enabled,
+                    source,
+                )
+            )
+        )
+
+        self.page.playback_repeat_requested.connect(
+            lambda mode, source:
+            repeat_requests.append(
+                (
+                    mode,
+                    source,
+                )
+            )
+        )
+
+        self.page.song = song
+
+        self.page.sync_playback_control_state(
+            available=True
+        )
+
+        self.page.playback_shuffle_button.click()
+        self.page.playback_repeat_button.click()
+
+        self.assertEqual(
+            shuffle_requests,
+            [
+                (
+                    False,
+                    "Spotify",
+                )
+            ],
+        )
+
+        self.assertEqual(
+            repeat_requests,
+            [
+                (
+                    "context",
+                    "Spotify",
+                )
+            ],
+        )
+
+        self.assertIs(
+            song.shuffle_active,
+            True,
+        )
+
+        self.assertEqual(
+            song.repeat_mode,
+            "off",
+        )
+
+    def test_repeat_button_cycles_from_authoritative_modes(self):
+        song = type(
+            "PlaybackModeSong",
+            (),
+            {},
+        )()
+
+        song.playing = True
+        song.source_app = "Spotify"
+        song.shuffle_active = False
+        song.repeat_mode = "off"
+
+        requests = []
+
+        self.page.playback_repeat_requested.connect(
+            lambda mode, source:
+            requests.append(
+                (
+                    mode,
+                    source,
+                )
+            )
+        )
+
+        self.page.song = song
+
+        for current, expected in (
+            (
+                "off",
+                "context",
+            ),
+            (
+                "context",
+                "track",
+            ),
+            (
+                "track",
+                "off",
+            ),
+        ):
+            song.repeat_mode = current
+
+            self.page.sync_playback_control_state(
+                available=True
+            )
+
+            self.page.playback_repeat_button.click()
+
+            self.assertEqual(
+                requests[-1],
+                (
+                    expected,
+                    "Spotify",
+                ),
+            )
+
+            self.assertEqual(
+                song.repeat_mode,
+                current,
+            )
+
+    def test_unknown_shuffle_repeat_state_disables_only_mode_controls(self):
+        song = type(
+            "PlaybackModeSong",
+            (),
+            {},
+        )()
+
+        song.playing = True
+        song.source_app = "Spotify"
+        song.shuffle_active = None
+        song.repeat_mode = None
+
+        self.page.song = song
+
+        self.page.sync_playback_control_state(
+            available=True
+        )
+
+        self.assertFalse(
+            self.page.playback_shuffle_button.isEnabled()
+        )
+
+        self.assertFalse(
+            self.page.playback_repeat_button.isEnabled()
+        )
+
+        self.assertTrue(
+            self.page.playback_previous_button.isEnabled()
+        )
+
+        self.assertTrue(
+            self.page.playback_play_pause_button.isEnabled()
+        )
+
+        self.assertTrue(
+            self.page.playback_next_button.isEnabled()
+        )
+
+    def test_main_window_routes_shuffle_repeat_signals(self):
+        source = (
+            REPO_ROOT
+            / "src"
+            / "ui"
+            / "main_window.py"
+        ).read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "playback_shuffle_requested.connect",
+            source,
+        )
+
+        self.assertIn(
+            "playback_control_coordinator.request_shuffle",
+            source,
+        )
+
+        self.assertIn(
+            "playback_repeat_requested.connect",
+            source,
+        )
+
+        self.assertIn(
+            "playback_control_coordinator.request_repeat_mode",
             source,
         )
 
