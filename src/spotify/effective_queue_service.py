@@ -1180,7 +1180,9 @@ class SpotifyEffectiveQueueService:
         if not future:
             return None
 
+        remaining_playlist = []
         playlist_anchors = []
+        unsafe_nonlocal = False
 
         for item in resolved_items:
             position = (
@@ -1193,21 +1195,63 @@ class SpotifyEffectiveQueueService:
                 position is None
                 or position
                 <= current_position
-                or _resolved_is_local(item)
+            ):
+                continue
+
+            remaining_playlist.append(
+                item
+            )
+
+            if _resolved_is_local(
+                item
             ):
                 continue
 
             uri = _resolved_uri(item)
 
             if not uri:
+                unsafe_nonlocal = True
                 continue
 
             playlist_anchors.append(
                 item
             )
 
-        if not playlist_anchors:
+        if unsafe_nonlocal:
             return None
+
+        if not playlist_anchors:
+            if not remaining_playlist:
+                return None
+
+            rebuilt_tail = []
+
+            for item in remaining_playlist:
+                if not _resolved_is_local(
+                    item
+                ):
+                    return None
+
+                local_item = (
+                    _local_queue_item(
+                        item
+                    )
+                )
+
+                if local_item is None:
+                    return None
+
+                rebuilt_tail.append(
+                    local_item
+                )
+
+            rebuilt_tail.extend(
+                future
+            )
+
+            return tuple(
+                rebuilt_tail
+            )
 
         matched = []
 
@@ -1305,6 +1349,42 @@ class SpotifyEffectiveQueueService:
             previous_position = (
                 target_position
             )
+
+        if (
+            len(matched)
+            == len(playlist_anchors)
+        ):
+            for item in remaining_playlist:
+                position = (
+                    _resolved_position(
+                        item
+                    )
+                )
+
+                if (
+                    position is None
+                    or position
+                    <= previous_position
+                ):
+                    continue
+
+                if not _resolved_is_local(
+                    item
+                ):
+                    return None
+
+                local_item = (
+                    _local_queue_item(
+                        item
+                    )
+                )
+
+                if local_item is None:
+                    return None
+
+                rebuilt.append(
+                    local_item
+                )
 
         rebuilt.extend(
             future[

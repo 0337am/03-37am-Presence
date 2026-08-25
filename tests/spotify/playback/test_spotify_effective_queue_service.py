@@ -1281,6 +1281,251 @@ class SpotifyEffectiveQueueServiceTests(
             source,
         )
 
+    def test_all_local_playlist_tail_precedes_api_future(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "Post Playlist",
+                "spotify:track:Post123",
+            ),
+            queue_item(
+                "Later",
+                "spotify:track:Later123",
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Local Tail One",
+                    (
+                        "spotify:local:"
+                        "artist:album:tailone:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Local Tail Two",
+                    (
+                        "spotify:local:"
+                        "artist:album:tailtwo:180"
+                    ),
+                    local=True,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Local Tail One",
+                "Local Tail Two",
+                "Post Playlist",
+                "Later",
+            ],
+        )
+
+        self.assertTrue(
+            result.queue.items[
+                0
+            ].is_local
+        )
+
+        self.assertTrue(
+            result.queue.items[
+                1
+            ].is_local
+        )
+
+    def test_trailing_locals_follow_last_matched_playlist_anchor(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        anchor_uri = (
+            "spotify:track:Anchor123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "Current",
+                current_uri,
+                local=True,
+            ),
+            queue_item(
+                "Anchor",
+                anchor_uri,
+            ),
+            queue_item(
+                "Post Playlist",
+                "spotify:track:Post123",
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Anchor",
+                    anchor_uri,
+                ),
+                resolved_item(
+                    2,
+                    "Local Tail One",
+                    (
+                        "spotify:local:"
+                        "artist:album:tailone:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    3,
+                    "Local Tail Two",
+                    (
+                        "spotify:local:"
+                        "artist:album:tailtwo:180"
+                    ),
+                    local=True,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Anchor",
+                "Local Tail One",
+                "Local Tail Two",
+                "Post Playlist",
+            ],
+        )
+
+    def test_missing_nonlocal_uri_blocks_tail_inference(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "Current",
+                current_uri,
+                local=True,
+            ),
+            queue_item(
+                "API Future",
+                "spotify:track:Future123",
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Local",
+                    (
+                        "spotify:local:"
+                        "artist:album:local:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Untrusted Catalogue",
+                    "",
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertIs(
+            result,
+            base,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
