@@ -1686,6 +1686,330 @@ class SpotifyEffectiveQueueServiceTests(
                 ),
             )
 
+    def test_later_catalogue_suffix_restores_only_safe_local_gaps(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        skipped_uri = (
+            "spotify:track:Skipped123"
+        )
+
+        first_uri = (
+            "spotify:track:First123"
+        )
+
+        second_uri = (
+            "spotify:track:Second123"
+        )
+
+        third_uri = (
+            "spotify:track:Third123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "First",
+                first_uri,
+            ),
+            queue_item(
+                "Second",
+                second_uri,
+            ),
+            queue_item(
+                "Third",
+                third_uri,
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Safe Local One",
+                    (
+                        "spotify:local:"
+                        "artist:album:safeone:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Safe Local Two",
+                    (
+                        "spotify:local:"
+                        "artist:album:safetwo:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    3,
+                    "Skipped Catalogue",
+                    skipped_uri,
+                ),
+                resolved_item(
+                    4,
+                    "Uncertain Local",
+                    (
+                        "spotify:local:"
+                        "artist:album:uncertain:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    5,
+                    "First",
+                    first_uri,
+                ),
+                resolved_item(
+                    6,
+                    "Second",
+                    second_uri,
+                ),
+                resolved_item(
+                    7,
+                    "Trusted Local Gap",
+                    (
+                        "spotify:local:"
+                        "artist:album:trustedgap:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    8,
+                    "Third",
+                    third_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Safe Local One",
+                "Safe Local Two",
+                "First",
+                "Second",
+                "Trusted Local Gap",
+                "Third",
+            ],
+        )
+
+        self.assertNotIn(
+            "Skipped Catalogue",
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+        )
+
+        self.assertNotIn(
+            "Uncertain Local",
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+        )
+
+    def test_single_later_anchor_is_not_enough_for_suffix_inference(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        skipped_uri = (
+            "spotify:track:Skipped123"
+        )
+
+        later_uri = (
+            "spotify:track:Later123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "Later",
+                later_uri,
+            )
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Local",
+                    (
+                        "spotify:local:"
+                        "artist:album:local:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Skipped",
+                    skipped_uri,
+                ),
+                resolved_item(
+                    3,
+                    "Later",
+                    later_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            result.queue.items,
+            (),
+        )
+
+    def test_incomplete_later_suffix_preserves_api_queue(
+        self,
+    ):
+        current_uri = (
+            "spotify:local:"
+            "artist:album:current:180"
+        )
+
+        skipped_uri = (
+            "spotify:track:Skipped123"
+        )
+
+        first_uri = (
+            "spotify:track:First123"
+        )
+
+        expected_uri = (
+            "spotify:track:Expected123"
+        )
+
+        manual_uri = (
+            "spotify:track:Manual123"
+        )
+
+        base = ready_queue(
+            queue_item(
+                "First",
+                first_uri,
+            ),
+            queue_item(
+                "Manual Queue",
+                manual_uri,
+            ),
+        )
+
+        resolved = ResolvedServiceStub(
+            (
+                resolved_item(
+                    0,
+                    "Current",
+                    current_uri,
+                    local=True,
+                ),
+                resolved_item(
+                    1,
+                    "Safe Local",
+                    (
+                        "spotify:local:"
+                        "artist:album:safe:180"
+                    ),
+                    local=True,
+                ),
+                resolved_item(
+                    2,
+                    "Skipped",
+                    skipped_uri,
+                ),
+                resolved_item(
+                    3,
+                    "First",
+                    first_uri,
+                ),
+                resolved_item(
+                    4,
+                    "Expected",
+                    expected_uri,
+                ),
+            )
+        )
+
+        result = (
+            self.make_service(
+                base,
+                player_payload(
+                    player_track(
+                        "Current",
+                        current_uri,
+                        local=True,
+                    )
+                ),
+                resolved,
+            )
+            .get_queue()
+        )
+
+        self.assertEqual(
+            [
+                item.name
+                for item
+                in result.queue.items
+            ],
+            [
+                "Manual Queue",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

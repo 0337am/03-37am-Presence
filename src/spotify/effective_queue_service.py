@@ -1208,7 +1208,9 @@ class SpotifyEffectiveQueueService:
             ):
                 continue
 
-            uri = _resolved_uri(item)
+            uri = _resolved_uri(
+                item
+            )
 
             if not uri:
                 unsafe_nonlocal = True
@@ -1254,64 +1256,122 @@ class SpotifyEffectiveQueueService:
                 rebuilt_tail
             )
 
-        matched = []
+        def match_from(
+            anchor_start,
+        ):
+            matched_items = []
 
-        for api_item in future:
-            if len(matched) >= len(
-                playlist_anchors
-            ):
-                break
-
-            if (
-                api_item.item_type
-                != QUEUE_ITEM_TRACK
-                or api_item.is_local
-            ):
-                break
-
-            expected = (
-                playlist_anchors[
-                    len(matched)
-                ]
-            )
-
-            if not _uris_equal(
-                api_item.uri,
-                _resolved_uri(
-                    expected
-                ),
-            ):
-                break
-
-            matched.append(
-                (
-                    api_item,
-                    expected,
+            for api_item in future:
+                anchor_index = (
+                    anchor_start
+                    + len(
+                        matched_items
+                    )
                 )
-            )
 
-        if not matched:
-            return None
+                if anchor_index >= len(
+                    playlist_anchors
+                ):
+                    break
 
-        rebuilt = []
-        previous_position = (
-            current_position
+                if (
+                    api_item.item_type
+                    != QUEUE_ITEM_TRACK
+                    or api_item.is_local
+                ):
+                    break
+
+                expected = (
+                    playlist_anchors[
+                        anchor_index
+                    ]
+                )
+
+                if not _uris_equal(
+                    api_item.uri,
+                    _resolved_uri(
+                        expected
+                    ),
+                ):
+                    break
+
+                matched_items.append(
+                    (
+                        api_item,
+                        expected,
+                    )
+                )
+
+            return matched_items
+
+        anchor_start = 0
+        matched = match_from(
+            0
         )
 
-        for (
-            api_item,
-            anchor,
-        ) in matched:
-            target_position = (
+        if not matched:
+            minimum_later_suffix_matches = 2
+            suffix_candidates = []
+
+            for candidate_start in range(
+                1,
+                len(
+                    playlist_anchors
+                ),
+            ):
+                candidate = match_from(
+                    candidate_start
+                )
+
+                if len(
+                    candidate
+                ) < minimum_later_suffix_matches:
+                    continue
+
+                if len(
+                    candidate
+                ) != (
+                    len(
+                        playlist_anchors
+                    )
+                    - candidate_start
+                ):
+                    continue
+
+                suffix_candidates.append(
+                    (
+                        candidate_start,
+                        candidate,
+                    )
+                )
+
+            if len(
+                suffix_candidates
+            ) != 1:
+                return None
+
+            (
+                anchor_start,
+                matched,
+            ) = suffix_candidates[
+                0
+            ]
+
+        rebuilt = []
+
+        if anchor_start:
+            first_skipped_position = (
                 _resolved_position(
-                    anchor
+                    playlist_anchors[
+                        0
+                    ]
                 )
             )
 
-            if target_position is None:
+            if first_skipped_position is None:
                 return None
 
-            for item in resolved_items:
+            for item in remaining_playlist:
                 position = (
                     _resolved_position(
                         item
@@ -1321,14 +1381,16 @@ class SpotifyEffectiveQueueService:
                 if (
                     position is None
                     or position
-                    <= previous_position
+                    <= current_position
                     or position
-                    >= target_position
-                    or not _resolved_is_local(
-                        item
-                    )
+                    >= first_skipped_position
                 ):
                     continue
+
+                if not _resolved_is_local(
+                    item
+                ):
+                    return None
 
                 local_item = (
                     _local_queue_item(
@@ -1343,6 +1405,64 @@ class SpotifyEffectiveQueueService:
                     local_item
                 )
 
+            previous_position = None
+
+        else:
+            previous_position = (
+                current_position
+            )
+
+        for index, (
+            api_item,
+            anchor,
+        ) in enumerate(
+            matched
+        ):
+            target_position = (
+                _resolved_position(
+                    anchor
+                )
+            )
+
+            if target_position is None:
+                return None
+
+            if (
+                previous_position
+                is not None
+            ):
+                for item in resolved_items:
+                    position = (
+                        _resolved_position(
+                            item
+                        )
+                    )
+
+                    if (
+                        position is None
+                        or position
+                        <= previous_position
+                        or position
+                        >= target_position
+                        or not _resolved_is_local(
+                            item
+                        )
+                    ):
+                        continue
+
+                    local_item = (
+                        _local_queue_item(
+                            item
+                        )
+                    )
+
+                    if local_item is None:
+                        return None
+
+                    rebuilt.append(
+                        local_item
+                    )
+
             rebuilt.append(
                 api_item
             )
@@ -1352,8 +1472,13 @@ class SpotifyEffectiveQueueService:
             )
 
         if (
-            len(matched)
-            == len(playlist_anchors)
+            anchor_start
+            + len(
+                matched
+            )
+            == len(
+                playlist_anchors
+            )
         ):
             for item in remaining_playlist:
                 position = (
@@ -1389,11 +1514,15 @@ class SpotifyEffectiveQueueService:
 
         rebuilt.extend(
             future[
-                len(matched):
+                len(
+                    matched
+                ):
             ]
         )
 
-        return tuple(rebuilt)
+        return tuple(
+            rebuilt
+        )
 
     def _effective_snapshot(
         self,
