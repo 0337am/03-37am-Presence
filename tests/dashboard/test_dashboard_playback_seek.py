@@ -98,6 +98,8 @@ class DashboardPlaybackSeekTests(
     def tearDown(
         self,
     ):
+        self.page.stop_media_worker()
+
         for timer in self.page.findChildren(
             QTimer
         ):
