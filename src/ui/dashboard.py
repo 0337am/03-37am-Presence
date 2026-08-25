@@ -27,6 +27,7 @@ from PyQt6.QtGui import (
     QColor,
     QIcon,
     QPainter,
+    QPainterPath,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -9601,81 +9602,249 @@ class DashboardPage(QWidget):
             )
         )
 
-        pen.setWidth(2)
+        pen.setWidthF(
+            1.9
+        )
 
-        painter.setPen(pen)
+        pen.setCapStyle(
+            Qt.PenCapStyle.RoundCap
+        )
+
+        pen.setJoinStyle(
+            Qt.PenJoinStyle.RoundJoin
+        )
+
+        painter.setPen(
+            pen
+        )
 
         normalized = str(
-            mode or ""
+            mode
+            or ""
         ).strip().casefold()
 
         if normalized == "shuffle":
-            painter.drawLine(
-                3, 5, 7, 5
-            )
-            painter.drawLine(
-                7, 5, 13, 14
-            )
-            painter.drawLine(
-                13, 14, 17, 14
-            )
-            painter.drawLine(
-                14, 11, 17, 14
-            )
-            painter.drawLine(
-                14, 17, 17, 14
+            upper_path = QPainterPath()
+
+            upper_path.moveTo(
+                3.0,
+                5.0,
             )
 
-            painter.drawLine(
-                3, 14, 7, 14
+            upper_path.lineTo(
+                5.5,
+                5.0,
             )
-            painter.drawLine(
-                7, 14, 13, 5
+
+            upper_path.cubicTo(
+                8.0,
+                5.0,
+                10.5,
+                14.0,
+                14.5,
+                14.0,
             )
-            painter.drawLine(
-                13, 5, 17, 5
+
+            upper_path.lineTo(
+                16.5,
+                14.0,
             )
-            painter.drawLine(
-                14, 2, 17, 5
+
+            painter.drawPath(
+                upper_path
             )
-            painter.drawLine(
-                14, 8, 17, 5
+
+            lower_path = QPainterPath()
+
+            lower_path.moveTo(
+                3.0,
+                14.0,
+            )
+
+            lower_path.lineTo(
+                5.5,
+                14.0,
+            )
+
+            lower_path.cubicTo(
+                8.0,
+                14.0,
+                10.5,
+                5.0,
+                14.5,
+                5.0,
+            )
+
+            lower_path.lineTo(
+                16.5,
+                5.0,
+            )
+
+            painter.drawPath(
+                lower_path
+            )
+
+            upper_arrow = QPainterPath()
+
+            upper_arrow.moveTo(
+                14.0,
+                11.5,
+            )
+
+            upper_arrow.lineTo(
+                16.5,
+                14.0,
+            )
+
+            upper_arrow.lineTo(
+                14.0,
+                16.5,
+            )
+
+            painter.drawPath(
+                upper_arrow
+            )
+
+            lower_arrow = QPainterPath()
+
+            lower_arrow.moveTo(
+                14.0,
+                2.5,
+            )
+
+            lower_arrow.lineTo(
+                16.5,
+                5.0,
+            )
+
+            lower_arrow.lineTo(
+                14.0,
+                7.5,
+            )
+
+            painter.drawPath(
+                lower_arrow
             )
 
         else:
-            painter.drawLine(
-                4, 6, 15, 6
+            top_path = QPainterPath()
+
+            top_path.moveTo(
+                4.0,
+                8.0,
             )
-            painter.drawLine(
-                15, 6, 17, 8
+
+            top_path.cubicTo(
+                4.0,
+                6.0,
+                5.5,
+                5.0,
+                7.5,
+                5.0,
             )
-            painter.drawLine(
-                17, 8, 15, 10
+
+            top_path.lineTo(
+                16.0,
+                5.0,
             )
-            painter.drawLine(
-                16, 13, 5, 13
+
+            painter.drawPath(
+                top_path
             )
-            painter.drawLine(
-                5, 13, 3, 11
+
+            top_arrow = QPainterPath()
+
+            top_arrow.moveTo(
+                13.5,
+                2.5,
             )
-            painter.drawLine(
-                3, 11, 5, 9
+
+            top_arrow.lineTo(
+                16.0,
+                5.0,
+            )
+
+            top_arrow.lineTo(
+                13.5,
+                7.5,
+            )
+
+            painter.drawPath(
+                top_arrow
+            )
+
+            bottom_path = QPainterPath()
+
+            bottom_path.moveTo(
+                16.0,
+                11.0,
+            )
+
+            bottom_path.cubicTo(
+                16.0,
+                13.0,
+                14.5,
+                15.0,
+                12.5,
+                15.0,
+            )
+
+            bottom_path.lineTo(
+                4.0,
+                15.0,
+            )
+
+            painter.drawPath(
+                bottom_path
+            )
+
+            bottom_arrow = QPainterPath()
+
+            bottom_arrow.moveTo(
+                6.5,
+                12.5,
+            )
+
+            bottom_arrow.lineTo(
+                4.0,
+                15.0,
+            )
+
+            bottom_arrow.lineTo(
+                6.5,
+                17.5,
+            )
+
+            painter.drawPath(
+                bottom_arrow
             )
 
             if normalized == "track":
                 font = painter.font()
-                font.setPointSize(6)
-                font.setBold(True)
-                painter.setFont(font)
+
+                font.setPixelSize(
+                    7
+                )
+
+                font.setBold(
+                    True
+                )
+
+                painter.setFont(
+                    font
+                )
+
                 painter.drawText(
-                    9,
-                    12,
+                    8,
+                    13,
                     "1",
                 )
 
         painter.end()
 
-        return QIcon(pixmap)
+        return QIcon(
+            pixmap
+        )
 
     def _refresh_playback_mode_icons(
         self,
