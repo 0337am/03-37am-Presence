@@ -1276,6 +1276,7 @@ class DashboardPage(QWidget):
         self.build_recent_card()
         self.build_quick_access_card()
         self.build_library_status_card()
+        self.build_queue_card()
 
         self.now_playing_card.setMinimumHeight(
             220
@@ -1354,6 +1355,9 @@ class DashboardPage(QWidget):
             ),
             "auto_afk": (
                 self.afk_card
+            ),
+            "queue": (
+                self.queue_card
             ),
         }
 
@@ -5130,11 +5134,28 @@ class DashboardPage(QWidget):
             Qt.CursorShape.PointingHandCursor
         )
         self.layout_add_card_button.setToolTip(
-            "Add a custom card to the dashboard"
+            "Add a card to the dashboard"
         )
 
         self.layout_add_card_menu = QMenu(
             self.layout_add_card_button
+        )
+
+        self.layout_add_queue_action = QAction(
+            "Spotify Queue",
+            self.layout_add_card_menu,
+        )
+        self.layout_add_queue_action.setToolTip(
+            "Show your Spotify Queue on the dashboard"
+        )
+        self.layout_add_queue_action.triggered.connect(
+            lambda _checked=False:
+            DashboardPage.add_queue_card(
+                self
+            )
+        )
+        self.layout_add_card_menu.addAction(
+            self.layout_add_queue_action
         )
 
         self.layout_add_link_action = QAction(
@@ -5882,6 +5903,33 @@ class DashboardPage(QWidget):
                 "Profile not deleted",
                 str(error),
             )
+
+    def add_queue_card(
+        self,
+    ):
+        if self.dashboard_layout_state.locked:
+            self.sync_dashboard_layout_controls()
+            return
+
+        try:
+            queue_layout = (
+                self.dashboard_layout_state.card(
+                    "queue"
+                )
+            )
+        except KeyError:
+            self.sync_dashboard_layout_controls()
+            return
+
+        if queue_layout.visible:
+            self.sync_dashboard_layout_controls()
+            return
+
+        self.set_dashboard_card_visibility(
+            "queue",
+            True,
+        )
+
 
     def add_link_card(self):
         if self.dashboard_layout_state.locked:
@@ -8206,6 +8254,60 @@ class DashboardPage(QWidget):
             )
             self.sync_dashboard_layout_controls()
 
+    def sync_dashboard_add_queue_action(
+        self,
+    ):
+        action = getattr(
+            self,
+            "layout_add_queue_action",
+            None,
+        )
+
+        if action is None:
+            return
+
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if layout is None:
+            action.setVisible(
+                False
+            )
+            action.setEnabled(
+                False
+            )
+            return
+
+        try:
+            queue_layout = layout.card(
+                "queue"
+            )
+        except KeyError:
+            action.setVisible(
+                False
+            )
+            action.setEnabled(
+                False
+            )
+            return
+
+        available = (
+            not queue_layout.visible
+        )
+
+        action.setVisible(
+            available
+        )
+
+        action.setEnabled(
+            available
+            and not layout.locked
+        )
+
+
     def sync_dashboard_layout_controls(self):
         if not hasattr(
             self,
@@ -8251,6 +8353,9 @@ class DashboardPage(QWidget):
 
         locked = bool(
             self.dashboard_layout_state.locked
+        )
+        DashboardPage.sync_dashboard_add_queue_action(
+            self
         )
 
         layout_state = (
@@ -11551,6 +11656,61 @@ class DashboardPage(QWidget):
         ):
             self.update_quick_access_layout()
 
+    def build_queue_card(
+        self,
+    ):
+        self.queue_card = QFrame()
+        self.queue_card.setObjectName(
+            "queueCard"
+        )
+
+        layout = QVBoxLayout(
+            self.queue_card
+        )
+        layout.setContentsMargins(
+            14,
+            12,
+            14,
+            12,
+        )
+        layout.setSpacing(
+            8
+        )
+
+        heading = QLabel(
+            "SPOTIFY QUEUE"
+        )
+        heading.setObjectName(
+            "sectionLabel"
+        )
+
+        layout.addWidget(
+            heading
+        )
+
+        self.queue_placeholder = QLabel(
+            "Queue content will appear here."
+        )
+        self.queue_placeholder.setObjectName(
+            "queuePlaceholder"
+        )
+        self.queue_placeholder.setWordWrap(
+            True
+        )
+        self.queue_placeholder.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        layout.addWidget(
+            self.queue_placeholder,
+            1,
+        )
+
+        self.queue_card.setMinimumHeight(
+            270
+        )
+
+
     def build_library_status_card(self):
         self.library_status_card = QFrame()
         self.library_status_card.setObjectName(
@@ -12413,7 +12573,8 @@ class DashboardPage(QWidget):
 
             QFrame#recentCard,
             QFrame#quickAccessCard,
-            QFrame#libraryStatusCard {{
+            QFrame#libraryStatusCard,
+            QFrame#queueCard {{
                 background: {card_glass};
                 border: 1px solid {theme["border"]};
                 border-radius: 14px;
@@ -12520,6 +12681,7 @@ class DashboardPage(QWidget):
             QFrame#recentCard[dashboardEditing="true"],
             QFrame#quickAccessCard[dashboardEditing="true"],
             QFrame#libraryStatusCard[dashboardEditing="true"],
+            QFrame#queueCard[dashboardEditing="true"],
             QFrame#statusStripCard[dashboardEditing="true"] {{
                 border: 1px solid {colour_with_alpha(theme["accent"], 0.34)};
             }}
