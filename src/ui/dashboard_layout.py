@@ -13,7 +13,7 @@ from src.ui.custom_cards import (
 )
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CANVAS_UNITS = 10000
 
 
@@ -81,6 +81,12 @@ CARD_SPECS = {
         minimum_column_span=3,
         maximum_column_span=6,
         maximum_row_span=1,
+    ),
+    "queue": DashboardCardSpec(
+        card_id="queue",
+        title="Spotify Queue",
+        minimum_column_span=4,
+        maximum_column_span=12,
     ),
 }
 
@@ -247,6 +253,11 @@ class DashboardLayout:
 
         if schema_version == 1:
             return _migrate_v1_payload(
+                payload
+            )
+
+        if schema_version == 2:
+            return _migrate_v2_payload(
                 payload
             )
 
@@ -622,13 +633,60 @@ def resize_card_freeform(
     )
 
 
+
+def _with_hidden_queue_card(
+    cards,
+) -> tuple[DashboardCardLayout, ...]:
+    cards = tuple(
+        cards
+    )
+
+    queue_cards = tuple(
+        card
+        for card in cards
+        if card.card_id == "queue"
+    )
+
+    if len(queue_cards) > 1:
+        raise ValueError(
+            "The dashboard layout contains duplicate Queue cards."
+        )
+
+    if queue_cards:
+        return cards
+
+    z_index = (
+        max(
+            (
+                card.z_index
+                for card in cards
+            ),
+            default=0,
+        )
+        + 1
+    )
+
+    return (
+        *cards,
+        DashboardCardLayout(
+            card_id="queue",
+            x=0,
+            y=3600,
+            width=4900,
+            height=4300,
+            z_index=z_index,
+            visible=False,
+        ),
+    )
+
+
 def _make_layout(
     name: str,
     cards,
     locked: bool = True,
 ) -> DashboardLayout:
     layout = DashboardLayout(
-        cards=tuple(
+        cards=_with_hidden_queue_card(
             DashboardCardLayout(
                 card_id=card_id,
                 x=x,
@@ -655,6 +713,7 @@ def _make_layout(
     return validate_layout(
         layout
     )
+
 
 
 PRESET_LAYOUTS = {
@@ -750,6 +809,51 @@ def preset_layout(
 
     raise KeyError(
         f"Unknown dashboard preset: {name}"
+    )
+
+
+
+def _migrate_v2_payload(
+    payload,
+) -> DashboardLayout:
+    cards_payload = payload.get(
+        "cards"
+    )
+
+    if not isinstance(
+        cards_payload,
+        list,
+    ):
+        raise ValueError(
+            "Dashboard cards must be a list."
+        )
+
+    migrated = DashboardLayout(
+        cards=_with_hidden_queue_card(
+            DashboardCardLayout.from_dict(
+                card
+            )
+            for card in cards_payload
+        ),
+        locked=_strict_boolean(
+            payload.get(
+                "locked",
+                True,
+            ),
+            "locked",
+        ),
+        preset=str(
+            payload.get(
+                "preset",
+                "Custom",
+            )
+            or "Custom"
+        ).strip(),
+        schema_version=SCHEMA_VERSION,
+    )
+
+    return validate_layout(
+        migrated
     )
 
 
@@ -957,7 +1061,7 @@ def _migrate_v1_payload(
         )
 
     migrated = DashboardLayout(
-        cards=tuple(
+        cards=_with_hidden_queue_card(
             migrated_cards
         ),
         locked=locked,
@@ -1032,7 +1136,7 @@ class DashboardLayoutStore:
                 payload
             )
 
-            if source_version == 1:
+            if source_version in {1, 2}:
                 self._backup_legacy_file()
 
                 try:
