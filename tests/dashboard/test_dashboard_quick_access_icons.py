@@ -102,14 +102,16 @@ class QuickAccessIconTests(
             source,
         )
 
-    def test_refresh_loop_passes_icon_key_variable(self):
+    def test_refresh_uses_model_icon_key_without_legacy_nameerror(
+        self,
+    ):
         source = inspect.getsource(
             DashboardPage
             .refresh_quick_access_buttons
         )
 
         self.assertIn(
-            "icon_key=icon_key,",
+            "quick_access_item.icon_key",
             source,
         )
 
@@ -117,6 +119,7 @@ class QuickAccessIconTests(
             "icon_key=icon,",
             source,
         )
+
 
     def test_icon_refresh_sets_real_button_icon(self):
         source = inspect.getsource(

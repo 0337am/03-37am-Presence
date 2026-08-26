@@ -84,6 +84,9 @@ from src.discord.presence_presets import (
 from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
+from src.system.quick_access_preferences import (
+    QuickAccessPreferencesStore,
+)
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
@@ -914,6 +917,7 @@ class DashboardPage(QWidget):
     # V2_THREE_COLUMN_POLISH
     navigate_requested = pyqtSignal(int)
     settings_section_requested = pyqtSignal(str)
+    apply_presence_mode_requested = pyqtSignal(str)
     apply_presence_preset_requested = pyqtSignal(str)
 
     playback_control_requested = pyqtSignal(
@@ -952,6 +956,10 @@ class DashboardPage(QWidget):
 
         self.afk_preferences_store = (
             AfkPreferencesStore()
+        )
+
+        self.quick_access_preferences_store = (
+            QuickAccessPreferencesStore()
         )
 
         self.presence_preset_store = (
@@ -11643,51 +11651,61 @@ class DashboardPage(QWidget):
 
         self.quick_access_buttons = []
 
-        page_buttons = [
-            (
-                "afk",
-                "AFK",
-                "Set AFK presence",
-                1,
-            ),
-            (
-                "custom",
-                "Custom",
-                "Create a presence",
-                1,
-            ),
-            (
-                "presets",
-                "Presets",
-                "Manage presence modes",
-                1,
-            ),
-            (
-                "settings",
-                "Settings",
-                "Configure application",
-                3,
-            ),
-        ]
+        builtin_page_indices = {
+            "custom": 1,
+            "presets": 1,
+            "settings": 3,
+        }
 
-        for (
-            icon_key,
-            title,
-            detail,
-            page_index,
-        ) in page_buttons:
+        quick_access_preferences = (
+            self.quick_access_preferences_store.load()
+        )
+
+        for quick_access_item in (
+            quick_access_preferences.items
+        ):
+            if not quick_access_item.visible:
+                continue
+
+            if quick_access_item.kind != "builtin":
+                continue
+
+            if quick_access_item.target == "afk":
+                callback = (
+                    lambda checked=False:
+                    self.apply_presence_mode_requested.emit(
+                        "afk"
+                    )
+                )
+
+            else:
+                page_index = builtin_page_indices.get(
+                    quick_access_item.target
+                )
+
+                if page_index is None:
+                    continue
+
+                callback = (
+                    lambda checked=False,
+                    index=page_index:
+                    self.navigate_requested.emit(
+                        index
+                    )
+                )
+
             self.quick_access_buttons.append(
                 self._make_quick_access_button(
-                    icon_key=icon_key,
-                    title=title,
-                    detail=detail,
-                    callback=(
-                        lambda checked=False,
-                        index=page_index:
-                        self.navigate_requested.emit(
-                            index
-                        )
+                    icon_key=(
+                        quick_access_item.icon_key
                     ),
+                    title=(
+                        quick_access_item.title
+                    ),
+                    detail=(
+                        quick_access_item.detail
+                    ),
+                    callback=callback,
                 )
             )
 

@@ -1359,6 +1359,36 @@ class MainWindow(QMainWindow):
         if callable(refresh_quick_access):
             refresh_quick_access(force=True)
 
+    def apply_presence_mode_from_dashboard(
+        self,
+        mode: str,
+    ):
+        mode = str(
+            mode
+            or ""
+        ).strip().lower()
+
+        if mode != "afk":
+            return
+
+        presence_mode = (
+            self.presence_controller.load_mode(
+                mode
+            )
+        )
+
+        self.presence_controller.apply_mode(
+            presence_mode
+        )
+
+        self.presence_page.load_active_mode()
+
+        self.dashboard_page.refresh_quick_access_buttons(
+            force=True
+        )
+
+        self.refresh_discord_status()
+
     def apply_presence_preset_from_dashboard(
         self,
         preset_id: str,
@@ -2174,6 +2204,10 @@ class MainWindow(QMainWindow):
 
         self.dashboard_page.navigate_requested.connect(
             self.switch_page
+        )
+
+        self.dashboard_page.apply_presence_mode_requested.connect(
+            self.apply_presence_mode_from_dashboard
         )
 
         self.dashboard_page.settings_section_requested.connect(
