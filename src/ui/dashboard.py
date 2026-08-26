@@ -28,6 +28,7 @@ from PyQt6.QtGui import (
     QIcon,
     QPainter,
     QPainterPath,
+    QPen,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -11263,7 +11264,7 @@ class DashboardPage(QWidget):
         layout.setSpacing(8)
 
         heading = QLabel(
-            "ϟ  QUICK ACCESS"
+            "QUICK ACCESS"
         )
         heading.setObjectName(
             "sectionLabel"
@@ -11292,10 +11293,297 @@ class DashboardPage(QWidget):
             force=True
         )
 
+
+    @staticmethod
+    def _quick_access_icon(
+        icon_key: str,
+        color,
+    ) -> QIcon:
+        normalized = str(
+            icon_key
+            or ""
+        ).strip().casefold()
+
+        if normalized not in {
+            "afk",
+            "custom",
+            "presets",
+            "settings",
+        }:
+            return QIcon()
+
+        pixmap = QPixmap(
+            16,
+            16,
+        )
+
+        pixmap.fill(
+            Qt.GlobalColor.transparent
+        )
+
+        ink = QColor(
+            str(
+                color
+                or "#ffffff"
+            )
+        )
+
+        if not ink.isValid():
+            ink = QColor(
+                "#ffffff"
+            )
+
+        painter = QPainter(
+            pixmap
+        )
+
+        painter.setRenderHint(
+            QPainter.RenderHint.Antialiasing,
+            True,
+        )
+
+        pen = QPen(
+            ink
+        )
+
+        pen.setWidthF(
+            1.55
+        )
+
+        pen.setCapStyle(
+            Qt.PenCapStyle.RoundCap
+        )
+
+        pen.setJoinStyle(
+            Qt.PenJoinStyle.RoundJoin
+        )
+
+        painter.setPen(
+            pen
+        )
+
+        if normalized == "afk":
+            # Small clock: deterministic "away" symbol.
+            painter.drawEllipse(
+                2,
+                2,
+                12,
+                12,
+            )
+
+            painter.drawLine(
+                8,
+                4,
+                8,
+                8,
+            )
+
+            painter.drawLine(
+                8,
+                8,
+                11,
+                10,
+            )
+
+        elif normalized == "custom":
+            # Pencil/edit symbol.
+            painter.drawLine(
+                3,
+                13,
+                11,
+                5,
+            )
+
+            painter.drawLine(
+                5,
+                14,
+                13,
+                6,
+            )
+
+            painter.drawLine(
+                3,
+                13,
+                5,
+                14,
+            )
+
+            painter.drawLine(
+                11,
+                4,
+                13,
+                6,
+            )
+
+        elif normalized == "presets":
+            # Three adjustment rails.
+            painter.drawLine(
+                2,
+                4,
+                14,
+                4,
+            )
+
+            painter.drawLine(
+                2,
+                8,
+                14,
+                8,
+            )
+
+            painter.drawLine(
+                2,
+                12,
+                14,
+                12,
+            )
+
+            painter.drawEllipse(
+                4,
+                3,
+                2,
+                2,
+            )
+
+            painter.drawEllipse(
+                9,
+                7,
+                2,
+                2,
+            )
+
+            painter.drawEllipse(
+                6,
+                11,
+                2,
+                2,
+            )
+
+        elif normalized == "settings":
+            # Compact gear / cog.
+            painter.drawEllipse(
+                4,
+                4,
+                8,
+                8,
+            )
+
+            painter.drawEllipse(
+                7,
+                7,
+                2,
+                2,
+            )
+
+            for (
+                x1,
+                y1,
+                x2,
+                y2,
+            ) in (
+                (8, 1, 8, 4),
+                (8, 12, 8, 15),
+                (1, 8, 4, 8),
+                (12, 8, 15, 8),
+                (3, 3, 5, 5),
+                (11, 11, 13, 13),
+                (11, 5, 13, 3),
+                (3, 13, 5, 11),
+            ):
+                painter.drawLine(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                )
+
+        painter.end()
+
+        return QIcon(
+            pixmap
+        )
+
+    def _refresh_quick_access_icons(
+        self,
+        theme=None,
+    ) -> None:
+        if not isinstance(
+            theme,
+            dict,
+        ):
+            theme_manager = getattr(
+                self,
+                "theme_manager",
+                None,
+            )
+
+            theme_getter = getattr(
+                theme_manager,
+                "theme",
+                None,
+            )
+
+            if callable(
+                theme_getter
+            ):
+                try:
+                    theme = theme_getter()
+
+                except Exception:
+                    theme = {}
+
+            else:
+                theme = {}
+
+        icon_color = (
+            theme.get(
+                "text",
+                "#ffffff",
+            )
+            if isinstance(
+                theme,
+                dict,
+            )
+            else "#ffffff"
+        )
+
+        for item in getattr(
+            self,
+            "quick_access_buttons",
+            (),
+        ):
+            if not isinstance(
+                item,
+                dict,
+            ):
+                continue
+
+            button = item.get(
+                "button"
+            )
+
+            icon_key = item.get(
+                "icon_key"
+            )
+
+            if (
+                button is None
+                or not icon_key
+            ):
+                continue
+
+            button.setIcon(
+                self._quick_access_icon(
+                    icon_key,
+                    icon_color,
+                )
+            )
+
+
     def _make_quick_access_button(
         self,
         *,
-        icon: str,
+        icon_key: str,
         title: str,
         detail: str,
         callback,
@@ -11319,7 +11607,7 @@ class DashboardPage(QWidget):
 
         return {
             "button": button,
-            "icon": icon,
+            "icon_key": icon_key,
             "title": title,
             "detail": detail,
         }
@@ -11357,25 +11645,25 @@ class DashboardPage(QWidget):
 
         page_buttons = [
             (
-                chr(0x2659),
+                "afk",
                 "AFK",
                 "Set AFK presence",
                 1,
             ),
             (
-                chr(0x270E),
+                "custom",
                 "Custom",
                 "Create a presence",
                 1,
             ),
             (
-                chr(0x2605),
+                "presets",
                 "Presets",
                 "Manage presence modes",
                 1,
             ),
             (
-                chr(0x2699),
+                "settings",
                 "Settings",
                 "Configure application",
                 3,
@@ -11383,14 +11671,14 @@ class DashboardPage(QWidget):
         ]
 
         for (
-            icon,
+            icon_key,
             title,
             detail,
             page_index,
         ) in page_buttons:
             self.quick_access_buttons.append(
                 self._make_quick_access_button(
-                    icon=icon,
+                    icon_key=icon_key,
                     title=title,
                     detail=detail,
                     callback=(
@@ -11411,7 +11699,7 @@ class DashboardPage(QWidget):
 
             self.quick_access_buttons.append(
                 self._make_quick_access_button(
-                    icon=chr(0x2605),
+                    icon_key="presets",
                     title=preset.name,
                     detail=f"Apply {mode_name}",
                     callback=(
@@ -11423,6 +11711,8 @@ class DashboardPage(QWidget):
                     ),
                 )
             )
+
+        self._refresh_quick_access_icons()
 
         self._quick_access_layout_mode = None
 
@@ -11614,9 +11904,7 @@ class DashboardPage(QWidget):
             row = index // columns
             column = index % columns
 
-            text = (
-                f"{item['icon']}  {item['title']}"
-            )
+            text = item["title"]
 
             if show_details:
                 text += (
@@ -13933,6 +14221,10 @@ class DashboardPage(QWidget):
             self._last_artwork_signature = None
             self.update_artwork(self.song)
         self._refresh_playback_transport_icons(
+            theme
+        )
+
+        self._refresh_quick_access_icons(
             theme
         )
 
