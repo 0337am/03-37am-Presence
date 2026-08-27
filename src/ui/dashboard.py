@@ -85,6 +85,8 @@ from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
 from src.system.quick_access_preferences import (
+    MAX_DETAIL_LENGTH,
+    MAX_TITLE_LENGTH,
     SUPPORTED_PRESENCE_MODE_TARGETS,
     QuickAccessItem,
     QuickAccessPreferencesStore,
@@ -6518,6 +6520,10 @@ class DashboardPage(QWidget):
         )
 
         self.schedule_dashboard_geometry_refresh()
+        self.refresh_quick_access_buttons(
+            force=True
+        )
+
         return True
 
     def duplicate_custom_card_layout(
@@ -6994,6 +7000,10 @@ class DashboardPage(QWidget):
         self.remove_custom_card_ui(card_id)
         self.sync_dashboard_layout_controls()
         self.schedule_dashboard_geometry_refresh()
+        self.refresh_quick_access_buttons(
+            force=True
+        )
+
         return True
 
     def open_launcher_card_target(
@@ -11333,6 +11343,88 @@ class DashboardPage(QWidget):
         )
 
 
+    def _launcher_card_quick_access_items(
+        self,
+    ) -> tuple[QuickAccessItem, ...]:
+        cards = getattr(
+            self,
+            "custom_cards",
+            {},
+        )
+
+        if not isinstance(
+            cards,
+            dict,
+        ):
+            return ()
+
+        items = []
+
+        for card in cards.values():
+            if not isinstance(
+                card,
+                LauncherCardData,
+            ):
+                continue
+
+            title = (
+                str(
+                    card.title
+                    or ""
+                ).strip()
+                or "Launcher"
+            )
+
+            description = str(
+                card.description
+                or ""
+            ).strip()
+
+            if description:
+                detail = description
+
+            else:
+                target_kind = (
+                    str(
+                        card.target_kind
+                        or "launcher"
+                    )
+                    .strip()
+                    .replace(
+                        "_",
+                        " ",
+                    )
+                )
+
+                detail = (
+                    target_kind.title()
+                    + " shortcut"
+                )
+
+            items.append(
+                QuickAccessItem(
+                    item_id=(
+                        "launcher_card."
+                        + card.card_id
+                    ),
+                    kind="launcher_card",
+                    target=card.card_id,
+                    title=title[
+                        :MAX_TITLE_LENGTH
+                    ],
+                    detail=detail[
+                        :MAX_DETAIL_LENGTH
+                    ],
+                    icon_key="launcher",
+                    visible=True,
+                )
+            )
+
+        return tuple(
+            items
+        )
+
+
     def _presence_mode_quick_access_items(
         self,
     ) -> tuple[QuickAccessItem, ...]:
@@ -11515,6 +11607,10 @@ class DashboardPage(QWidget):
             ._presence_preset_quick_access_items(
                 self
             )
+            + DashboardPage
+            ._launcher_card_quick_access_items(
+                self
+            )
         )
 
         if dynamic_items:
@@ -11562,6 +11658,7 @@ class DashboardPage(QWidget):
             "library",
             "spotify",
             "about",
+            "launcher",
         }:
             return QIcon()
 
@@ -11614,6 +11711,37 @@ class DashboardPage(QWidget):
         painter.setPen(
             pen
         )
+
+        if normalized == "launcher":
+            painter.drawRect(
+                2,
+                4,
+                9,
+                9,
+            )
+            painter.drawLine(
+                8,
+                8,
+                13,
+                3,
+            )
+            painter.drawLine(
+                9,
+                3,
+                13,
+                3,
+            )
+            painter.drawLine(
+                13,
+                3,
+                13,
+                7,
+            )
+            painter.end()
+
+            return QIcon(
+                pixmap
+            )
 
         if normalized == "afk":
             # Small clock: deterministic "away" symbol.
@@ -12041,6 +12169,16 @@ class DashboardPage(QWidget):
             )
         }
 
+        launcher_items_by_id = {
+            item.item_id: item
+            for item in (
+                DashboardPage
+                ._launcher_card_quick_access_items(
+                    self
+                )
+            )
+        }
+
         for quick_access_item in (
             quick_access_preferences.items
         ):
@@ -12078,6 +12216,42 @@ class DashboardPage(QWidget):
                             .apply_presence_mode_requested
                             .emit(
                                 mode
+                            )
+                        ),
+                    )
+                )
+
+                continue
+
+            if (
+                quick_access_item.kind
+                == "launcher_card"
+            ):
+                launcher_item = (
+                    launcher_items_by_id.get(
+                        quick_access_item.item_id
+                    )
+                )
+
+                if launcher_item is None:
+                    continue
+
+                self.quick_access_buttons.append(
+                    self._make_quick_access_button(
+                        icon_key=(
+                            launcher_item.icon_key
+                        ),
+                        title=(
+                            launcher_item.title
+                        ),
+                        detail=(
+                            launcher_item.detail
+                        ),
+                        callback=(
+                            lambda checked=False,
+                            card_id=launcher_item.target:
+                            self.open_launcher_card_target(
+                                card_id
                             )
                         ),
                     )

@@ -29,6 +29,7 @@ SUPPORTED_ITEM_KINDS = frozenset(
         "builtin",
         "presence_preset",
         "presence_mode",
+        "launcher_card",
     }
 )
 
@@ -56,6 +57,10 @@ SUPPORTED_BUILTIN_TARGETS = frozenset(
 
 _SLUG_PATTERN = re.compile(
     r"^[a-z0-9][a-z0-9._-]*$"
+)
+
+_LAUNCHER_CARD_TARGET_PATTERN = re.compile(
+    r"^custom_launcher_[0-9a-f]{32}$"
 )
 
 
@@ -213,6 +218,32 @@ class QuickAccessItem:
                 raise ValueError(
                     "Presence mode Quick Access items "
                     "must use the presets icon."
+                )
+
+        if kind == "launcher_card":
+            if not _LAUNCHER_CARD_TARGET_PATTERN.fullmatch(
+                target
+            ):
+                raise ValueError(
+                    "Launcher Quick Access target must "
+                    "be a stable Launcher card ID."
+                )
+
+            expected_item_id = (
+                "launcher_card."
+                + target
+            )
+
+            if item_id != expected_item_id:
+                raise ValueError(
+                    "Launcher Quick Access item_id "
+                    "must match its target."
+                )
+
+            if icon_key != "launcher":
+                raise ValueError(
+                    "Launcher Quick Access items "
+                    "must use the launcher icon."
                 )
 
         if type(self.visible) is not bool:

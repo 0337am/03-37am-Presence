@@ -386,6 +386,7 @@ class QuickAccessManagerDialog(QDialog):
                 not in {
                     "presence_preset",
                     "presence_mode",
+                    "launcher_card",
                 }
             ):
                 raise ValueError(
@@ -420,6 +421,7 @@ class QuickAccessManagerDialog(QDialog):
                 in {
                     "presence_preset",
                     "presence_mode",
+                    "launcher_card",
                 }
             ):
                 live_item = (

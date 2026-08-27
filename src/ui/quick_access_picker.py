@@ -114,6 +114,7 @@ class QuickAccessPickerDialog(QDialog):
                 not in {
                     "presence_preset",
                     "presence_mode",
+                    "launcher_card",
                 }
             ):
                 raise ValueError(
