@@ -272,10 +272,54 @@ class QuickAccessManagerTests(
                 dashboard
             )
 
-        constructor.assert_called_once_with(
-            initial,
-            theme=dashboard.theme_manager.theme(),
-            parent=dashboard,
+        constructor.assert_called_once()
+
+        args, kwargs = constructor.call_args
+
+        self.assertEqual(
+            args,
+            (
+                initial,
+            ),
+        )
+
+        self.assertEqual(
+            kwargs["theme"],
+            dashboard.theme_manager.theme(),
+        )
+
+        self.assertIs(
+            kwargs["parent"],
+            dashboard,
+        )
+
+        self.assertEqual(
+            [
+                (
+                    item.kind,
+                    item.target,
+                )
+                for item
+                in kwargs["dynamic_items"]
+            ],
+            [
+                (
+                    "presence_mode",
+                    "music",
+                ),
+                (
+                    "presence_mode",
+                    "sleep",
+                ),
+                (
+                    "presence_mode",
+                    "working",
+                ),
+                (
+                    "presence_mode",
+                    "disabled",
+                ),
+            ],
         )
 
         self.assertEqual(

@@ -27,6 +27,17 @@ MAX_ICON_KEY_LENGTH = 32
 SUPPORTED_ITEM_KINDS = frozenset(
     {
         "builtin",
+        "presence_preset",
+        "presence_mode",
+    }
+)
+
+SUPPORTED_PRESENCE_MODE_TARGETS = frozenset(
+    {
+        "music",
+        "sleep",
+        "working",
+        "disabled",
     }
 )
 
@@ -159,6 +170,49 @@ class QuickAccessItem:
                 raise ValueError(
                     "Unsupported built-in Quick Access target: "
                     f"{target}"
+                )
+
+        if kind == "presence_preset":
+            expected_item_id = (
+                "presence_preset."
+                + target
+            )
+
+            if item_id != expected_item_id:
+                raise ValueError(
+                    "Presence preset Quick Access item_id "
+                    "must match its target."
+                )
+
+            if icon_key != "presets":
+                raise ValueError(
+                    "Presence preset Quick Access items "
+                    "must use the presets icon."
+                )
+
+
+        if kind == "presence_mode":
+            if target not in SUPPORTED_PRESENCE_MODE_TARGETS:
+                raise ValueError(
+                    "Unsupported Presence mode Quick Access target: "
+                    f"{target}"
+                )
+
+            expected_item_id = (
+                "presence_mode."
+                + target
+            )
+
+            if item_id != expected_item_id:
+                raise ValueError(
+                    "Presence mode Quick Access item_id "
+                    "must match its target."
+                )
+
+            if icon_key != "presets":
+                raise ValueError(
+                    "Presence mode Quick Access items "
+                    "must use the presets icon."
                 )
 
         if type(self.visible) is not bool:

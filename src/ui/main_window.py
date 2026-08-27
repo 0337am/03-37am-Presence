@@ -55,6 +55,9 @@ from src.discord.identity_preferences import (
 from src.discord.presence_controller import (
     PresenceController,
 )
+from src.discord.presence_modes import (
+    VALID_MODES,
+)
 from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
@@ -1368,7 +1371,10 @@ class MainWindow(QMainWindow):
             or ""
         ).strip().lower()
 
-        if mode != "afk":
+        if (
+            mode not in VALID_MODES
+            or mode == "custom"
+        ):
             return
 
         presence_mode = (

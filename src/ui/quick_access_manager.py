@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 
 from PyQt6.QtCore import (
@@ -30,6 +31,7 @@ from src.system.quick_access_catalogue import (
 )
 from src.system.quick_access_preferences import (
     DEFAULT_QUICK_ACCESS_ITEMS,
+    MAX_ITEMS,
     QuickAccessItem,
     QuickAccessPreferences,
 )
@@ -327,6 +329,8 @@ class QuickAccessManagerDialog(QDialog):
         preferences: QuickAccessPreferences,
         theme: dict | None = None,
         parent: QWidget | None = None,
+        *,
+        dynamic_items: Iterable[QuickAccessItem] = (),
     ):
         super().__init__(
             parent
@@ -361,9 +365,83 @@ class QuickAccessManagerDialog(QDialog):
             680
         )
 
-        self._items = list(
-            preferences.items
+        dynamic_items = tuple(
+            dynamic_items
         )
+
+        dynamic_items_by_id = {}
+
+        for dynamic_item in dynamic_items:
+            if not isinstance(
+                dynamic_item,
+                QuickAccessItem,
+            ):
+                raise TypeError(
+                    "dynamic_items must contain "
+                    "QuickAccessItem values."
+                )
+
+            if (
+                dynamic_item.kind
+                not in {
+                    "presence_preset",
+                    "presence_mode",
+                }
+            ):
+                raise ValueError(
+                    "Unsupported dynamic Quick Access "
+                    "item kind."
+                )
+
+            if (
+                dynamic_item.item_id
+                in dynamic_items_by_id
+            ):
+                raise ValueError(
+                    "Dynamic Quick Access items contain "
+                    "duplicate IDs."
+                )
+
+            dynamic_items_by_id[
+                dynamic_item.item_id
+            ] = dynamic_item
+
+        self._dynamic_items_by_id = (
+            dynamic_items_by_id
+        )
+
+        refreshed_items = []
+
+        for item in preferences.items:
+            live_item = None
+
+            if (
+                item.kind
+                in {
+                    "presence_preset",
+                    "presence_mode",
+                }
+            ):
+                live_item = (
+                    self._dynamic_items_by_id.get(
+                        item.item_id
+                    )
+                )
+
+            if live_item is None:
+                refreshed_items.append(
+                    item
+                )
+                continue
+
+            refreshed_items.append(
+                replace(
+                    live_item,
+                    visible=item.visible,
+                )
+            )
+
+        self._items = refreshed_items
 
         self._rows = []
 
@@ -932,9 +1010,35 @@ class QuickAccessManagerDialog(QDialog):
     def _addable_entries(
         self,
     ):
-        return addable_quick_access_catalogue(
+        if len(
+            self._items
+        ) >= MAX_ITEMS:
+            return ()
+
+        existing_ids = {
             item.item_id
             for item in self._items
+        }
+
+        static_entries = tuple(
+            addable_quick_access_catalogue(
+                existing_ids
+            )
+        )
+
+        dynamic_entries = tuple(
+            item
+            for item
+            in self._dynamic_items_by_id.values()
+            if (
+                item.item_id
+                not in existing_ids
+            )
+        )
+
+        return (
+            static_entries
+            + dynamic_entries
         )
 
     def _update_add_button_state(
@@ -961,9 +1065,26 @@ class QuickAccessManagerDialog(QDialog):
     ) -> bool:
         self._sync_visibility()
 
-        entry = quick_access_catalogue_entry(
+        if len(
+            self._items
+        ) >= MAX_ITEMS:
+            return False
+
+        normalized = str(
             item_id
+            or ""
+        ).strip().casefold()
+
+        entry = quick_access_catalogue_entry(
+            normalized
         )
+
+        if entry is None:
+            entry = (
+                self._dynamic_items_by_id.get(
+                    normalized
+                )
+            )
 
         if entry is None:
             return False
@@ -1031,6 +1152,9 @@ class QuickAccessManagerDialog(QDialog):
             ],
             theme=self._theme,
             parent=self,
+            dynamic_items=tuple(
+                self._dynamic_items_by_id.values()
+            ),
         )
 
         if not dialog.exec():

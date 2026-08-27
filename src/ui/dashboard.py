@@ -85,6 +85,8 @@ from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
 from src.system.quick_access_preferences import (
+    SUPPORTED_PRESENCE_MODE_TARGETS,
+    QuickAccessItem,
     QuickAccessPreferencesStore,
 )
 from src.system.idle_monitor import (
@@ -11331,6 +11333,172 @@ class DashboardPage(QWidget):
         )
 
 
+    def _presence_mode_quick_access_items(
+        self,
+    ) -> tuple[QuickAccessItem, ...]:
+        items = []
+
+        for (
+            mode,
+            display_name,
+        ) in MODE_NAMES.items():
+            normalized = str(
+                mode
+                or ""
+            ).strip().casefold()
+
+            if (
+                normalized
+                not in SUPPORTED_PRESENCE_MODE_TARGETS
+            ):
+                continue
+
+            title = str(
+                display_name
+                or normalized
+            ).strip()
+
+            detail = (
+                "Disable Discord Rich Presence"
+                if normalized == "disabled"
+                else (
+                    "Apply "
+                    + title
+                    + " presence"
+                )
+            )
+
+            items.append(
+                QuickAccessItem(
+                    item_id=(
+                        "presence_mode."
+                        + normalized
+                    ),
+                    kind="presence_mode",
+                    target=normalized,
+                    title=title,
+                    detail=detail,
+                    icon_key="presets",
+                    visible=True,
+                )
+            )
+
+        return tuple(
+            items
+        )
+
+
+    def _presence_preset_quick_access_items(
+        self,
+    ) -> tuple[QuickAccessItem, ...]:
+        preset_store = getattr(
+            self,
+            "presence_preset_store",
+            None,
+        )
+
+        load_presets = getattr(
+            preset_store,
+            "load",
+            None,
+        )
+
+        if not callable(
+            load_presets
+        ):
+            return ()
+
+        try:
+            presets = tuple(
+                load_presets()
+            )
+
+        except Exception:
+            return ()
+
+        items = []
+        seen_ids = set()
+
+        for preset in presets:
+            preset_id = str(
+                getattr(
+                    preset,
+                    "preset_id",
+                    "",
+                )
+                or ""
+            ).strip().casefold()
+
+            if (
+                not preset_id
+                or preset_id in seen_ids
+            ):
+                continue
+
+            seen_ids.add(
+                preset_id
+            )
+
+            mode = str(
+                getattr(
+                    preset,
+                    "mode",
+                    "",
+                )
+                or ""
+            ).strip().casefold()
+
+            mode_name = MODE_NAMES.get(
+                mode,
+                (
+                    mode.replace(
+                        "_",
+                        " ",
+                    ).title()
+                    or "Presence"
+                ),
+            )
+
+            title = str(
+                getattr(
+                    preset,
+                    "name",
+                    "",
+                )
+                or "Presence preset"
+            ).strip()
+
+            try:
+                item = QuickAccessItem(
+                    item_id=(
+                        "presence_preset."
+                        + preset_id
+                    ),
+                    kind="presence_preset",
+                    target=preset_id,
+                    title=title,
+                    detail=(
+                        f"Apply {mode_name}"
+                    ),
+                    icon_key="presets",
+                    visible=True,
+                )
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            items.append(
+                item
+            )
+
+        return tuple(
+            items
+        )
+
+
     def open_quick_access_manager(
         self,
     ):
@@ -11338,11 +11506,31 @@ class DashboardPage(QWidget):
             self.quick_access_preferences_store.load()
         )
 
-        dialog = QuickAccessManagerDialog(
-            preferences,
-            theme=self.theme_manager.theme(),
-            parent=self,
+        dynamic_items = (
+            DashboardPage
+            ._presence_mode_quick_access_items(
+                self
+            )
+            + DashboardPage
+            ._presence_preset_quick_access_items(
+                self
+            )
         )
+
+        if dynamic_items:
+            dialog = QuickAccessManagerDialog(
+                preferences,
+                theme=self.theme_manager.theme(),
+                parent=self,
+                dynamic_items=dynamic_items,
+            )
+
+        else:
+            dialog = QuickAccessManagerDialog(
+                preferences,
+                theme=self.theme_manager.theme(),
+                parent=self,
+            )
 
         if not dialog.exec():
             return
@@ -11832,10 +12020,158 @@ class DashboardPage(QWidget):
             self.quick_access_preferences_store.load()
         )
 
+        managed_preset_targets = {
+            item.target
+            for item in (
+                quick_access_preferences.items
+            )
+            if (
+                item.kind
+                == "presence_preset"
+            )
+        }
+
+        presence_mode_items_by_id = {
+            item.item_id: item
+            for item in (
+                DashboardPage
+                ._presence_mode_quick_access_items(
+                    self
+                )
+            )
+        }
+
         for quick_access_item in (
             quick_access_preferences.items
         ):
             if not quick_access_item.visible:
+                continue
+
+            if (
+                quick_access_item.kind
+                == "presence_mode"
+            ):
+                mode_item = (
+                    presence_mode_items_by_id.get(
+                        quick_access_item.item_id
+                    )
+                )
+
+                if mode_item is None:
+                    continue
+
+                self.quick_access_buttons.append(
+                    self._make_quick_access_button(
+                        icon_key=(
+                            mode_item.icon_key
+                        ),
+                        title=(
+                            mode_item.title
+                        ),
+                        detail=(
+                            mode_item.detail
+                        ),
+                        callback=(
+                            lambda checked=False,
+                            mode=mode_item.target:
+                            self
+                            .apply_presence_mode_requested
+                            .emit(
+                                mode
+                            )
+                        ),
+                    )
+                )
+
+                continue
+
+            if (
+                quick_access_item.kind
+                == "presence_preset"
+            ):
+                preset_store = getattr(
+                    self,
+                    "presence_preset_store",
+                    None,
+                )
+
+                get_preset = getattr(
+                    preset_store,
+                    "get",
+                    None,
+                )
+
+                if not callable(
+                    get_preset
+                ):
+                    continue
+
+                try:
+                    preset = get_preset(
+                        quick_access_item.target
+                    )
+
+                except Exception:
+                    preset = None
+
+                if preset is None:
+                    continue
+
+                preset_id = str(
+                    getattr(
+                        preset,
+                        "preset_id",
+                        quick_access_item.target,
+                    )
+                    or quick_access_item.target
+                ).strip().casefold()
+
+                mode = str(
+                    getattr(
+                        preset,
+                        "mode",
+                        "",
+                    )
+                    or ""
+                ).strip().casefold()
+
+                mode_name = MODE_NAMES.get(
+                    mode,
+                    (
+                        mode.replace(
+                            "_",
+                            " ",
+                        ).title()
+                        or "Presence"
+                    ),
+                )
+
+                preset_name = str(
+                    getattr(
+                        preset,
+                        "name",
+                        "",
+                    )
+                    or quick_access_item.title
+                ).strip()
+
+                self.quick_access_buttons.append(
+                    self._make_quick_access_button(
+                        icon_key="presets",
+                        title=preset_name,
+                        detail=(
+                            f"Apply {mode_name}"
+                        ),
+                        callback=(
+                            lambda checked=False,
+                            preset_id=preset_id:
+                            self.apply_presence_preset_requested.emit(
+                                preset_id
+                            )
+                        ),
+                    )
+                )
+
                 continue
 
             if quick_access_item.kind != "builtin":
@@ -11881,6 +12217,21 @@ class DashboardPage(QWidget):
             )
 
         for preset in self.presence_preset_store.pinned():
+            pinned_preset_id = str(
+                getattr(
+                    preset,
+                    "preset_id",
+                    "",
+                )
+                or ""
+            ).strip().casefold()
+
+            if (
+                pinned_preset_id
+                in managed_preset_targets
+            ):
+                continue
+
             mode_name = MODE_NAMES.get(
                 preset.mode,
                 preset.mode.title(),

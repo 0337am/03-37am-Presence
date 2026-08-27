@@ -17,6 +17,9 @@ from PyQt6.QtWidgets import (
 from src.system.quick_access_catalogue import (
     addable_quick_access_catalogue,
 )
+from src.system.quick_access_preferences import (
+    QuickAccessItem,
+)
 
 
 FALLBACK_THEME = {
@@ -64,6 +67,8 @@ class QuickAccessPickerDialog(QDialog):
         existing_item_ids: Iterable[str],
         theme: dict | None = None,
         parent: QWidget | None = None,
+        *,
+        dynamic_items: Iterable[QuickAccessItem] = (),
     ):
         super().__init__(
             parent
@@ -75,9 +80,78 @@ class QuickAccessPickerDialog(QDialog):
 
         self._selected_item_id = None
 
+        existing_item_ids = tuple(
+            str(
+                item_id
+                or ""
+            ).strip().casefold()
+            for item_id in existing_item_ids
+        )
+
+        existing_ids = set(
+            existing_item_ids
+        )
+
+        dynamic_items = tuple(
+            dynamic_items
+        )
+
+        dynamic_entries = []
+        seen_dynamic_ids = set()
+
+        for dynamic_item in dynamic_items:
+            if not isinstance(
+                dynamic_item,
+                QuickAccessItem,
+            ):
+                raise TypeError(
+                    "dynamic_items must contain "
+                    "QuickAccessItem values."
+                )
+
+            if (
+                dynamic_item.kind
+                not in {
+                    "presence_preset",
+                    "presence_mode",
+                }
+            ):
+                raise ValueError(
+                    "Unsupported dynamic Quick Access "
+                    "item kind."
+                )
+
+            if (
+                dynamic_item.item_id
+                in seen_dynamic_ids
+            ):
+                raise ValueError(
+                    "Dynamic Quick Access items contain "
+                    "duplicate IDs."
+                )
+
+            seen_dynamic_ids.add(
+                dynamic_item.item_id
+            )
+
+            if (
+                dynamic_item.item_id
+                in existing_ids
+            ):
+                continue
+
+            dynamic_entries.append(
+                dynamic_item
+            )
+
         self._entries = (
-            addable_quick_access_catalogue(
-                existing_item_ids
+            tuple(
+                addable_quick_access_catalogue(
+                    existing_item_ids
+                )
+            )
+            + tuple(
+                dynamic_entries
             )
         )
 
