@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from src.system.quick_access_preferences import (
     DEFAULT_QUICK_ACCESS_ITEMS,
+    QuickAccessItem,
     QuickAccessPreferences,
     default_quick_access_preferences,
 )
@@ -420,6 +421,78 @@ class DashboardQuickAccessPreferencesIntegrationTests(
         self.assertEqual(
             dashboard.quick_access_preferences_store.load_count,
             2,
+        )
+
+    def test_optional_builtin_destinations_use_trusted_page_routes(
+        self,
+    ):
+        preferences = QuickAccessPreferences(
+            items=tuple(
+                QuickAccessItem(
+                    item_id=(
+                        "builtin."
+                        + target
+                    ),
+                    kind="builtin",
+                    target=target,
+                    title=target.title(),
+                    detail=(
+                        "Open "
+                        + target.title()
+                    ),
+                    icon_key=target,
+                )
+                for target in (
+                    "presence",
+                    "library",
+                    "spotify",
+                    "about",
+                )
+            )
+        )
+
+        dashboard = _DashboardStub(
+            preferences=preferences
+        )
+
+        DashboardPage.refresh_quick_access_buttons(
+            dashboard
+        )
+
+        self.assertEqual(
+            [
+                item[
+                    "title"
+                ]
+                for item
+                in dashboard.quick_access_buttons
+            ],
+            [
+                "Presence",
+                "Library",
+                "Spotify",
+                "About",
+            ],
+        )
+
+        for item in dashboard.quick_access_buttons:
+            item[
+                "callback"
+            ]()
+
+        self.assertEqual(
+            dashboard.navigate_requested.calls,
+            [
+                (1,),
+                (2,),
+                (5,),
+                (4,),
+            ],
+        )
+
+        self.assertEqual(
+            dashboard.apply_presence_mode_requested.calls,
+            [],
         )
 
 

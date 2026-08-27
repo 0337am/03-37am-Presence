@@ -461,6 +461,109 @@ class QuickAccessManagerTests(
             "#ff7fa8",
         )
 
+    def test_add_button_picker_selection_adds_optional_shortcut(
+        self,
+    ):
+        dialog = QuickAccessManagerDialog(
+            QuickAccessPreferences(
+                items=DEFAULT_QUICK_ACCESS_ITEMS
+            )
+        )
+
+        picker = Mock()
+        picker.exec.return_value = 1
+        picker.selected_item_id.return_value = (
+            "builtin.library"
+        )
+
+        with patch(
+            "src.ui.quick_access_manager."
+            "QuickAccessPickerDialog",
+            return_value=picker,
+        ):
+            dialog.add_button.click()
+
+        self.assertEqual(
+            dialog.preferences().items[
+                -1
+            ].item_id,
+            "builtin.library",
+        )
+
+        self.assertTrue(
+            dialog.preferences().items[
+                -1
+            ].visible
+        )
+
+    def test_remove_button_removes_item_and_makes_it_addable(
+        self,
+    ):
+        dialog = QuickAccessManagerDialog(
+            QuickAccessPreferences(
+                items=DEFAULT_QUICK_ACCESS_ITEMS
+            )
+        )
+
+        removed_id = dialog._rows[
+            1
+        ][
+            "item_id"
+        ]
+
+        dialog._rows[
+            1
+        ][
+            "remove"
+        ].click()
+
+        self.assertNotIn(
+            removed_id,
+            [
+                item.item_id
+                for item in dialog.preferences().items
+            ],
+        )
+
+        self.assertIn(
+            removed_id,
+            [
+                entry.item_id
+                for entry in dialog._addable_entries()
+            ],
+        )
+
+    def test_reset_after_optional_add_restores_default_four(
+        self,
+    ):
+        dialog = QuickAccessManagerDialog(
+            QuickAccessPreferences(
+                items=DEFAULT_QUICK_ACCESS_ITEMS
+            )
+        )
+
+        self.assertTrue(
+            dialog._add_item(
+                "builtin.spotify"
+            )
+        )
+
+        self.assertEqual(
+            len(
+                dialog.preferences().items
+            ),
+            5,
+        )
+
+        dialog._reset_defaults()
+
+        self.assertEqual(
+            dialog.preferences(),
+            QuickAccessPreferences(
+                items=DEFAULT_QUICK_ACCESS_ITEMS
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

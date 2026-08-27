@@ -24,9 +24,17 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.system.quick_access_catalogue import (
+    addable_quick_access_catalogue,
+    quick_access_catalogue_entry,
+)
 from src.system.quick_access_preferences import (
     DEFAULT_QUICK_ACCESS_ITEMS,
+    QuickAccessItem,
     QuickAccessPreferences,
+)
+from src.ui.quick_access_picker import (
+    QuickAccessPickerDialog,
 )
 
 
@@ -350,7 +358,7 @@ class QuickAccessManagerDialog(QDialog):
         )
 
         self.setMinimumWidth(
-            560
+            680
         )
 
         self._items = list(
@@ -433,6 +441,35 @@ class QuickAccessManagerDialog(QDialog):
 
         controls.setSpacing(
             9
+        )
+
+        self.add_button = QPushButton(
+            "Add shortcut"
+        )
+
+        self.add_button.setObjectName(
+            "secondaryButton"
+        )
+
+        self.add_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.add_button.setMinimumWidth(
+            112
+        )
+
+        self.add_button.setToolTip(
+            "Add another destination to Quick Access"
+        )
+
+        self.add_button.clicked.connect(
+            lambda checked=False:
+            self._open_add_shortcut_picker()
+        )
+
+        controls.addWidget(
+            self.add_button
         )
 
         self.reset_button = QPushButton(
@@ -574,7 +611,7 @@ class QuickAccessManagerDialog(QDialog):
             )
 
             row_layout.setSpacing(
-                12
+                10
             )
 
             visible_box = QuickAccessCheckBox(
@@ -626,7 +663,7 @@ class QuickAccessManagerDialog(QDialog):
             )
 
             up_button.setMinimumWidth(
-                72
+                64
             )
 
             up_button.setEnabled(
@@ -655,7 +692,7 @@ class QuickAccessManagerDialog(QDialog):
             )
 
             down_button.setMinimumWidth(
-                72
+                64
             )
 
             down_button.setEnabled(
@@ -668,6 +705,34 @@ class QuickAccessManagerDialog(QDialog):
                 self._move_item(
                     row_index,
                     1,
+                )
+            )
+
+            remove_button = QPushButton(
+                "Remove"
+            )
+
+            remove_button.setObjectName(
+                "secondaryButton"
+            )
+
+            remove_button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
+
+            remove_button.setMinimumWidth(
+                76
+            )
+
+            remove_button.setToolTip(
+                "Remove this shortcut"
+            )
+
+            remove_button.clicked.connect(
+                lambda checked=False,
+                row_index=index:
+                self._remove_item(
+                    row_index
                 )
             )
 
@@ -688,6 +753,10 @@ class QuickAccessManagerDialog(QDialog):
                 down_button
             )
 
+            row_layout.addWidget(
+                remove_button
+            )
+
             self.items_layout.addWidget(
                 row
             )
@@ -700,6 +769,7 @@ class QuickAccessManagerDialog(QDialog):
                     "detail": detail,
                     "up": up_button,
                     "down": down_button,
+                    "remove": remove_button,
                 }
             )
 
@@ -711,6 +781,9 @@ class QuickAccessManagerDialog(QDialog):
             ].set_theme(
                 self._theme
             )
+
+        self._update_add_button_state()
+
 
     def apply_theme(
         self,
@@ -855,6 +928,124 @@ class QuickAccessManagerDialog(QDialog):
             ].set_theme(
                 self._theme
             )
+
+    def _addable_entries(
+        self,
+    ):
+        return addable_quick_access_catalogue(
+            item.item_id
+            for item in self._items
+        )
+
+    def _update_add_button_state(
+        self,
+    ) -> None:
+        add_button = getattr(
+            self,
+            "add_button",
+            None,
+        )
+
+        if add_button is None:
+            return
+
+        add_button.setEnabled(
+            bool(
+                self._addable_entries()
+            )
+        )
+
+    def _add_item(
+        self,
+        item_id: str,
+    ) -> bool:
+        self._sync_visibility()
+
+        entry = quick_access_catalogue_entry(
+            item_id
+        )
+
+        if entry is None:
+            return False
+
+        existing_ids = {
+            item.item_id
+            for item in self._items
+        }
+
+        if entry.item_id in existing_ids:
+            return False
+
+        self._items.append(
+            QuickAccessItem(
+                item_id=entry.item_id,
+                kind=entry.kind,
+                target=entry.target,
+                title=entry.title,
+                detail=entry.detail,
+                icon_key=entry.icon_key,
+                visible=True,
+            )
+        )
+
+        self._rebuild_rows()
+
+        return True
+
+    def _remove_item(
+        self,
+        index: int,
+    ) -> bool:
+        self._sync_visibility()
+
+        if not (
+            0
+            <= int(
+                index
+            )
+            < len(
+                self._items
+            )
+        ):
+            return False
+
+        self._items.pop(
+            int(
+                index
+            )
+        )
+
+        self._rebuild_rows()
+
+        return True
+
+    def _open_add_shortcut_picker(
+        self,
+    ) -> None:
+        self._sync_visibility()
+
+        dialog = QuickAccessPickerDialog(
+            [
+                item.item_id
+                for item in self._items
+            ],
+            theme=self._theme,
+            parent=self,
+        )
+
+        if not dialog.exec():
+            return
+
+        selected_item_id = (
+            dialog.selected_item_id()
+        )
+
+        if not selected_item_id:
+            return
+
+        self._add_item(
+            selected_item_id
+        )
 
     def _sync_visibility(
         self,

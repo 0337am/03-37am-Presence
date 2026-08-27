@@ -732,6 +732,83 @@ class QuickAccessPreferencesTests(
                     imported,
                 )
 
+    def test_optional_builtin_targets_are_supported(
+        self,
+    ):
+        for target in (
+            "presence",
+            "library",
+            "spotify",
+            "about",
+        ):
+            with self.subTest(
+                target=target
+            ):
+                item = QuickAccessItem(
+                    item_id=(
+                        "builtin."
+                        + target
+                    ),
+                    kind="builtin",
+                    target=target,
+                    title=target.title(),
+                    detail=(
+                        "Open "
+                        + target.title()
+                    ),
+                    icon_key=target,
+                )
+
+                self.assertEqual(
+                    item.target,
+                    target,
+                )
+
+    def test_optional_builtin_items_round_trip(
+        self,
+    ):
+        original = QuickAccessPreferences(
+            items=tuple(
+                QuickAccessItem(
+                    item_id=(
+                        "builtin."
+                        + target
+                    ),
+                    kind="builtin",
+                    target=target,
+                    title=target.title(),
+                    detail=(
+                        "Open "
+                        + target.title()
+                    ),
+                    icon_key=target,
+                )
+                for target in (
+                    "presence",
+                    "library",
+                    "spotify",
+                    "about",
+                )
+            )
+        )
+
+        payload = (
+            quick_access_preferences_to_payload(
+                original
+            )
+        )
+
+        restored = (
+            quick_access_preferences_from_payload(
+                payload
+            )
+        )
+
+        self.assertEqual(
+            restored,
+            original,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

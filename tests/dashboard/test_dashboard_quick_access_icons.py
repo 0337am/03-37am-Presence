@@ -28,6 +28,10 @@ class QuickAccessIconTests(
             "custom",
             "presets",
             "settings",
+            "presence",
+            "library",
+            "spotify",
+            "about",
         ):
             with self.subTest(
                 icon_key=icon_key

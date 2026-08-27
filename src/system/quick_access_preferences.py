@@ -36,6 +36,10 @@ SUPPORTED_BUILTIN_TARGETS = frozenset(
         "custom",
         "presets",
         "settings",
+        "presence",
+        "library",
+        "spotify",
+        "about",
     }
 )
 

@@ -11370,6 +11370,10 @@ class DashboardPage(QWidget):
             "custom",
             "presets",
             "settings",
+            "presence",
+            "library",
+            "spotify",
+            "about",
         }:
             return QIcon()
 
@@ -11558,6 +11562,116 @@ class DashboardPage(QWidget):
                     y2,
                 )
 
+        if normalized == "presence":
+            painter.drawEllipse(
+                4,
+                2,
+                4,
+                4,
+            )
+            painter.drawEllipse(
+                9,
+                3,
+                3,
+                3,
+            )
+            painter.drawArc(
+                2,
+                6,
+                9,
+                8,
+                20 * 16,
+                140 * 16,
+            )
+            painter.drawArc(
+                8,
+                7,
+                6,
+                6,
+                20 * 16,
+                130 * 16,
+            )
+
+        elif normalized == "library":
+            painter.drawLine(
+                2,
+                5,
+                6,
+                5,
+            )
+            painter.drawLine(
+                6,
+                5,
+                8,
+                3,
+            )
+            painter.drawLine(
+                8,
+                3,
+                13,
+                3,
+            )
+            painter.drawRoundedRect(
+                2,
+                5,
+                12,
+                9,
+                2.0,
+                2.0,
+            )
+
+        elif normalized == "spotify":
+            painter.drawEllipse(
+                2,
+                2,
+                12,
+                12,
+            )
+            painter.drawArc(
+                4,
+                5,
+                8,
+                4,
+                20 * 16,
+                140 * 16,
+            )
+            painter.drawArc(
+                4,
+                7,
+                8,
+                4,
+                20 * 16,
+                140 * 16,
+            )
+            painter.drawArc(
+                5,
+                9,
+                6,
+                3,
+                20 * 16,
+                140 * 16,
+            )
+
+        elif normalized == "about":
+            painter.drawEllipse(
+                2,
+                2,
+                12,
+                12,
+            )
+            painter.drawEllipse(
+                7,
+                4,
+                2,
+                2,
+            )
+            painter.drawLine(
+                8,
+                8,
+                8,
+                12,
+            )
+
         painter.end()
 
         return QIcon(
@@ -11708,6 +11822,10 @@ class DashboardPage(QWidget):
             "custom": 1,
             "presets": 1,
             "settings": 3,
+            "presence": 1,
+            "library": 2,
+            "spotify": 5,
+            "about": 4,
         }
 
         quick_access_preferences = (
