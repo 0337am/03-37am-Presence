@@ -144,6 +144,9 @@ from src.ui.discord_avatar_loader import (
 from src.ui.discord_profile_preview import (
     DiscordProfilePreview,
 )
+from src.ui.quick_access_manager import (
+    QuickAccessManagerDialog,
+)
 from src.ui.theme import ThemeManager
 
 from src.spotify.queue_service import (
@@ -11271,6 +11274,8 @@ class DashboardPage(QWidget):
         )
         layout.setSpacing(8)
 
+        heading_row = QHBoxLayout()
+
         heading = QLabel(
             "QUICK ACCESS"
         )
@@ -11278,8 +11283,32 @@ class DashboardPage(QWidget):
             "sectionLabel"
         )
 
-        layout.addWidget(
+        manage_button = QPushButton(
+            "Manage"
+        )
+        manage_button.setObjectName(
+            "textButton"
+        )
+        manage_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        manage_button.setToolTip(
+            "Choose and reorder Quick Access shortcuts"
+        )
+        manage_button.clicked.connect(
+            self.open_quick_access_manager
+        )
+
+        heading_row.addWidget(
             heading
+        )
+        heading_row.addStretch()
+        heading_row.addWidget(
+            manage_button
+        )
+
+        layout.addLayout(
+            heading_row
         )
 
         self.quick_access_grid = QGridLayout()
@@ -11301,6 +11330,30 @@ class DashboardPage(QWidget):
             force=True
         )
 
+
+    def open_quick_access_manager(
+        self,
+    ):
+        preferences = (
+            self.quick_access_preferences_store.load()
+        )
+
+        dialog = QuickAccessManagerDialog(
+            preferences,
+            theme=self.theme_manager.theme(),
+            parent=self,
+        )
+
+        if not dialog.exec():
+            return
+
+        self.quick_access_preferences_store.save(
+            dialog.preferences()
+        )
+
+        self.refresh_quick_access_buttons(
+            force=True
+        )
 
     @staticmethod
     def _quick_access_icon(

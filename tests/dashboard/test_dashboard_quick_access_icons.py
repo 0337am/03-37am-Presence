@@ -158,6 +158,33 @@ class QuickAccessIconTests(
             source,
         )
 
+    def test_icon_renderer_staticmethod_contract_matches_runtime(
+        self,
+    ):
+        descriptor = inspect.getattr_static(
+            DashboardPage,
+            "_quick_access_icon",
+        )
+
+        self.assertIsInstance(
+            descriptor,
+            staticmethod,
+        )
+
+        instance_renderer = descriptor.__get__(
+            object(),
+            DashboardPage,
+        )
+
+        icon = instance_renderer(
+            "afk",
+            "#ffffff",
+        )
+
+        self.assertFalse(
+            icon.isNull()
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
