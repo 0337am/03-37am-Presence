@@ -12,17 +12,17 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_python_version_metadata(self):
         self.assertEqual(
             APP_VERSION,
-            "3.1.0",
+            "3.2.0",
         )
 
         self.assertEqual(
             RELEASE_NAME,
-            "Discord Presence Studio",
+            "Playback & Quick Access",
         )
 
         self.assertEqual(
             DISPLAY_VERSION,
-            "v3.1.0 - Discord Presence Studio",
+            "v3.2.0 - Playback & Quick Access",
         )
 
     def test_windows_version_metadata(self):
@@ -33,81 +33,86 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "filevers=(3, 1, 0, 0)",
+            "filevers=(3, 2, 0, 0)",
             source,
         )
 
         self.assertIn(
-            "prodvers=(3, 1, 0, 0)",
+            "prodvers=(3, 2, 0, 0)",
             source,
         )
 
         self.assertEqual(
-            source.count('"3.1.0.0"'),
+            source.count('"3.2.0.0"'),
             2,
         )
 
         self.assertIn(
-            "03:37am Presence - Discord Presence Studio",
+            "03:37am Presence - Playback & Quick Access",
             source,
         )
 
-    def test_changelog_starts_with_v31(self):
+    def test_changelog_starts_with_v32(self):
         source = Path(
             "CHANGELOG.md"
         ).read_text(
             encoding="utf-8"
         )
 
+        v32 = source.index(
+            "## v3.2.0 - Playback & Quick Access"
+        )
+
         v31 = source.index(
             "## v3.1.0 - Discord Presence Studio"
         )
 
-        v301 = source.index(
-            "## v3.0.1 - Updater Relaunch Fix"
-        )
-
         self.assertLess(
+            v32,
             v31,
-            v301,
         )
 
         self.assertIn(
-            "Released 15 August 2026.",
+            "Released 28 August 2026.",
             source,
         )
 
         self.assertIn(
-            "Discord profile and activity preview",
+            "Dashboard playback control row",
             source,
         )
 
         self.assertIn(
-            "Presence Studio",
+            "Loop ×N",
             source,
         )
 
         self.assertIn(
-            "Rich Presence Link Buttons",
+            "Spotify Queue",
             source,
         )
 
         self.assertIn(
-            "Show on Discord",
+            "Quick Access 2.0",
             source,
         )
 
         self.assertIn(
-            "HTTP or HTTPS URLs",
+            "Launcher Cards",
             source,
         )
 
         self.assertIn(
-            "Disabled Presence",
+            "Spotify playlists",
             source,
         )
 
-    def test_readme_describes_v31(self):
+        self.assertIn(
+            "does not start playback automatically",
+            source,
+        )
+
+    def test_readme_describes_v32(self):
         source = Path(
             "README.MD"
         ).read_text(
@@ -115,36 +120,46 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "## v3.1.0 highlights",
+            "## v3.2.0 highlights",
             source,
         )
 
         self.assertNotIn(
-            "## v3.0.1 highlights",
+            "## v3.1.0 highlights",
             source,
         )
 
         self.assertIn(
-            "Presence Studio",
+            "Dashboard playback row",
             source,
         )
 
         self.assertIn(
-            "Discord profile and activity preview",
+            "Loop ×N",
             source,
         )
 
         self.assertIn(
-            "Rich Presence Link Buttons",
+            "Spotify Queue",
             source,
         )
 
         self.assertIn(
-            "Show on Discord",
+            "Quick Access 2.0",
             source,
         )
 
-    def test_spotify_user_agent_tracks_v31(self):
+        self.assertIn(
+            "Launcher Cards",
+            source,
+        )
+
+        self.assertIn(
+            "Spotify playlists",
+            source,
+        )
+
+    def test_spotify_user_agent_tracks_v32(self):
         source = Path(
             "src/spotify/web_api.py"
         ).read_text(
@@ -152,12 +167,12 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "03-37am-Presence/3.1.0 Spotify-Web-API",
+            "03-37am-Presence/3.2.0 Spotify-Web-API",
             source,
         )
 
         self.assertNotIn(
-            "03-37am-Presence/3.0.1 Spotify-Web-API",
+            "03-37am-Presence/3.1.0 Spotify-Web-API",
             source,
         )
 

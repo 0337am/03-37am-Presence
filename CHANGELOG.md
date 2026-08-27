@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.2.0 - Playback & Quick Access
+
+Released 28 August 2026.
+
+### Added
+
+- Added a complete Dashboard playback control row for Shuffle, Previous, Play/Pause, Next, and Repeat, with app-owned themed icons and live Spotify state.
+- Added direct Dashboard seeking through the existing playback coordinator, with a thin progress rail and an invisible interaction overlay that keeps the presentation clean.
+- Added playback-cycle detection for trusted Spotify Repeat One loops, including Discord elapsed-timer resets and an optional `Loop ×N` counter.
+- Added an optional Spotify Queue Dashboard card with a current-track row and Up Next presentation.
+- Added Quick Access 2.0 with persistent ordering, visibility, add/remove management, reset-to-defaults, and app-owned shortcut icons.
+- Added Quick Access destinations for Presence modes and saved Presence presets, Launcher Cards, and Spotify playlists.
+- Added a grouped and searchable Spotify playlist picker so playlist shortcuts can be added without flooding the root shortcut catalogue.
+
+### Improved
+
+- Spotify Queue presentation reconstructs local-file positions while Shuffle is off, including mixed local/catalogue boundaries and omitted catalogue anchors observed during live validation.
+- When Shuffle is on, Queue now uses an explicitly partial Spotify-visible presentation because Spotify does not expose exact shuffled local-file positions.
+- Quick Access resolves current metadata for saved Presence presets, Launcher Cards, and Spotify playlists while keeping stale managed entries removable instead of deleting user choices silently.
+- Playback controls, seek, shuffle, repeat, Queue, and Quick Access were exercised through expanded automated and live acceptance coverage.
+
+### Safety, compatibility, and upgrade behavior
+
+- Dashboard playback actions continue routing through the app's existing trusted playback services and coordinator. Quick Access does not launch Spotify URIs, simulate input, steal foreground focus, or introduce a second playback engine.
+- Spotify playlist Quick Access opens the existing in-app playlist detail view and does not start playback automatically.
+- Existing Quick Access users retain the original four default shortcuts unless they choose to customize them; preferences remain schema-compatible and invalid data continues using the established recovery path.
+- Existing settings, Dashboard layouts, Presence presets, Launcher Cards, Library data, Spotify connection state, and updater identity continue using their established upgrade paths.
+
 ## v3.1.0 - Discord Presence Studio
 
 Released 15 August 2026.

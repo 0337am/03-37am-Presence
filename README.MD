@@ -2,14 +2,16 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.1.0 highlights
+## v3.2.0 highlights
 
-- Rebuilt the Presence experience around Presence Studio, with a searchable and filterable Presence Library, pinned cards, editing, renaming, duplication, deletion, and reusable saved Presences.
-- Added a live Discord profile and activity preview that can display the connected Discord identity, avatar, music presentation, and custom Presence state locally inside the app.
-- Added up to two optional Discord Rich Presence Link Buttons to Music, AFK, Sleep, Working, and Custom Presences, with a per-Presence Show on Discord control that preserves saved labels and URLs when hidden.
-- Added live Link Button previews and visibility feedback inside Presence Studio while keeping preview controls inert and separate from browser navigation.
-- Improved Discord music presentation and return-to-music artwork handling while preserving Windows media state as presentation truth.
-- Existing Presence settings and presets remain compatible. Link Buttons default to hidden with no configured links until the user chooses to add them.
+- Added a complete Dashboard playback row for Shuffle, Previous, Play/Pause, Next, and Repeat with app-owned themed controls.
+- Added direct Dashboard seeking while preserving the existing playback service and coordinator boundaries.
+- Added trusted Spotify Repeat One loop tracking, including Discord timer resets and an optional `Loop ×N` counter.
+- Added an optional Spotify Queue Dashboard card with truthful local-file reconstruction while Shuffle is off and an explicitly partial Spotify-visible presentation while Shuffle is on.
+- Expanded Quick Access into Quick Access 2.0 with persistent ordering, visibility, add/remove management, reset-to-defaults, and app-owned shortcut icons.
+- Quick Access can now open Presence modes and saved Presence presets, Launcher Cards, and Spotify playlists.
+- Spotify playlist shortcuts use a grouped and searchable playlist picker and open the existing in-app playlist detail without starting playback automatically.
+- Playback and Quick Access additions preserve the app's established safety boundaries without simulated input, foreground focus stealing, or direct Spotify URI launching from Quick Access.
 
 ## Core features
 
