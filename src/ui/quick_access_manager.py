@@ -387,6 +387,7 @@ class QuickAccessManagerDialog(QDialog):
                     "presence_preset",
                     "presence_mode",
                     "launcher_card",
+                    "spotify_playlist",
                 }
             ):
                 raise ValueError(
@@ -422,6 +423,7 @@ class QuickAccessManagerDialog(QDialog):
                     "presence_preset",
                     "presence_mode",
                     "launcher_card",
+                    "spotify_playlist",
                 }
             ):
                 live_item = (

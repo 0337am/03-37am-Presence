@@ -1508,6 +1508,69 @@ class SpotifyPage(
             return False
 
 
+    def show_playlist_reference(
+        self,
+        spotify_id,
+        name,
+        owner_name="",
+    ) -> bool:
+        if not isinstance(
+            spotify_id,
+            str,
+        ):
+            return False
+
+        checked_id = spotify_id.strip()
+
+        if (
+            checked_id != spotify_id
+            or not checked_id
+            or len(checked_id) > 22
+            or not checked_id.isascii()
+            or not checked_id.isalnum()
+        ):
+            return False
+
+        checked_name = str(
+            name
+            or ""
+        ).strip()
+
+        if not checked_name:
+            checked_name = (
+                "Spotify Playlist"
+            )
+
+        checked_owner = str(
+            owner_name
+            or ""
+        ).strip()
+
+        try:
+            playlist = SpotifyPlaylistSummary(
+                spotify_id=checked_id,
+                name=checked_name,
+                spotify_uri=(
+                    "spotify:playlist:"
+                    + checked_id
+                ),
+                owner_name=checked_owner,
+                total_items=0,
+                artwork_reference=None,
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        return bool(
+            self.show_playlist_detail(
+                playlist
+            )
+        )
+
+
     def show_playlist_detail(
         self,
         playlist,

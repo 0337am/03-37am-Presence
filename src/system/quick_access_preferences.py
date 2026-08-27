@@ -30,6 +30,7 @@ SUPPORTED_ITEM_KINDS = frozenset(
         "presence_preset",
         "presence_mode",
         "launcher_card",
+        "spotify_playlist",
     }
 )
 
@@ -62,6 +63,175 @@ _SLUG_PATTERN = re.compile(
 _LAUNCHER_CARD_TARGET_PATTERN = re.compile(
     r"^custom_launcher_[0-9a-f]{32}$"
 )
+
+_SPOTIFY_PLAYLIST_ID_MAX_LENGTH = 22
+
+
+def spotify_playlist_quick_access_target(
+    spotify_id,
+) -> str:
+    if not isinstance(
+        spotify_id,
+        str,
+    ):
+        raise TypeError(
+            "Spotify playlist ID must be text."
+        )
+
+    checked = spotify_id.strip()
+
+    if (
+        checked != spotify_id
+        or not checked
+        or len(checked)
+        > _SPOTIFY_PLAYLIST_ID_MAX_LENGTH
+        or not checked.isascii()
+        or not checked.isalnum()
+    ):
+        raise ValueError(
+            "Spotify playlist ID must contain "
+            "only ASCII letters and digits."
+        )
+
+    encoded = ["p"]
+
+    for character in checked:
+        if (
+            "A"
+            <= character
+            <= "Z"
+        ):
+            encoded.append(
+                "_"
+            )
+            encoded.append(
+                character.lower()
+            )
+        else:
+            encoded.append(
+                character
+            )
+
+    return "".join(
+        encoded
+    )
+
+
+def spotify_playlist_id_from_quick_access_target(
+    target,
+) -> str:
+    if not isinstance(
+        target,
+        str,
+    ):
+        raise TypeError(
+            "Spotify playlist Quick Access "
+            "target must be text."
+        )
+
+    checked = target.strip()
+
+    if (
+        checked != target
+        or checked != checked.casefold()
+        or not checked.startswith("p")
+    ):
+        raise ValueError(
+            "Invalid Spotify playlist "
+            "Quick Access target."
+        )
+
+    payload = checked[1:]
+
+    if not payload:
+        raise ValueError(
+            "Spotify playlist Quick Access "
+            "target is empty."
+        )
+
+    decoded = []
+    index = 0
+
+    while index < len(
+        payload
+    ):
+        character = payload[
+            index
+        ]
+
+        if character == "_":
+            index += 1
+
+            if index >= len(
+                payload
+            ):
+                raise ValueError(
+                    "Invalid Spotify playlist "
+                    "Quick Access target."
+                )
+
+            character = payload[
+                index
+            ]
+
+            if not (
+                "a"
+                <= character
+                <= "z"
+            ):
+                raise ValueError(
+                    "Invalid Spotify playlist "
+                    "Quick Access target."
+                )
+
+            decoded.append(
+                character.upper()
+            )
+
+        elif (
+            "a"
+            <= character
+            <= "z"
+        ) or (
+            "0"
+            <= character
+            <= "9"
+        ):
+            decoded.append(
+                character
+            )
+
+        else:
+            raise ValueError(
+                "Invalid Spotify playlist "
+                "Quick Access target."
+            )
+
+        index += 1
+
+    spotify_id = "".join(
+        decoded
+    )
+
+    if (
+        not spotify_id
+        or len(spotify_id)
+        > _SPOTIFY_PLAYLIST_ID_MAX_LENGTH
+        or not spotify_id.isascii()
+        or not spotify_id.isalnum()
+        or (
+            spotify_playlist_quick_access_target(
+                spotify_id
+            )
+            != checked
+        )
+    ):
+        raise ValueError(
+            "Invalid Spotify playlist "
+            "Quick Access target."
+        )
+
+    return spotify_id
 
 
 def _clean_text(
@@ -244,6 +414,45 @@ class QuickAccessItem:
                 raise ValueError(
                     "Launcher Quick Access items "
                     "must use the launcher icon."
+                )
+
+        if kind == "spotify_playlist":
+            try:
+                spotify_id = (
+                    spotify_playlist_id_from_quick_access_target(
+                        target
+                    )
+                )
+            except (
+                TypeError,
+                ValueError,
+            ) as error:
+                raise ValueError(
+                    "Invalid Spotify playlist "
+                    "Quick Access target."
+                ) from error
+
+            expected_target = (
+                spotify_playlist_quick_access_target(
+                    spotify_id
+                )
+            )
+
+            expected_item_id = (
+                "spotify_playlist."
+                + expected_target
+            )
+
+            if item_id != expected_item_id:
+                raise ValueError(
+                    "Spotify playlist Quick Access "
+                    "item ID must match its target."
+                )
+
+            if icon_key != "spotify":
+                raise ValueError(
+                    "Spotify playlist Quick Access "
+                    "items must use the Spotify icon."
                 )
 
         if type(self.visible) is not bool:

@@ -2203,6 +2203,93 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def _handle_quick_access_spotify_playlists_ready(
+        self,
+        result,
+    ) -> None:
+        playlists_page = getattr(
+            result,
+            "playlists_page",
+            None,
+        )
+
+        if playlists_page is None:
+            return
+
+        playlists = getattr(
+            playlists_page,
+            "playlists",
+            None,
+        )
+
+        if not isinstance(
+            playlists,
+            (
+                tuple,
+                list,
+            ),
+        ):
+            return
+
+        dashboard_page = getattr(
+            self,
+            "dashboard_page",
+            None,
+        )
+
+        setter = getattr(
+            dashboard_page,
+            "set_spotify_quick_access_playlists",
+            None,
+        )
+
+        if not callable(
+            setter
+        ):
+            return
+
+        setter(
+            playlists
+        )
+
+
+    def open_spotify_playlist_from_dashboard(
+        self,
+        spotify_id: str,
+        title: str,
+    ) -> bool:
+        spotify_page = getattr(
+            self,
+            "spotify_page",
+            None,
+        )
+
+        show_reference = getattr(
+            spotify_page,
+            "show_playlist_reference",
+            None,
+        )
+
+        if not callable(
+            show_reference
+        ):
+            return False
+
+        try:
+            self.switch_page(
+                5
+            )
+
+            return bool(
+                show_reference(
+                    spotify_id,
+                    title,
+                )
+            )
+        except Exception:
+            return False
+
+
     def connect_services(self):
         self.dashboard_page.media_worker.song_ready.connect(
             self.handle_song_update
@@ -2222,6 +2309,14 @@ class MainWindow(QMainWindow):
 
         self.dashboard_page.apply_presence_preset_requested.connect(
             self.apply_presence_preset_from_dashboard
+        )
+
+        self.dashboard_page.spotify_playlist_requested.connect(
+            self.open_spotify_playlist_from_dashboard
+        )
+
+        self.spotify_playlist_runtime.playlists_ready.connect(
+            self._handle_quick_access_spotify_playlists_ready
         )
         self.presence_page.presets_changed.connect(
             self.refresh_dashboard_quick_access

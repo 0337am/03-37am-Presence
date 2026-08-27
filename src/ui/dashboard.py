@@ -91,6 +91,13 @@ from src.system.quick_access_preferences import (
     QuickAccessItem,
     QuickAccessPreferencesStore,
 )
+from src.system.quick_access_preferences import (
+    spotify_playlist_id_from_quick_access_target,
+    spotify_playlist_quick_access_target,
+)
+from src.spotify.playlist_models import (
+    SpotifyPlaylistSummary,
+)
 from src.system.idle_monitor import (
     WindowsIdleMonitor,
 )
@@ -926,6 +933,7 @@ class DashboardPage(QWidget):
     settings_section_requested = pyqtSignal(str)
     apply_presence_mode_requested = pyqtSignal(str)
     apply_presence_preset_requested = pyqtSignal(str)
+    spotify_playlist_requested = pyqtSignal(str, str)
 
     playback_control_requested = pyqtSignal(
         str,
@@ -11425,6 +11433,146 @@ class DashboardPage(QWidget):
         )
 
 
+    def set_spotify_quick_access_playlists(
+        self,
+        playlists,
+    ) -> None:
+        try:
+            candidates = tuple(
+                playlists
+            )
+        except TypeError:
+            candidates = ()
+
+        live_playlists = {}
+
+        for playlist in candidates:
+            if not isinstance(
+                playlist,
+                SpotifyPlaylistSummary,
+            ):
+                continue
+
+            spotify_id = str(
+                playlist.spotify_id
+                or ""
+            )
+
+            try:
+                spotify_playlist_quick_access_target(
+                    spotify_id
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            live_playlists[
+                spotify_id
+            ] = playlist
+
+        self._spotify_quick_access_playlists = (
+            live_playlists
+        )
+
+        if hasattr(
+            self,
+            "quick_access_grid",
+        ):
+            self.refresh_quick_access_buttons(
+                force=True
+            )
+
+
+    def _spotify_playlist_quick_access_items(
+        self,
+    ) -> tuple[QuickAccessItem, ...]:
+        live_playlists = getattr(
+            self,
+            "_spotify_quick_access_playlists",
+            {},
+        )
+
+        if not isinstance(
+            live_playlists,
+            dict,
+        ):
+            return ()
+
+        items = []
+
+        for spotify_id, playlist in (
+            live_playlists.items()
+        ):
+            if not isinstance(
+                playlist,
+                SpotifyPlaylistSummary,
+            ):
+                continue
+
+            try:
+                target = (
+                    spotify_playlist_quick_access_target(
+                        spotify_id
+                    )
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            title = (
+                str(
+                    playlist.name
+                    or ""
+                ).strip()
+                or "Spotify Playlist"
+            )
+
+            owner_name = str(
+                playlist.owner_name
+                or ""
+            ).strip()
+
+            detail = (
+                owner_name
+                or "Spotify playlist"
+            )
+
+            try:
+                item = QuickAccessItem(
+                    item_id=(
+                        "spotify_playlist."
+                        + target
+                    ),
+                    kind="spotify_playlist",
+                    target=target,
+                    title=title[
+                        :MAX_TITLE_LENGTH
+                    ],
+                    detail=detail[
+                        :MAX_DETAIL_LENGTH
+                    ],
+                    icon_key="spotify",
+                    visible=True,
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            items.append(
+                item
+            )
+
+        return tuple(
+            items
+        )
+
+
     def _presence_mode_quick_access_items(
         self,
     ) -> tuple[QuickAccessItem, ...]:
@@ -11609,6 +11757,10 @@ class DashboardPage(QWidget):
             )
             + DashboardPage
             ._launcher_card_quick_access_items(
+                self
+            )
+            + DashboardPage
+            ._spotify_playlist_quick_access_items(
                 self
             )
         )
@@ -12183,6 +12335,89 @@ class DashboardPage(QWidget):
             quick_access_preferences.items
         ):
             if not quick_access_item.visible:
+                continue
+
+            if (
+                quick_access_item.kind
+                == "spotify_playlist"
+            ):
+                try:
+                    spotify_id = (
+                        spotify_playlist_id_from_quick_access_target(
+                            quick_access_item.target
+                        )
+                    )
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
+
+                live_playlists = getattr(
+                    self,
+                    "_spotify_quick_access_playlists",
+                    {},
+                )
+
+                live_playlist = (
+                    live_playlists.get(
+                        spotify_id
+                    )
+                    if isinstance(
+                        live_playlists,
+                        dict,
+                    )
+                    else None
+                )
+
+                if isinstance(
+                    live_playlist,
+                    SpotifyPlaylistSummary,
+                ):
+                    title = (
+                        str(
+                            live_playlist.name
+                            or ""
+                        ).strip()
+                        or quick_access_item.title
+                    )
+
+                    owner_name = str(
+                        live_playlist.owner_name
+                        or ""
+                    ).strip()
+
+                    detail = (
+                        owner_name
+                        or quick_access_item.detail
+                        or "Spotify playlist"
+                    )
+                else:
+                    title = (
+                        quick_access_item.title
+                    )
+
+                    detail = (
+                        quick_access_item.detail
+                    )
+
+                self.quick_access_buttons.append(
+                    self._make_quick_access_button(
+                        icon_key="spotify",
+                        title=title,
+                        detail=detail,
+                        callback=(
+                            lambda checked=False,
+                            playlist_id=spotify_id,
+                            playlist_title=title:
+                            self.spotify_playlist_requested.emit(
+                                playlist_id,
+                                playlist_title,
+                            )
+                        ),
+                    )
+                )
+
                 continue
 
             if (
