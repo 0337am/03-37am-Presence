@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.2.1 - Custom Presence Party
+
+Released 28 August 2026.
+
+### Added
+
+- Added optional Party / Group controls to Custom Presence in Presence Studio, with editable current-member and maximum-member values.
+- Custom Presence can now publish Discord's native Rich Presence party-size metadata so Discord itself renders the native group icon and `(x of y)` member count.
+- Party information is preserved through Custom Presence settings and Presence Library presets, including saved member values when the Discord display option is turned off.
+
+### Improved
+
+- Added app-owned themed chevrons to the Party member controls, with white arrows while active and a muted presentation while the controls are disabled.
+
+### Safety, compatibility, and upgrade behavior
+
+- Party information is Custom Presence only and is omitted entirely when disabled or when another Presence mode is active.
+- Existing settings and schema-1 Presence presets remain compatible; older data defaults Party information to off with safe 1-of-2 editor defaults.
+- Discord RPC lifecycle and publication remain on the existing worker-owned path, with no Discord client secret, bot token, user token, foreground activation, or simulated input introduced.
+
 ## v3.2.0 - Playback & Quick Access
 
 Released 28 August 2026.

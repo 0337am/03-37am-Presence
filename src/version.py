@@ -1,5 +1,5 @@
-APP_VERSION = "3.2.0"
-RELEASE_NAME = "Playback & Quick Access"
+APP_VERSION = "3.2.1"
+RELEASE_NAME = "Custom Presence Party"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

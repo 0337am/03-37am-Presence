@@ -2,8 +2,9 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.2.0 highlights
+## v3.2.1 highlights
 
+- Added optional Custom Presence Party / Group controls with editable current and maximum member counts. Discord uses the native Rich Presence party metadata to render its own group icon and `(x of y)` member count.
 - Added a complete Dashboard playback row for Shuffle, Previous, Play/Pause, Next, and Repeat with app-owned themed controls.
 - Added direct Dashboard seeking while preserving the existing playback service and coordinator boundaries.
 - Added trusted Spotify Repeat One loop tracking, including Discord timer resets and an optional `Loop ×N` counter.
