@@ -18,6 +18,10 @@ VALID_MODES = {
     "disabled",
 }
 
+DEFAULT_PARTY_CURRENT = 1
+DEFAULT_PARTY_MAXIMUM = 2
+MAX_PARTY_SIZE = 9999
+
 MODE_NAMES = {
     "music": "Music",
     "afk": "AFK",
@@ -66,6 +70,9 @@ class PresenceMode:
     show_buttons: bool = False
     buttons: tuple[PresenceLinkButton, ...] = ()
     show_loop_count: bool = False
+    show_party: bool = False
+    party_current: int = DEFAULT_PARTY_CURRENT
+    party_maximum: int = DEFAULT_PARTY_MAXIMUM
 
     def normalized_mode(self) -> str:
         normalized = str(
@@ -76,6 +83,69 @@ class PresenceMode:
             return "custom"
 
         return normalized
+
+    @staticmethod
+    def _normalized_party_value(
+        value,
+        default: int,
+    ) -> int:
+        try:
+            normalized = int(value)
+        except (
+            TypeError,
+            ValueError,
+        ):
+            normalized = int(default)
+
+        return max(
+            1,
+            min(
+                normalized,
+                MAX_PARTY_SIZE,
+            ),
+        )
+
+    def normalized_party_size(
+        self,
+    ) -> tuple[int, int]:
+        current = self._normalized_party_value(
+            self.party_current,
+            DEFAULT_PARTY_CURRENT,
+        )
+
+        maximum = self._normalized_party_value(
+            self.party_maximum,
+            DEFAULT_PARTY_MAXIMUM,
+        )
+
+        if maximum < current:
+            maximum = current
+
+        return (
+            current,
+            maximum,
+        )
+
+    def party_enabled(self) -> bool:
+        return bool(
+            self.normalized_mode() == "custom"
+            and self.show_party
+        )
+
+    def discord_party_size(
+        self,
+    ) -> list[int] | None:
+        if not self.party_enabled():
+            return None
+
+        current, maximum = (
+            self.normalized_party_size()
+        )
+
+        return [
+            current,
+            maximum,
+        ]
 
     def resolved_title(self) -> str:
         mode = self.normalized_mode()
@@ -149,6 +219,10 @@ class PresenceMode:
     def to_payload(self) -> dict:
         buttons = self.normalized_buttons()
 
+        party_current, party_maximum = (
+            self.normalized_party_size()
+        )
+
         return {
             "mode": self.normalized_mode(),
             "title": self.resolved_title(),
@@ -163,6 +237,10 @@ class PresenceMode:
                 if self.normalized_mode() == "music"
                 else False
             ),
+            "show_party": self.party_enabled(),
+            "party_current": party_current,
+            "party_maximum": party_maximum,
+            "party_size": self.discord_party_size(),
             "show_buttons": (
                 self.link_buttons_enabled()
             ),

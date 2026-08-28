@@ -1,6 +1,8 @@
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
 from src.discord.presence_modes import (
+    DEFAULT_PARTY_CURRENT,
+    DEFAULT_PARTY_MAXIMUM,
     MODE_DEFAULTS,
     PresenceMode,
     VALID_MODES,
@@ -105,6 +107,22 @@ class PresenceController(QObject):
             type=bool,
         )
 
+        show_party = self.store.value(
+            f"presence/{normalized}/show_party",
+            False,
+            type=bool,
+        )
+
+        party_current = self.store.value(
+            f"presence/{normalized}/party_current",
+            DEFAULT_PARTY_CURRENT,
+        )
+
+        party_maximum = self.store.value(
+            f"presence/{normalized}/party_maximum",
+            DEFAULT_PARTY_MAXIMUM,
+        )
+
         try:
             buttons = decode_presence_buttons(
                 self.store.value(
@@ -129,6 +147,13 @@ class PresenceController(QObject):
                 if normalized == "music"
                 else False
             ),
+            show_party=(
+                bool(show_party)
+                if normalized == "custom"
+                else False
+            ),
+            party_current=party_current,
+            party_maximum=party_maximum,
         )
 
     def save_mode(
@@ -160,6 +185,26 @@ class PresenceController(QObject):
                 bool(
                     presence_mode.show_loop_count
                 ),
+            )
+
+        if mode == "custom":
+            party_current, party_maximum = (
+                presence_mode.normalized_party_size()
+            )
+
+            self.store.setValue(
+                f"presence/{mode}/show_party",
+                presence_mode.party_enabled(),
+            )
+
+            self.store.setValue(
+                f"presence/{mode}/party_current",
+                party_current,
+            )
+
+            self.store.setValue(
+                f"presence/{mode}/party_maximum",
+                party_maximum,
             )
 
         if mode not in {
@@ -341,6 +386,7 @@ class PresenceController(QObject):
                 image_name=payload["image_name"],
                 show_elapsed=payload["show_elapsed"],
                 buttons=discord_buttons,
+                party_size=payload["party_size"],
             )
 
         self.mode_changed.emit(

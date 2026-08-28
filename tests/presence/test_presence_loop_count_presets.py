@@ -73,22 +73,33 @@ class PresenceLoopCountPresetTests(
             )
         ]
 
+        legacy_fields = [
+            "preset_id",
+            "name",
+            "mode",
+            "title",
+            "message",
+            "image_path",
+            "show_elapsed",
+            "show_buttons",
+            "buttons",
+            "pinned",
+            "created_at",
+            "updated_at",
+            "show_loop_count",
+        ]
+
         self.assertEqual(
-            fields,
+            fields[:len(legacy_fields)],
+            legacy_fields,
+        )
+
+        self.assertEqual(
+            fields[len(legacy_fields):],
             [
-                "preset_id",
-                "name",
-                "mode",
-                "title",
-                "message",
-                "image_path",
-                "show_elapsed",
-                "show_buttons",
-                "buttons",
-                "pinned",
-                "created_at",
-                "updated_at",
-                "show_loop_count",
+                "show_party",
+                "party_current",
+                "party_maximum",
             ],
         )
 

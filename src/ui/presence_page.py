@@ -2,6 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PyQt6.QtCore import (
+    QPoint,
     Qt,
     QUrl,
     pyqtSignal,
@@ -9,6 +10,9 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QDesktopServices,
+    QPainter,
+    QPalette,
+    QPen,
     QPixmap,
 )
 from PyQt6.QtWidgets import (
@@ -26,9 +30,15 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QScrollArea,
+    QSpinBox,
+    QStyle,
+    QStyleOptionSpinBox,
 )
 
 from src.discord.presence_modes import (
+    DEFAULT_PARTY_CURRENT,
+    DEFAULT_PARTY_MAXIMUM,
+    MAX_PARTY_SIZE,
     MODE_NAMES,
     PRESENCE_IMAGE_DIRECTORY,
     PresenceMode,
@@ -91,6 +101,142 @@ def colour_with_alpha(
 
 
 from src.ui.presence_library import PresenceLibraryPanel
+
+
+class PartySpinBox(QSpinBox):
+    """Presence Studio spin box with app-owned chevrons."""
+
+    @staticmethod
+    def _draw_chevron(
+        painter: QPainter,
+        rect,
+        *,
+        points_up: bool,
+    ):
+        if (
+            not rect.isValid()
+            or rect.width() <= 0
+            or rect.height() <= 0
+        ):
+            return
+
+        center = rect.center()
+
+        x = center.x()
+        y = center.y()
+
+        if points_up:
+            left = QPoint(
+                x - 3,
+                y + 1,
+            )
+            middle = QPoint(
+                x,
+                y - 2,
+            )
+            right = QPoint(
+                x + 3,
+                y + 1,
+            )
+
+        else:
+            left = QPoint(
+                x - 3,
+                y - 1,
+            )
+            middle = QPoint(
+                x,
+                y + 2,
+            )
+            right = QPoint(
+                x + 3,
+                y - 1,
+            )
+
+        painter.drawLine(
+            left,
+            middle,
+        )
+        painter.drawLine(
+            middle,
+            right,
+        )
+
+    def paintEvent(
+        self,
+        event,
+    ):
+        super().paintEvent(
+            event
+        )
+
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(
+            option
+        )
+
+        style = self.style()
+
+        up_rect = style.subControlRect(
+            QStyle.ComplexControl.CC_SpinBox,
+            option,
+            QStyle.SubControl.SC_SpinBoxUp,
+            self,
+        )
+
+        down_rect = style.subControlRect(
+            QStyle.ComplexControl.CC_SpinBox,
+            option,
+            QStyle.SubControl.SC_SpinBoxDown,
+            self,
+        )
+
+        chevron_color = (
+            Qt.GlobalColor.white
+            if self.isEnabled()
+            else self.palette().color(
+                QPalette.ColorRole.Mid
+            ).lighter(125)
+        )
+
+        painter = QPainter(
+            self
+        )
+        painter.setRenderHint(
+            QPainter.RenderHint.Antialiasing,
+            True,
+        )
+
+        pen = QPen(
+            chevron_color
+        )
+        pen.setWidthF(
+            1.45
+        )
+        pen.setCapStyle(
+            Qt.PenCapStyle.RoundCap
+        )
+        pen.setJoinStyle(
+            Qt.PenJoinStyle.RoundJoin
+        )
+
+        painter.setPen(
+            pen
+        )
+
+        self._draw_chevron(
+            painter,
+            up_rect,
+            points_up=True,
+        )
+
+        self._draw_chevron(
+            painter,
+            down_rect,
+            points_up=False,
+        )
+
+        painter.end()
 
 class PresencePage(QWidget):
     presets_changed = pyqtSignal()
@@ -423,6 +569,189 @@ class PresencePage(QWidget):
             Qt.CursorShape.PointingHandCursor
         )
 
+        self.party_editor = QWidget()
+        self.party_editor.setObjectName(
+            "presencePartyEditor"
+        )
+
+        party_layout = QVBoxLayout(
+            self.party_editor
+        )
+        party_layout.setContentsMargins(
+            0,
+            4,
+            0,
+            0,
+        )
+        party_layout.setSpacing(8)
+
+        party_header = QHBoxLayout()
+        party_header.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        party_header.setSpacing(8)
+
+        party_heading = QLabel(
+            "PARTY / GROUP"
+        )
+        party_heading.setObjectName(
+            "presenceStudioSectionTitle"
+        )
+
+        self.show_party_box = QCheckBox(
+            "Show on Discord"
+        )
+        self.show_party_box.setObjectName(
+            "partyBox"
+        )
+        self.show_party_box.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.show_party_box.setToolTip(
+            "Show Discord's native party size "
+            "indicator for this Custom Presence."
+        )
+
+        party_header.addWidget(
+            party_heading
+        )
+        party_header.addStretch()
+        party_header.addWidget(
+            self.show_party_box
+        )
+
+        self.party_help = QLabel(
+            "Choose the current and maximum group size. "
+            "Turning this off keeps the saved numbers."
+        )
+        self.party_help.setObjectName(
+            "modeHelp"
+        )
+        self.party_help.setWordWrap(True)
+
+        party_members_row = QHBoxLayout()
+        party_members_row.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        party_members_row.setSpacing(10)
+
+        current_members_layout = QVBoxLayout()
+        current_members_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        current_members_layout.setSpacing(5)
+
+        current_members_label = QLabel(
+            "Current members"
+        )
+        current_members_label.setObjectName(
+            "fieldTitle"
+        )
+
+        self.party_current_spin = PartySpinBox()
+        self.party_current_spin.setObjectName(
+            "presencePartySpin"
+        )
+        self.party_current_spin.setRange(
+            1,
+            MAX_PARTY_SIZE,
+        )
+        self.party_current_spin.setValue(
+            DEFAULT_PARTY_CURRENT
+        )
+        self.party_current_spin.setMinimumHeight(
+            34
+        )
+        self.party_current_spin.setToolTip(
+            "Current number of members in the party."
+        )
+
+        current_members_layout.addWidget(
+            current_members_label
+        )
+        current_members_layout.addWidget(
+            self.party_current_spin
+        )
+
+        maximum_members_layout = QVBoxLayout()
+        maximum_members_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        maximum_members_layout.setSpacing(5)
+
+        maximum_members_label = QLabel(
+            "Maximum members"
+        )
+        maximum_members_label.setObjectName(
+            "fieldTitle"
+        )
+
+        self.party_maximum_spin = PartySpinBox()
+        self.party_maximum_spin.setObjectName(
+            "presencePartySpin"
+        )
+        self.party_maximum_spin.setRange(
+            1,
+            MAX_PARTY_SIZE,
+        )
+        self.party_maximum_spin.setValue(
+            DEFAULT_PARTY_MAXIMUM
+        )
+        self.party_maximum_spin.setMinimumHeight(
+            34
+        )
+        self.party_maximum_spin.setToolTip(
+            "Maximum number of members in the party."
+        )
+
+        maximum_members_layout.addWidget(
+            maximum_members_label
+        )
+        maximum_members_layout.addWidget(
+            self.party_maximum_spin
+        )
+
+        party_members_row.addLayout(
+            current_members_layout,
+            1,
+        )
+        party_members_row.addLayout(
+            maximum_members_layout,
+            1,
+        )
+
+        party_layout.addLayout(
+            party_header
+        )
+        party_layout.addWidget(
+            self.party_help
+        )
+        party_layout.addLayout(
+            party_members_row
+        )
+
+        self.show_party_box.toggled.connect(
+            self._update_party_editor_state
+        )
+        self.party_current_spin.valueChanged.connect(
+            self._on_party_current_changed
+        )
+        self.party_maximum_spin.valueChanged.connect(
+            self._on_party_maximum_changed
+        )
+
         self.link_buttons_editor = QFrame()
         self.link_buttons_editor.setObjectName(
             "presenceStudioLinkButtonsCard"
@@ -670,6 +999,9 @@ class PresencePage(QWidget):
         )
         self.editor_layout.addWidget(
             self.elapsed_box
+        )
+        self.editor_layout.addWidget(
+            self.party_editor
         )
 
         self.editor_layout.addStretch()
@@ -2210,6 +2542,9 @@ class PresencePage(QWidget):
         self._load_link_button_editor(
             presence_mode
         )
+        self._load_party_editor(
+            presence_mode
+        )
 
         self.image_path = (
             presence_mode.image_path
@@ -2358,6 +2693,12 @@ class PresencePage(QWidget):
             _loop_count_box.setChecked(
                 False
             )
+
+        self._load_party_editor(
+            PresenceMode(
+                mode="custom"
+            )
+        )
 
         self.title_input.blockSignals(
             False
@@ -2706,6 +3047,148 @@ class PresencePage(QWidget):
             bool(checked)
         )
 
+    def _load_party_editor(
+        self,
+        presence_mode: PresenceMode,
+    ):
+        party_box = getattr(
+            self,
+            "show_party_box",
+            None,
+        )
+        current_spin = getattr(
+            self,
+            "party_current_spin",
+            None,
+        )
+        maximum_spin = getattr(
+            self,
+            "party_maximum_spin",
+            None,
+        )
+
+        if (
+            party_box is None
+            or current_spin is None
+            or maximum_spin is None
+        ):
+            return
+
+        current, maximum = (
+            presence_mode.normalized_party_size()
+        )
+
+        party_box.blockSignals(True)
+        current_spin.blockSignals(True)
+        maximum_spin.blockSignals(True)
+
+        party_box.setChecked(
+            presence_mode.party_enabled()
+        )
+        current_spin.setValue(
+            current
+        )
+        maximum_spin.setValue(
+            maximum
+        )
+
+        party_box.blockSignals(False)
+        current_spin.blockSignals(False)
+        maximum_spin.blockSignals(False)
+
+        self._update_party_editor_state()
+
+    def _update_party_editor_state(
+        self,
+        *_,
+    ):
+        party_editor = getattr(
+            self,
+            "party_editor",
+            None,
+        )
+        party_box = getattr(
+            self,
+            "show_party_box",
+            None,
+        )
+        current_spin = getattr(
+            self,
+            "party_current_spin",
+            None,
+        )
+        maximum_spin = getattr(
+            self,
+            "party_maximum_spin",
+            None,
+        )
+
+        if (
+            party_editor is None
+            or party_box is None
+            or current_spin is None
+            or maximum_spin is None
+        ):
+            return
+
+        custom_mode = (
+            self.current_mode == "custom"
+        )
+
+        numbers_enabled = bool(
+            custom_mode
+            and party_box.isChecked()
+        )
+
+        party_editor.setVisible(
+            custom_mode
+        )
+        party_box.setEnabled(
+            custom_mode
+        )
+        current_spin.setEnabled(
+            numbers_enabled
+        )
+        maximum_spin.setEnabled(
+            numbers_enabled
+        )
+
+    def _on_party_current_changed(
+        self,
+        value: int,
+    ):
+        maximum_spin = getattr(
+            self,
+            "party_maximum_spin",
+            None,
+        )
+
+        if maximum_spin is None:
+            return
+
+        if maximum_spin.value() < int(value):
+            maximum_spin.setValue(
+                int(value)
+            )
+
+    def _on_party_maximum_changed(
+        self,
+        value: int,
+    ):
+        current_spin = getattr(
+            self,
+            "party_current_spin",
+            None,
+        )
+
+        if current_spin is None:
+            return
+
+        if current_spin.value() > int(value):
+            current_spin.setValue(
+                int(value)
+            )
+
     def current_editor_presence_mode(
         self,
     ) -> PresenceMode:
@@ -2736,6 +3219,40 @@ class PresencePage(QWidget):
             and loop_count_box.isChecked()
         )
 
+        party_box = getattr(
+            self,
+            "show_party_box",
+            None,
+        )
+        party_current_spin = getattr(
+            self,
+            "party_current_spin",
+            None,
+        )
+        party_maximum_spin = getattr(
+            self,
+            "party_maximum_spin",
+            None,
+        )
+
+        show_party = bool(
+            mode == "custom"
+            and party_box is not None
+            and party_box.isChecked()
+        )
+
+        party_current = (
+            party_current_spin.value()
+            if party_current_spin is not None
+            else DEFAULT_PARTY_CURRENT
+        )
+
+        party_maximum = (
+            party_maximum_spin.value()
+            if party_maximum_spin is not None
+            else DEFAULT_PARTY_MAXIMUM
+        )
+
         return PresenceMode(
             mode=mode,
             title=self.title_input.text().strip(),
@@ -2747,6 +3264,9 @@ class PresencePage(QWidget):
             show_buttons=show_buttons,
             buttons=buttons,
             show_loop_count=show_loop_count,
+            show_party=show_party,
+            party_current=party_current,
+            party_maximum=party_maximum,
         )
 
     def on_preset_changed(self, *_):
@@ -2928,6 +3448,9 @@ class PresencePage(QWidget):
             _loop_count_box.blockSignals(False)
 
         self._load_link_button_editor(
+            presence_mode
+        )
+        self._load_party_editor(
             presence_mode
         )
 
@@ -3290,14 +3813,18 @@ class PresencePage(QWidget):
                 outline: none;
             }}
 
-            QCheckBox#elapsedBox, QCheckBox#loopCountBox {{
+            QCheckBox#elapsedBox,
+            QCheckBox#loopCountBox,
+            QCheckBox#partyBox {{
                 color: {theme["text"]};
                 spacing: 8px;
                 font-size: 11px;
                 padding-top: 3px;
             }}
 
-            QCheckBox#elapsedBox::indicator, QCheckBox#loopCountBox::indicator {{
+            QCheckBox#elapsedBox::indicator,
+            QCheckBox#loopCountBox::indicator,
+            QCheckBox#partyBox::indicator {{
                 width: 16px;
                 height: 16px;
                 background: {theme["background"]};
@@ -3305,13 +3832,73 @@ class PresencePage(QWidget):
                 border-radius: 4px;
             }}
 
-            QCheckBox#elapsedBox::indicator:hover, QCheckBox#loopCountBox::indicator:hover {{
+            QCheckBox#elapsedBox::indicator:hover,
+            QCheckBox#loopCountBox::indicator:hover,
+            QCheckBox#partyBox::indicator:hover {{
                 border: 1px solid {theme["accent"]};
             }}
 
-            QCheckBox#elapsedBox::indicator:checked, QCheckBox#loopCountBox::indicator:checked {{
+            QCheckBox#elapsedBox::indicator:checked,
+            QCheckBox#loopCountBox::indicator:checked,
+            QCheckBox#partyBox::indicator:checked {{
                 background: {theme["accent"]};
                 border: 1px solid {theme["accent"]};
+            }}
+
+            QSpinBox#presencePartySpin {{
+                color: {theme["text"]};
+                background: {card_alt_glass};
+                border: 1px solid {theme["border"]};
+                border-radius: 9px;
+                padding: {input_padding}px 27px {input_padding}px 8px;
+                font-size: 11px;
+                selection-background-color: {theme["accent"]};
+            }}
+
+            QSpinBox#presencePartySpin:hover,
+            QSpinBox#presencePartySpin:focus {{
+                border: 1px solid {theme["accent"]};
+            }}
+
+            QSpinBox#presencePartySpin:disabled {{
+                color: {theme["muted"]};
+                background: {theme["background"]};
+                border-color: {theme["border"]};
+            }}
+
+            QSpinBox#presencePartySpin::up-button {{
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid {theme["border"]};
+                border-bottom: 1px solid {theme["border"]};
+                border-top-right-radius: 8px;
+                background: rgba(255, 255, 255, 0.03);
+            }}
+
+            QSpinBox#presencePartySpin::down-button {{
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 20px;
+                border-left: 1px solid {theme["border"]};
+                border-bottom-right-radius: 8px;
+                background: rgba(255, 255, 255, 0.03);
+            }}
+
+            QSpinBox#presencePartySpin::up-button:hover,
+            QSpinBox#presencePartySpin::down-button:hover {{
+                background: rgba(255, 255, 255, 0.07);
+            }}
+
+            QSpinBox#presencePartySpin::up-button:pressed,
+            QSpinBox#presencePartySpin::down-button:pressed {{
+                background: rgba(255, 255, 255, 0.10);
+            }}
+
+            QSpinBox#presencePartySpin::up-arrow,
+            QSpinBox#presencePartySpin::down-arrow {{
+                width: 0px;
+                height: 0px;
             }}
 
             QPushButton#secondaryButton {{
@@ -3497,6 +4084,9 @@ class PresencePage(QWidget):
         self._load_link_button_editor(
             presence_mode
         )
+        self._load_party_editor(
+            presence_mode
+        )
 
         self.image_path = (
             presence_mode.image_path
@@ -3561,6 +4151,8 @@ class PresencePage(QWidget):
             buttons_available
         )
 
+        self._update_party_editor_state()
+
         has_image = bool(
             self.image_path
             and Path(
@@ -3608,6 +4200,11 @@ class PresencePage(QWidget):
         elif mode == "disabled":
             self.mode_help.setText(
                 "Discord Rich Presence will be cleared."
+            )
+
+        elif mode == "custom":
+            self.mode_help.setText(
+                "Edit the title, message, artwork, timer, optional party information, and link buttons before publishing."
             )
 
         else:
@@ -3931,7 +4528,7 @@ class PresencePage(QWidget):
         answer = QMessageBox.question(
             self,
             "Reset Custom presence",
-            "Clear the saved Custom presence title, message, timer, and image?",
+            "Clear the saved Custom presence title, message, timer, image, party information, and buttons?",
         )
 
         if answer != QMessageBox.StandardButton.Yes:
@@ -3975,6 +4572,9 @@ class PresencePage(QWidget):
             "presence/custom/message",
             "presence/custom/image_path",
             "presence/custom/show_elapsed",
+            "presence/custom/show_party",
+            "presence/custom/party_current",
+            "presence/custom/party_maximum",
             "presence/custom/show_buttons",
             "presence/custom/buttons",
         ):

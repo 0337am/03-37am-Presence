@@ -46,6 +46,7 @@ class CustomPresenceUpdate:
     show_elapsed: bool
     started_at: int | None
     buttons: tuple[tuple[str, str], ...] = ()
+    party_size: tuple[int, int] | None = None
 
 
 class ExtendedDiscordPresence(DiscordPresence):
@@ -76,6 +77,51 @@ class ExtendedDiscordPresence(DiscordPresence):
             }
             for label, url in buttons
         ]
+
+    @staticmethod
+    def _normalize_rpc_party_size(
+        party_size,
+    ) -> tuple[int, int] | None:
+        if party_size is None:
+            return None
+
+        if not isinstance(
+            party_size,
+            (
+                list,
+                tuple,
+            ),
+        ):
+            return None
+
+        if len(party_size) != 2:
+            return None
+
+        try:
+            current = int(
+                party_size[0]
+            )
+
+            maximum = int(
+                party_size[1]
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return None
+
+        if (
+            current < 1
+            or maximum < current
+            or maximum > 9999
+        ):
+            return None
+
+        return (
+            current,
+            maximum,
+        )
 
     def __init__(
         self,
@@ -326,6 +372,7 @@ class ExtendedDiscordPresence(DiscordPresence):
         image_name: str = "",
         show_elapsed: bool = False,
         buttons=None,
+        party_size=None,
     ):
         if self._stop_event.is_set():
             return
@@ -351,6 +398,9 @@ class ExtendedDiscordPresence(DiscordPresence):
             ),
             buttons=self._normalize_rpc_buttons(
                 buttons
+            ),
+            party_size=self._normalize_rpc_party_size(
+                party_size
             ),
         )
 
@@ -440,6 +490,11 @@ class ExtendedDiscordPresence(DiscordPresence):
         if button_payload:
             options["buttons"] = (
                 button_payload
+            )
+
+        if update.party_size is not None:
+            options["party_size"] = list(
+                update.party_size
             )
 
         if ActivityType is not None:
@@ -541,6 +596,7 @@ class ExtendedDiscordPresence(DiscordPresence):
                 item.started_at,
                 image_key,
                 item.buttons,
+                item.party_size,
             )
 
         if isinstance(
