@@ -883,6 +883,7 @@ def install_startup_native_stage(
                 "_0337_stage_prepared",
                 False,
             )
+            and _state["staging"]
             and not getattr(
                 self,
                 "_0337_stage_complete",
@@ -991,6 +992,38 @@ def install_startup_native_stage(
             _state["staging"] = False
 
             _uninstall_hook()
+
+            captured_main_hwnd = int(
+                _state["main"]
+            )
+
+            if not _valid_target(
+                captured_main_hwnd
+            ):
+                current_main_hwnd = int(
+                    self.winId()
+                )
+
+                if _valid_target(
+                    current_main_hwnd
+                ):
+                    desired_main_rect = (
+                        _state["desired"].get(
+                            captured_main_hwnd
+                        )
+                    )
+
+                    _state["main"] = (
+                        current_main_hwnd
+                    )
+
+                    if (
+                        desired_main_rect
+                        is not None
+                    ):
+                        _state["desired"][
+                            current_main_hwnd
+                        ] = desired_main_rect
 
             handles = (
                 _move_targets_onscreen()
