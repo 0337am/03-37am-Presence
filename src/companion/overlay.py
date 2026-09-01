@@ -244,6 +244,9 @@ class CompanionOverlay(QWidget):
     ) -> None:
         super().__init__(parent)
 
+        self._requested_visible = False
+        self._policy_hidden = False
+
         self._source_pixmap = QPixmap()
 
         self._movie: QMovie | None = None
@@ -330,6 +333,14 @@ class CompanionOverlay(QWidget):
     @property
     def click_through(self) -> bool:
         return self._click_through
+
+    @property
+    def requested_visible(self) -> bool:
+        return self._requested_visible
+
+    @property
+    def policy_hidden(self) -> bool:
+        return self._policy_hidden
 
     @property
     def current_screen_name(self) -> str:
@@ -707,6 +718,54 @@ class CompanionOverlay(QWidget):
         if was_visible:
             self.show()
 
+    def set_policy_hidden(
+        self,
+        hidden: bool,
+    ) -> None:
+        if not isinstance(
+            hidden,
+            bool,
+        ):
+            raise ValueError(
+                "hidden must be a boolean."
+            )
+
+        if self._policy_hidden == hidden:
+            return
+
+        self._policy_hidden = hidden
+
+        if hidden:
+            self._cancel_drag()
+
+        self._sync_visibility()
+
+    def _has_asset(self) -> bool:
+        return (
+            self._movie is not None
+            or not self._source_pixmap.isNull()
+        )
+
+    def _sync_visibility(self) -> None:
+        should_show = (
+            self._requested_visible
+            and not self._policy_hidden
+            and self._has_asset()
+        )
+
+        if should_show:
+            self.show()
+
+            if self._movie is not None:
+                self._movie.start()
+
+            return
+
+        if self._movie is not None:
+            self._movie.stop()
+
+        self.hide()
+
     def mousePressEvent(
         self,
         event,
@@ -808,24 +867,12 @@ class CompanionOverlay(QWidget):
             preferences
         )
 
-        has_asset = (
-            self._movie is not None
-            or not self._source_pixmap.isNull()
+        self._requested_visible = bool(
+            preferences.enabled
+            and self._has_asset()
         )
 
-        if (
-            preferences.enabled
-            and has_asset
-        ):
-            self.show()
-
-            if self._movie is not None:
-                self._movie.start()
-        else:
-            if self._movie is not None:
-                self._movie.stop()
-
-            self.hide()
+        self._sync_visibility()
 
     def _apply_preferred_placement(
         self,
