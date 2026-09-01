@@ -130,36 +130,65 @@ def _clamp_position_to_screen(
     window_size: QSize,
     desired_position: QPoint,
 ) -> QPoint:
-    area = screen.availableGeometry()
+    """
+    Keep a deliberately placed Companion recoverable.
+
+    Remembered positions may extend beyond any monitor edge.
+    Only an effectively unreachable position is pulled back,
+    leaving a small visible strip that can still be grabbed.
+    """
+    area = screen.geometry()
+
+    width = max(
+        1,
+        window_size.width(),
+    )
+
+    height = max(
+        1,
+        window_size.height(),
+    )
+
+    minimum_visible = 24
+
+    visible_x = min(
+        width,
+        minimum_visible,
+    )
+
+    visible_y = min(
+        height,
+        minimum_visible,
+    )
+
+    minimum_x = (
+        area.x()
+        - width
+        + visible_x
+    )
 
     maximum_x = (
         area.x()
-        + max(
-            0,
-            area.width()
-            - max(
-                1,
-                window_size.width(),
-            ),
-        )
+        + area.width()
+        - visible_x
+    )
+
+    minimum_y = (
+        area.y()
+        - height
+        + visible_y
     )
 
     maximum_y = (
         area.y()
-        + max(
-            0,
-            area.height()
-            - max(
-                1,
-                window_size.height(),
-            ),
-        )
+        + area.height()
+        - visible_y
     )
 
     x = min(
         max(
             desired_position.x(),
-            area.x(),
+            minimum_x,
         ),
         maximum_x,
     )
@@ -167,7 +196,7 @@ def _clamp_position_to_screen(
     y = min(
         max(
             desired_position.y(),
-            area.y(),
+            minimum_y,
         ),
         maximum_y,
     )

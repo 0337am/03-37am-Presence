@@ -944,40 +944,163 @@ class CompanionOverlayTests(unittest.TestCase):
             primary,
         )
 
-    def test_clamp_position_keeps_window_inside_available_geometry(self):
-        screen = _FakeScreen(
-            "SECONDARY",
-            QRect(
-                1920,
-                0,
-                1920,
-                1080,
-            ),
-            QRect(
-                1920,
-                0,
-                1920,
-                1032,
-            ),
+    def test_clamp_preserves_intentional_partial_bottom_position(
+        self,
+    ):
+        from PyQt6.QtCore import (
+            QPoint,
+            QRect,
+            QSize,
         )
 
-        position = _clamp_position_to_screen(
-            screen,
+        from src.companion.overlay import (
+            _clamp_position_to_screen,
+        )
+
+        class Screen:
+            def geometry(
+                self,
+            ):
+                return QRect(
+                    0,
+                    0,
+                    1920,
+                    1080,
+                )
+
+            def availableGeometry(
+                self,
+            ):
+                return QRect(
+                    0,
+                    0,
+                    1920,
+                    1032,
+                )
+
+        desired = QPoint(
+            100,
+            960,
+        )
+
+        result = _clamp_position_to_screen(
+            Screen(),
             QSize(
-                200,
-                100,
+                320,
+                320,
+            ),
+            desired,
+        )
+
+        self.assertEqual(
+            result,
+            desired,
+        )
+
+    def test_clamp_preserves_intentional_partial_top_left_position(
+        self,
+    ):
+        from PyQt6.QtCore import (
+            QPoint,
+            QRect,
+            QSize,
+        )
+
+        from src.companion.overlay import (
+            _clamp_position_to_screen,
+        )
+
+        class Screen:
+            def geometry(
+                self,
+            ):
+                return QRect(
+                    0,
+                    0,
+                    1920,
+                    1080,
+                )
+
+        desired = QPoint(
+            -350,
+            -250,
+        )
+
+        result = _clamp_position_to_screen(
+            Screen(),
+            QSize(
+                400,
+                300,
+            ),
+            desired,
+        )
+
+        self.assertEqual(
+            result,
+            desired,
+        )
+
+    def test_clamp_rescues_unreachable_position_with_visible_strip(
+        self,
+    ):
+        from PyQt6.QtCore import (
+            QPoint,
+            QRect,
+            QSize,
+        )
+
+        from src.companion.overlay import (
+            _clamp_position_to_screen,
+        )
+
+        class Screen:
+            def geometry(
+                self,
+            ):
+                return QRect(
+                    0,
+                    0,
+                    1920,
+                    1080,
+                )
+
+        bottom_right = _clamp_position_to_screen(
+            Screen(),
+            QSize(
+                400,
+                300,
             ),
             QPoint(
-                9000,
-                9000,
+                5000,
+                5000,
             ),
         )
 
         self.assertEqual(
-            position,
+            bottom_right,
             QPoint(
-                3640,
-                932,
+                1896,
+                1056,
+            ),
+        )
+
+        top_left = _clamp_position_to_screen(
+            Screen(),
+            QSize(
+                400,
+                300,
+            ),
+            QPoint(
+                -5000,
+                -5000,
+            ),
+        )
+
+        self.assertEqual(
+            top_left,
+            QPoint(
+                -376,
+                -276,
             ),
         )
 
@@ -1014,38 +1137,114 @@ class CompanionOverlayTests(unittest.TestCase):
             ),
         )
 
-    def test_apply_preferences_clamps_remembered_position(self):
-        primary = self.app.primaryScreen()
+    def test_apply_preferences_preserves_partial_offscreen_position(
+        self,
+    ):
+        from unittest.mock import patch
 
-        self.assertIsNotNone(
-            primary
-        )
+        from PyQt6.QtCore import QRect
 
-        preferences = CompanionPreferences(
-            enabled=False,
-            remember_position=True,
-            position_x=1_000_000,
-            position_y=1_000_000,
-            screen_name=primary.name(),
-        )
+        class Screen:
+            def name(
+                self,
+            ):
+                return "DISPLAY-PARTIAL"
 
-        self.overlay.apply_preferences(
-            preferences
-        )
+            def geometry(
+                self,
+            ):
+                return QRect(
+                    0,
+                    0,
+                    1920,
+                    1080,
+                )
 
-        expected = _clamp_position_to_screen(
-            primary,
-            self.overlay.size(),
-            QPoint(
-                1_000_000,
-                1_000_000,
-            ),
-        )
+            def availableGeometry(
+                self,
+            ):
+                return QRect(
+                    0,
+                    0,
+                    1920,
+                    1032,
+                )
 
-        self.assertEqual(
-            self.overlay.pos(),
-            expected,
-        )
+        screen = Screen()
+
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_png(
+                root,
+                width=320,
+                height=320,
+            )
+
+            preferences = CompanionPreferences(
+                enabled=True,
+                asset_path=str(
+                    path
+                ),
+                click_through=False,
+                remember_position=True,
+                position_x=100,
+                position_y=960,
+                screen_name="DISPLAY-PARTIAL",
+            )
+
+            with patch(
+                "src.companion.overlay."
+                "QGuiApplication.screens",
+                return_value=[
+                    screen,
+                ],
+            ), patch(
+                "src.companion.overlay."
+                "QGuiApplication.primaryScreen",
+                return_value=screen,
+            ):
+                self.overlay.apply_preferences(
+                    preferences
+                )
+
+                self.app.processEvents()
+
+                self.assertEqual(
+                    self.overlay.pos().x(),
+                    100,
+                )
+
+                self.assertEqual(
+                    self.overlay.pos().y(),
+                    960,
+                )
+
+                reapplied = CompanionPreferences(
+                    enabled=True,
+                    asset_path=str(
+                        path
+                    ),
+                    click_through=True,
+                    remember_position=True,
+                    position_x=100,
+                    position_y=960,
+                    screen_name="DISPLAY-PARTIAL",
+                )
+
+                self.overlay.apply_preferences(
+                    reapplied
+                )
+
+                self.app.processEvents()
+
+                self.assertEqual(
+                    self.overlay.pos().x(),
+                    100,
+                )
+
+                self.assertEqual(
+                    self.overlay.pos().y(),
+                    960,
+                )
 
     def test_apply_preferences_centers_without_remembered_position(self):
         primary = self.app.primaryScreen()
