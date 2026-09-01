@@ -12721,6 +12721,116 @@ class DashboardPage(QWidget):
             ),
         )
 
+    def _activate_quick_access_layout_geometry(
+        self,
+    ):
+        card_layout = self.quick_access_card.layout()
+
+        if card_layout is not None:
+            card_layout.invalidate()
+            card_layout.activate()
+
+        self.quick_access_grid.invalidate()
+        self.quick_access_grid.activate()
+
+        for item in self.quick_access_buttons:
+            button = item.get(
+                "button"
+            )
+
+            if button is not None:
+                button.updateGeometry()
+
+    def _apply_quick_access_button_height(
+        self,
+        button_height: int,
+    ):
+        target_height = max(
+            1,
+            int(button_height),
+        )
+
+        for item in self.quick_access_buttons:
+            button = item.get(
+                "button"
+            )
+
+            if button is not None:
+                button.setFixedHeight(
+                    target_height
+                )
+
+    @staticmethod
+    def _quick_access_grid_slot(
+        *,
+        index: int,
+        button_count: int,
+        columns: int,
+    ) -> tuple[int, int, int, int]:
+        row = index // columns
+
+        rows = max(
+            1,
+            (
+                button_count
+                + columns
+                - 1
+            )
+            // columns,
+        )
+
+        remainder = (
+            button_count
+            % columns
+        )
+
+        last_row_count = (
+            remainder
+            if remainder
+            else columns
+        )
+
+        if (
+            row == rows - 1
+            and last_row_count < columns
+        ):
+            grid_units = (
+                columns
+                * last_row_count
+            )
+
+            column_span = (
+                grid_units
+                // last_row_count
+            )
+
+        else:
+            grid_units = (
+                columns
+                if last_row_count == columns
+                else (
+                    columns
+                    * last_row_count
+                )
+            )
+
+            column_span = (
+                grid_units
+                // columns
+            )
+
+        column = (
+            index
+            % columns
+        ) * column_span
+
+        return (
+            row,
+            column,
+            column_span,
+            grid_units,
+        )
+
     def update_quick_access_layout(
         self,
         force: bool = False,
@@ -12768,6 +12878,33 @@ class DashboardPage(QWidget):
             // columns,
         )
 
+        remainder = (
+            button_count
+            % columns
+        )
+
+        last_row_count = (
+            remainder
+            if remainder
+            else (
+                columns
+                if button_count
+                else 0
+            )
+        )
+
+        if (
+            last_row_count
+            and last_row_count < columns
+        ):
+            grid_units = (
+                columns
+                * last_row_count
+            )
+
+        else:
+            grid_units = columns
+
         horizontal_spacing = 8
         vertical_spacing = 8
         horizontal_margins = 28
@@ -12810,9 +12947,14 @@ class DashboardPage(QWidget):
             and button_height >= 66
         )
 
+        self._apply_quick_access_button_height(
+            button_height
+        )
+
         layout_mode = (
             columns,
             rows,
+            last_row_count,
             show_details,
         )
 
@@ -12821,6 +12963,7 @@ class DashboardPage(QWidget):
             and layout_mode
             == self._quick_access_layout_mode
         ):
+            self._activate_quick_access_layout_geometry()
             return
 
         while self.quick_access_grid.count():
@@ -12828,7 +12971,7 @@ class DashboardPage(QWidget):
                 0
             )
 
-        for index in range(4):
+        for index in range(12):
             self.quick_access_grid.setColumnStretch(
                 index,
                 0,
@@ -12839,7 +12982,7 @@ class DashboardPage(QWidget):
             )
 
         for column in range(
-            columns
+            grid_units
         ):
             self.quick_access_grid.setColumnStretch(
                 column,
@@ -12857,8 +13000,21 @@ class DashboardPage(QWidget):
         for index, item in enumerate(
             self.quick_access_buttons
         ):
-            row = index // columns
-            column = index % columns
+            (
+                row,
+                column,
+                column_span,
+                item_grid_units,
+            ) = self._quick_access_grid_slot(
+                index=index,
+                button_count=button_count,
+                columns=columns,
+            )
+
+            if item_grid_units != grid_units:
+                raise RuntimeError(
+                    "Quick Access grid shape mismatch."
+                )
 
             text = item["title"]
 
@@ -12889,11 +13045,15 @@ class DashboardPage(QWidget):
                 button,
                 row,
                 column,
+                1,
+                column_span,
             )
 
         self._quick_access_layout_mode = (
             layout_mode
         )
+
+        self._activate_quick_access_layout_geometry()
 
     def update_responsive_dashboard_cards(
         self,
