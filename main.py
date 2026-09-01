@@ -612,6 +612,9 @@ def main() -> int:
         app,
         window,
     )
+    window.set_tray_controller(
+        tray_controller
+    )
 
     media_hotkey_runtime = (
         start_media_hotkey_runtime(

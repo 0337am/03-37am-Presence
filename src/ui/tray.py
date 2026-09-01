@@ -28,6 +28,24 @@ class TrayController(QObject):
         self.tray_icon = None
 
         self.mode_actions = {}
+        self._companion_runtime = None
+
+        self.companion_action = QAction(
+            "Desktop Companion",
+            self,
+        )
+
+        self.companion_action.setCheckable(
+            True
+        )
+
+        self.companion_action.setEnabled(
+            False
+        )
+
+        self.companion_action.triggered.connect(
+            self.on_companion_action_triggered
+        )
         self.mode_action_group = None
 
         self._quitting = False
@@ -166,6 +184,9 @@ class TrayController(QObject):
         menu.addAction(
             hide_action
         )
+        menu.addAction(
+            self.companion_action
+        )
         menu.addSeparator()
 
         menu.addMenu(
@@ -187,6 +208,202 @@ class TrayController(QObject):
 
         self.tray_icon.show()
 
+    def set_companion_runtime(
+        self,
+        runtime,
+    ):
+        previous = self._companion_runtime
+
+        if previous is runtime:
+            self.sync_companion_action()
+            return
+
+        if previous is not None:
+            signal = getattr(
+                previous,
+                "preferences_changed",
+                None,
+            )
+
+            disconnect = getattr(
+                signal,
+                "disconnect",
+                None,
+            )
+
+            if callable(disconnect):
+                try:
+                    disconnect(
+                        self._companion_preferences_changed
+                    )
+                except (
+                    TypeError,
+                    RuntimeError,
+                    ValueError,
+                ):
+                    pass
+
+        self._companion_runtime = runtime
+
+        if runtime is not None:
+            signal = getattr(
+                runtime,
+                "preferences_changed",
+                None,
+            )
+
+            connect = getattr(
+                signal,
+                "connect",
+                None,
+            )
+
+            if callable(connect):
+                try:
+                    connect(
+                        self._companion_preferences_changed
+                    )
+                except (
+                    TypeError,
+                    RuntimeError,
+                ):
+                    pass
+
+        self.sync_companion_action()
+
+    def _companion_preferences_changed(
+        self,
+        preferences,
+    ):
+        self.sync_companion_action(
+            preferences
+        )
+
+    def sync_companion_action(
+        self,
+        preferences=None,
+    ):
+        action = getattr(
+            self,
+            "companion_action",
+            None,
+        )
+
+        if action is None:
+            return
+
+        runtime = getattr(
+            self,
+            "_companion_runtime",
+            None,
+        )
+
+        available = runtime is not None
+
+        if available:
+            try:
+                available = not bool(
+                    getattr(
+                        runtime,
+                        "is_shutdown",
+                        False,
+                    )
+                )
+            except Exception:
+                available = False
+
+        checked = False
+
+        if available:
+            try:
+                if preferences is None:
+                    preferences = getattr(
+                        runtime,
+                        "preferences",
+                        None,
+                    )
+
+                if preferences is None:
+                    available = False
+                else:
+                    checked = bool(
+                        getattr(
+                            preferences,
+                            "enabled",
+                            False,
+                        )
+                    )
+
+            except Exception:
+                available = False
+                checked = False
+
+        previous_block_state = (
+            action.blockSignals(True)
+        )
+
+        try:
+            action.setEnabled(
+                available
+            )
+
+            action.setChecked(
+                checked
+                if available
+                else False
+            )
+
+        finally:
+            action.blockSignals(
+                previous_block_state
+            )
+
+    def on_companion_action_triggered(
+        self,
+        checked=False,
+    ):
+        runtime = getattr(
+            self,
+            "_companion_runtime",
+            None,
+        )
+
+        if runtime is None:
+            self.sync_companion_action()
+            return
+
+        try:
+            if bool(
+                getattr(
+                    runtime,
+                    "is_shutdown",
+                    False,
+                )
+            ):
+                self.sync_companion_action()
+                return
+
+            updater = getattr(
+                runtime,
+                "update_preferences",
+                None,
+            )
+
+            if not callable(updater):
+                self.sync_companion_action()
+                return
+
+            preferences = updater(
+                enabled=bool(checked)
+            )
+
+        except Exception:
+            self.sync_companion_action()
+            return
+
+        self.sync_companion_action(
+            preferences
+        )
     def presence_controller(self):
         controller = getattr(
             self.main_window,

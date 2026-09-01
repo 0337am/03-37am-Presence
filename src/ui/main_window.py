@@ -1317,6 +1317,26 @@ class MainWindow(QMainWindow):
             lambda: self.switch_page(4)
         )
 
+    def set_tray_controller(
+        self,
+        tray_controller,
+    ):
+        self.tray_controller = tray_controller
+
+        runtime = getattr(
+            self,
+            "companion_runtime",
+            None,
+        )
+
+        setter = getattr(
+            tray_controller,
+            "set_companion_runtime",
+            None,
+        )
+
+        if callable(setter):
+            setter(runtime)
     def set_companion_runtime(
         self,
         runtime,
@@ -1341,6 +1361,20 @@ class MainWindow(QMainWindow):
             settings_setter(
                 runtime
             )
+        tray_controller = getattr(
+            self,
+            "tray_controller",
+            None,
+        )
+
+        tray_setter = getattr(
+            tray_controller,
+            "set_companion_runtime",
+            None,
+        )
+
+        if callable(tray_setter):
+            tray_setter(runtime)
 
     def set_update_quit_callback(
         self,
