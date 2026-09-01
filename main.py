@@ -17,6 +17,7 @@ from src.system.first_run import (
     FirstRunDecision,
     FirstRunManager,
 )
+from src.companion.runtime import CompanionRuntime
 from src.system.startup_native_stage import install_startup_native_stage
 from src.ui.main_window import MainWindow
 from src.ui.tray import TrayController
@@ -276,6 +277,43 @@ def set_windows_app_id():
     except Exception:
         pass
 
+
+
+def start_companion_runtime(
+    app,
+    window,
+):
+    runtime = None
+
+    try:
+        runtime = CompanionRuntime(
+            parent=window
+        )
+
+        window.set_companion_runtime(
+            runtime
+        )
+
+        app.aboutToQuit.connect(
+            runtime.shutdown
+        )
+
+        return runtime
+
+    except Exception as error:
+        print(
+            "Desktop Companion runtime "
+            "could not start:",
+            error,
+        )
+
+        if runtime is not None:
+            try:
+                runtime.shutdown()
+            except Exception:
+                pass
+
+        return None
 
 
 def start_media_hotkey_runtime(
@@ -554,6 +592,11 @@ def main() -> int:
     )
 
     window = MainWindow()
+
+    companion_runtime = start_companion_runtime(
+        app,
+        window,
+    )
 
     QTimer.singleShot(
         0,

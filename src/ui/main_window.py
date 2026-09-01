@@ -1317,6 +1317,31 @@ class MainWindow(QMainWindow):
             lambda: self.switch_page(4)
         )
 
+    def set_companion_runtime(
+        self,
+        runtime,
+    ):
+        self.companion_runtime = runtime
+
+        settings_page = getattr(
+            self,
+            "settings_page",
+            None,
+        )
+
+        settings_setter = getattr(
+            settings_page,
+            "set_companion_runtime",
+            None,
+        )
+
+        if callable(
+            settings_setter
+        ):
+            settings_setter(
+                runtime
+            )
+
     def set_update_quit_callback(
         self,
         callback,
@@ -2517,6 +2542,27 @@ class MainWindow(QMainWindow):
             return
 
         self._shutting_down = True
+
+        companion_runtime = getattr(
+            self,
+            "companion_runtime",
+            None,
+        )
+
+        companion_shutdown = getattr(
+            companion_runtime,
+            "shutdown",
+            None,
+        )
+
+        if callable(
+            companion_shutdown
+        ):
+            try:
+                companion_shutdown()
+            except Exception:
+                pass
+
         playback_control_coordinator = getattr(
             self,
             "playback_control_coordinator",
