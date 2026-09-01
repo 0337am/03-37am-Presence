@@ -1,8 +1,9 @@
 """Desktop Companion feature package."""
 
 from src.companion.overlay import (
-    CompanionOverlay,
+    ANIMATED_ASSET_SUFFIXES,
     STATIC_ASSET_SUFFIXES,
+    CompanionOverlay,
 )
 from src.companion.preferences import (
     CompanionPreferences,
@@ -12,6 +13,7 @@ from src.companion.preferences import (
 )
 
 __all__ = [
+    "ANIMATED_ASSET_SUFFIXES",
     "CompanionOverlay",
     "CompanionPreferences",
     "CompanionPreferencesStore",

@@ -1,3 +1,4 @@
+import base64
 import os
 import tempfile
 import unittest
@@ -9,11 +10,26 @@ os.environ.setdefault(
 )
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage
+from PyQt6.QtGui import QImage, QMovie
 from PyQt6.QtWidgets import QApplication
 
 from src.companion.overlay import CompanionOverlay
 from src.companion.preferences import CompanionPreferences
+
+
+_ANIMATED_GIF_BASE64 = (
+    "R0lGODlhQABAAIEAAAAAAP///wAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh"
+    "+QQJEgAAACwAAAAAQABAAAAImAABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLF"
+    "ixgzatzIsaPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs2SAmzhz6oSps2dP"
+    "lz6D5mQptOjNlUaLIk0adCnTnyqf+nQqFSfVqgGuVtUqletTr0zBJhVrlKz"
+    "SqFitmp3aEivPrzXjyp1Lt67du3jz6t3Lt6/fv4ADCx5MOG9AACH5BAkSAAA"
+    "ALBAAFgAVABUAgQAAAP///wAAAAAAAAgzAAEIDECwoMGDAhMeXLhQIcOHBQF"
+    "AnEixosWLGDNq3Mixo8ePIEOKHClxo0OMCQdeTBgQACH5BAkSAAAALBwAFgA"
+    "VABUAgQAAAP///wAAAAAAAAgzAAEIDECwoMGDAhMeXLhQIcOHBQFAnEixosW"
+    "LGDNq3Mixo8ePIEOKHClxo0OMCQdeTBgQACH5BAkSAAAALCgAFgAVABUAgQA"
+    "AAP///wAAAAAAAAgzAAEIDECwoMGDAhMeXLhQIcOHBQFAnEixosWLGDNq3Mi"
+    "xo8ePIEOKHClxo0OMCQdeTBgQADs="
+)
 
 
 class CompanionOverlayTests(unittest.TestCase):
@@ -55,6 +71,23 @@ class CompanionOverlayTests(unittest.TestCase):
 
         self.assertTrue(
             image.save(str(path))
+        )
+
+        return path
+
+    def _create_gif(
+        self,
+        directory: str,
+    ) -> Path:
+        path = (
+            Path(directory)
+            / "companion.gif"
+        )
+
+        path.write_bytes(
+            base64.b64decode(
+                _ANIMATED_GIF_BASE64
+            )
         )
 
         return path
@@ -158,10 +191,9 @@ class CompanionOverlayTests(unittest.TestCase):
                 40,
             )
 
-    def test_static_loader_rejects_gif_until_animation_milestone(self):
+    def test_static_loader_rejects_gif_for_animated_loader(self):
         with tempfile.TemporaryDirectory() as root:
-            path = Path(root) / "companion.gif"
-            path.write_bytes(b"GIF89a")
+            path = self._create_gif(root)
 
             with self.assertRaises(
                 ValueError
@@ -297,6 +329,240 @@ class CompanionOverlayTests(unittest.TestCase):
 
             self.assertFalse(
                 self.overlay.isVisible()
+            )
+
+    def test_animated_gif_loads_and_starts(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_gif(root)
+
+            self.overlay.set_animated_asset(
+                path
+            )
+
+            self.app.processEvents()
+
+            self.assertTrue(
+                self.overlay.is_animated
+            )
+
+            self.assertEqual(
+                self.overlay.asset_path,
+                str(path),
+            )
+
+            self.assertEqual(
+                self.overlay.source_size,
+                (64, 64),
+            )
+
+            self.assertIsNotNone(
+                self.overlay._movie
+            )
+
+            self.assertEqual(
+                self.overlay._movie.state(),
+                QMovie.MovieState.Running,
+            )
+
+    def test_generic_asset_routes_gif_to_animation(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_gif(root)
+
+            self.overlay.set_asset(
+                path
+            )
+
+            self.assertTrue(
+                self.overlay.is_animated
+            )
+
+            self.assertEqual(
+                self.overlay.asset_path,
+                str(path),
+            )
+
+    def test_animation_speed_updates_active_movie(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_gif(root)
+
+            self.overlay.set_animated_asset(
+                path
+            )
+
+            self.overlay.set_animation_speed_percent(
+                175
+            )
+
+            self.assertEqual(
+                self.overlay.animation_speed_percent,
+                175,
+            )
+
+            self.assertEqual(
+                self.overlay._movie.speed(),
+                175,
+            )
+
+    def test_gif_scale_updates_window_size(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_gif(root)
+
+            self.overlay.set_animated_asset(
+                path
+            )
+
+            self.overlay.set_scale_percent(
+                200
+            )
+
+            self.assertEqual(
+                self.overlay.width(),
+                128,
+            )
+
+            self.assertEqual(
+                self.overlay.height(),
+                128,
+            )
+
+            self.assertEqual(
+                self.overlay.source_size,
+                (64, 64),
+            )
+
+    def test_clear_asset_stops_animation(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_gif(root)
+
+            self.overlay.set_animated_asset(
+                path
+            )
+
+            movie = self.overlay._movie
+
+            self.overlay.clear_asset()
+
+            self.assertEqual(
+                movie.state(),
+                QMovie.MovieState.NotRunning,
+            )
+
+            self.assertFalse(
+                self.overlay.is_animated
+            )
+
+            self.assertEqual(
+                self.overlay.asset_path,
+                "",
+            )
+
+            self.assertEqual(
+                self.overlay.source_size,
+                (0, 0),
+            )
+
+    def test_switching_gif_to_static_stops_old_movie(self):
+        with tempfile.TemporaryDirectory() as root:
+            gif_path = self._create_gif(root)
+
+            png_path = self._create_png(
+                root,
+                width=30,
+                height=10,
+            )
+
+            self.overlay.set_animated_asset(
+                gif_path
+            )
+
+            movie = self.overlay._movie
+
+            self.overlay.set_static_asset(
+                png_path
+            )
+
+            self.assertEqual(
+                movie.state(),
+                QMovie.MovieState.NotRunning,
+            )
+
+            self.assertFalse(
+                self.overlay.is_animated
+            )
+
+            self.assertEqual(
+                self.overlay.asset_path,
+                str(png_path),
+            )
+
+            self.assertEqual(
+                self.overlay.source_size,
+                (30, 10),
+            )
+
+    def test_switching_static_to_gif_uses_animation(self):
+        with tempfile.TemporaryDirectory() as root:
+            png_path = self._create_png(root)
+            gif_path = self._create_gif(root)
+
+            self.overlay.set_static_asset(
+                png_path
+            )
+
+            self.overlay.set_animated_asset(
+                gif_path
+            )
+
+            self.assertTrue(
+                self.overlay.is_animated
+            )
+
+            self.assertEqual(
+                self.overlay.source_size,
+                (64, 64),
+            )
+
+    def test_apply_preferences_routes_gif_speed_and_scale(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._create_gif(root)
+
+            self.overlay.apply_preferences(
+                CompanionPreferences(
+                    enabled=True,
+                    asset_path=str(path),
+                    scale_percent=150,
+                    animation_speed_percent=160,
+                )
+            )
+
+            self.app.processEvents()
+
+            self.assertTrue(
+                self.overlay.isVisible()
+            )
+
+            self.assertTrue(
+                self.overlay.is_animated
+            )
+
+            self.assertEqual(
+                self.overlay.animation_speed_percent,
+                160,
+            )
+
+            self.assertEqual(
+                self.overlay._movie.speed(),
+                160,
+            )
+
+            self.assertEqual(
+                self.overlay.width(),
+                96,
+            )
+
+            self.assertEqual(
+                self.overlay.height(),
+                96,
             )
 
 
