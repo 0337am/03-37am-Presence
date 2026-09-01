@@ -61,6 +61,10 @@ from src.music.source_preferences import (
     SourcePreferencesStore,
 )
 
+from src.ui.companion_settings import (
+    CompanionSettingsCard,
+)
+
 from src.ui.artwork_hosting_card import (
     ArtworkHostingCard,
 )
@@ -1989,6 +1993,12 @@ class SettingsPage(QWidget):
             diagnostics_buttons
         )
 
+        self.companion_settings_card = (
+            CompanionSettingsCard(
+                self
+            )
+        )
+
         self.status = QLabel("")
         self.status.setObjectName("status")
 
@@ -2060,6 +2070,9 @@ class SettingsPage(QWidget):
         )
         root.addWidget(updates)
         root.addWidget(diagnostics)
+        root.addWidget(
+            self.companion_settings_card
+        )
         root.addWidget(self.status)
         root.addLayout(button_row)
         root.addStretch()
@@ -2150,6 +2163,8 @@ class SettingsPage(QWidget):
                 diagnostics,
             ),
         }
+
+        self._register_companion_settings_card()
 
         self.settings_category_extras = {
             "customization": (
@@ -2829,6 +2844,96 @@ class SettingsPage(QWidget):
 
         self.set_status_message(
             presentation.headline
+        )
+
+    def _register_companion_settings_card(
+        self,
+    ) -> None:
+        card = self.companion_settings_card
+
+        self.settings_sections[
+            "desktop_companion"
+        ] = card
+
+        customization_key = None
+
+        for key in self.settings_category_cards:
+            normalized = str(
+                key
+            ).strip().casefold()
+
+            if normalized in {
+                "customization",
+                "customisation",
+            }:
+                customization_key = key
+                break
+
+        if customization_key is None:
+            raise RuntimeError(
+                "Customization Settings category is missing."
+            )
+
+        existing = self.settings_category_cards[
+            customization_key
+        ]
+
+        if isinstance(
+            existing,
+            tuple,
+        ):
+            if card not in existing:
+                self.settings_category_cards[
+                    customization_key
+                ] = existing + (
+                    card,
+                )
+
+        elif isinstance(
+            existing,
+            list,
+        ):
+            if card not in existing:
+                existing.append(
+                    card
+                )
+
+        else:
+            cards = list(
+                existing
+            )
+
+            if card not in cards:
+                cards.append(
+                    card
+                )
+
+            self.settings_category_cards[
+                customization_key
+            ] = cards
+
+        section_categories = getattr(
+            self,
+            "settings_section_categories",
+            None,
+        )
+
+        if isinstance(
+            section_categories,
+            dict,
+        ):
+            section_categories[
+                "desktop_companion"
+            ] = customization_key
+
+    def set_companion_runtime(
+        self,
+        runtime,
+    ) -> None:
+        self.companion_runtime = runtime
+
+        self.companion_settings_card.set_runtime(
+            runtime
         )
 
     def set_diagnostics_provider(
