@@ -1,5 +1,5 @@
-APP_VERSION = "3.2.2"
-RELEASE_NAME = "Window & Tray Fixes"
+APP_VERSION = "3.3.0"
+RELEASE_NAME = "Desktop Companion"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

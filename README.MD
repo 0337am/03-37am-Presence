@@ -1,8 +1,17 @@
 # 03:37am Presence
 
-03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
+03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, an optional local Desktop Companion overlay, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.2.2 highlights
+## v3.3.0 highlights
+
+- Added **Desktop Companion**, an optional transparent desktop overlay using a user-selected local PNG, JPG/JPEG, WebP, or animated GIF.
+- Companion controls include scale, opacity, always-on-top, click-through, remembered position and monitor, optional fullscreen hiding, and GIF playback speed.
+- When click-through is disabled, the Companion can be dragged directly and remembers its position without unnecessarily snapping partially off-screen placement back onto the monitor.
+- Companion can be enabled or disabled from Settings, the system tray, or an optional **Desktop Companion** Quick Access shortcut.
+- Quick Access now fills resized card space correctly in both directions, including evenly filling incomplete final rows after the Dashboard is resized.
+- Desktop Companion remains local-only and does not monitor keyboard presses, mouse clicks, global input activity, or upload Companion assets to Cloudinary.
+
+### v3.2.2 maintenance highlights
 
 - Fixed the main-window startup handoff so runtime window hiding remains reliable after the native phantom-window prevention stage completes.
 - The close button (`X`) and **Tray -> Hide window** now hide 03:37am Presence to the system tray while keeping the app running; **Tray -> Open** restores it and **Tray -> Quit** remains the full-exit action.

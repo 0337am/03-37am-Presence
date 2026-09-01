@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.3.0 - Desktop Companion
+
+Released 1 September 2026.
+
+### Added
+
+- Added **Desktop Companion**, an optional transparent desktop overlay using a user-selected local PNG, JPG/JPEG, WebP, or animated GIF.
+- Added Companion controls for scale, opacity, always-on-top behavior, click-through, remembered position and monitor, fullscreen hiding, and animated GIF speed.
+- Added direct local dragging while click-through is disabled, including persisted placement and recovery of completely unreachable positions without forcing intentionally partial off-screen placement back onscreen.
+- Added monitor-aware restore behavior and optional same-monitor fullscreen hiding with low-frequency, read-only foreground-window detection.
+- Added a dedicated Desktop Companion section in Settings, a synchronized system-tray toggle, and an optional Quick Access shortcut.
+
+### Improved
+
+- Desktop Companion GIF playback uses a memory-backed Qt movie buffer so the source GIF is not kept locked by the running overlay.
+- Companion visibility, Settings state, tray state, and Quick Access all reuse the same production runtime and preference ownership path.
+- Quick Access cards now refresh their layout geometry when resized, apply the calculated responsive row height, and distribute incomplete final rows across the available width instead of leaving stale empty space.
+
+### Safety, compatibility, and upgrade behavior
+
+- Desktop Companion is local-only. Companion images are not uploaded to Cloudinary or another network service.
+- This release does not add global keyboard or mouse hooks, Raw Input handling, simulated input, reactive key/click behavior, or foreground-focus manipulation.
+- Desktop Companion remains separate from Presence Studio and does not alter Discord Rich Presence publication or playback ownership.
+- Existing Dashboard layouts, Quick Access preferences, Presence data, Library data, Spotify connection state, tray behavior, updater identity, and prior settings continue using their established upgrade paths.
+
 ## v3.2.2 - Window & Tray Fixes
 
 Released 1 September 2026.
