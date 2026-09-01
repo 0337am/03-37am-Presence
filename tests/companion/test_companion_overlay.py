@@ -9,7 +9,7 @@ os.environ.setdefault(
     "offscreen",
 )
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QImage, QMovie
 from PyQt6.QtWidgets import QApplication
 
@@ -564,6 +564,230 @@ class CompanionOverlayTests(unittest.TestCase):
                 self.overlay.height(),
                 96,
             )
+
+
+    def test_drag_is_blocked_while_click_through_enabled(self):
+        self.assertTrue(
+            self.overlay.click_through
+        )
+
+        started = self.overlay._begin_drag(
+            QPoint(
+                500,
+                400,
+            )
+        )
+
+        self.assertFalse(
+            started
+        )
+
+        self.assertFalse(
+            self.overlay.is_dragging
+        )
+
+    def test_drag_moves_window_when_click_through_disabled(self):
+        self.overlay.set_click_through(
+            False
+        )
+
+        self.overlay.move(
+            100,
+            200,
+        )
+
+        self.assertTrue(
+            self.overlay._begin_drag(
+                QPoint(
+                    500,
+                    400,
+                )
+            )
+        )
+
+        self.assertTrue(
+            self.overlay._update_drag(
+                QPoint(
+                    540,
+                    430,
+                )
+            )
+        )
+
+        self.assertEqual(
+            self.overlay.pos(),
+            QPoint(
+                140,
+                230,
+            ),
+        )
+
+    def test_drag_release_emits_final_position_once(self):
+        self.overlay.set_click_through(
+            False
+        )
+
+        self.overlay.move(
+            20,
+            30,
+        )
+
+        positions = []
+
+        self.overlay.position_changed.connect(
+            lambda x, y: positions.append(
+                (
+                    x,
+                    y,
+                )
+            )
+        )
+
+        self.overlay._begin_drag(
+            QPoint(
+                100,
+                100,
+            )
+        )
+
+        self.overlay._update_drag(
+            QPoint(
+                150,
+                170,
+            )
+        )
+
+        self.assertTrue(
+            self.overlay._end_drag()
+        )
+
+        self.assertFalse(
+            self.overlay.is_dragging
+        )
+
+        self.assertEqual(
+            positions,
+            [
+                (
+                    70,
+                    100,
+                )
+            ],
+        )
+
+        self.assertFalse(
+            self.overlay._end_drag()
+        )
+
+        self.assertEqual(
+            len(positions),
+            1,
+        )
+
+    def test_enabling_click_through_cancels_active_drag(self):
+        self.overlay.set_click_through(
+            False
+        )
+
+        positions = []
+
+        self.overlay.position_changed.connect(
+            lambda x, y: positions.append(
+                (
+                    x,
+                    y,
+                )
+            )
+        )
+
+        self.overlay._begin_drag(
+            QPoint(
+                10,
+                10,
+            )
+        )
+
+        self.assertTrue(
+            self.overlay.is_dragging
+        )
+
+        self.overlay.set_click_through(
+            True
+        )
+
+        self.assertFalse(
+            self.overlay.is_dragging
+        )
+
+        self.assertFalse(
+            self.overlay._end_drag()
+        )
+
+        self.assertEqual(
+            positions,
+            [],
+        )
+
+    def test_drag_update_after_release_is_ignored(self):
+        self.overlay.set_click_through(
+            False
+        )
+
+        self.overlay.move(
+            40,
+            50,
+        )
+
+        self.overlay._begin_drag(
+            QPoint(
+                100,
+                100,
+            )
+        )
+
+        self.overlay._update_drag(
+            QPoint(
+                120,
+                125,
+            )
+        )
+
+        self.overlay._end_drag()
+
+        final_position = QPoint(
+            self.overlay.pos()
+        )
+
+        self.assertFalse(
+            self.overlay._update_drag(
+                QPoint(
+                    300,
+                    300,
+                )
+            )
+        )
+
+        self.assertEqual(
+            self.overlay.pos(),
+            final_position,
+        )
+
+    def test_click_through_property_tracks_toggle(self):
+        self.overlay.set_click_through(
+            False
+        )
+
+        self.assertFalse(
+            self.overlay.click_through
+        )
+
+        self.overlay.set_click_through(
+            True
+        )
+
+        self.assertTrue(
+            self.overlay.click_through
+        )
 
 
 if __name__ == "__main__":

@@ -6,8 +6,10 @@ from PyQt6.QtCore import (
     QBuffer,
     QByteArray,
     QIODevice,
+    QPoint,
     QSize,
     Qt,
+    pyqtSignal,
 )
 from PyQt6.QtGui import QMovie, QPixmap
 from PyQt6.QtWidgets import (
@@ -52,6 +54,11 @@ class CompanionOverlay(QWidget):
     ownership intentionally remain outside this component.
     """
 
+    position_changed = pyqtSignal(
+        int,
+        int,
+    )
+
     def __init__(
         self,
         parent=None,
@@ -67,6 +74,10 @@ class CompanionOverlay(QWidget):
         self._asset_path = ""
         self._scale_percent = 100
         self._animation_speed_percent = 100
+
+        self._click_through = True
+        self._drag_anchor_global: QPoint | None = None
+        self._drag_origin: QPoint | None = None
 
         self.setObjectName(
             "companionOverlay"
@@ -136,6 +147,17 @@ class CompanionOverlay(QWidget):
     @property
     def animation_speed_percent(self) -> int:
         return self._animation_speed_percent
+
+    @property
+    def click_through(self) -> bool:
+        return self._click_through
+
+    @property
+    def is_dragging(self) -> bool:
+        return (
+            self._drag_anchor_global is not None
+            and self._drag_origin is not None
+        )
 
     @property
     def is_animated(self) -> bool:
@@ -482,6 +504,11 @@ class CompanionOverlay(QWidget):
 
         was_visible = self.isVisible()
 
+        if enabled:
+            self._cancel_drag()
+
+        self._click_through = enabled
+
         self.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents,
             enabled,
@@ -494,6 +521,64 @@ class CompanionOverlay(QWidget):
 
         if was_visible:
             self.show()
+
+    def mousePressEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+            and self._begin_drag(
+                event.globalPosition().toPoint()
+            )
+        ):
+            event.accept()
+            return
+
+        super().mousePressEvent(
+            event
+        )
+
+    def mouseMoveEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.buttons()
+            & Qt.MouseButton.LeftButton
+            and self._update_drag(
+                event.globalPosition().toPoint()
+            )
+        ):
+            event.accept()
+            return
+
+        super().mouseMoveEvent(
+            event
+        )
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+            and self.is_dragging
+        ):
+            self._update_drag(
+                event.globalPosition().toPoint()
+            )
+
+            self._end_drag()
+
+            event.accept()
+            return
+
+        super().mouseReleaseEvent(
+            event
+        )
 
     def apply_preferences(
         self,
@@ -572,6 +657,79 @@ class CompanionOverlay(QWidget):
         super().closeEvent(
             event
         )
+
+    def _begin_drag(
+        self,
+        global_position: QPoint,
+    ) -> bool:
+        if self._click_through:
+            return False
+
+        if not isinstance(
+            global_position,
+            QPoint,
+        ):
+            raise TypeError(
+                "global_position must be a QPoint."
+            )
+
+        self._drag_anchor_global = QPoint(
+            global_position
+        )
+
+        self._drag_origin = QPoint(
+            self.pos()
+        )
+
+        return True
+
+    def _update_drag(
+        self,
+        global_position: QPoint,
+    ) -> bool:
+        if not self.is_dragging:
+            return False
+
+        if not isinstance(
+            global_position,
+            QPoint,
+        ):
+            raise TypeError(
+                "global_position must be a QPoint."
+            )
+
+        delta = (
+            global_position
+            - self._drag_anchor_global
+        )
+
+        self.move(
+            self._drag_origin
+            + delta
+        )
+
+        return True
+
+    def _end_drag(self) -> bool:
+        if not self.is_dragging:
+            return False
+
+        final_position = QPoint(
+            self.pos()
+        )
+
+        self._cancel_drag()
+
+        self.position_changed.emit(
+            final_position.x(),
+            final_position.y(),
+        )
+
+        return True
+
+    def _cancel_drag(self) -> None:
+        self._drag_anchor_global = None
+        self._drag_origin = None
 
     def _release_movie(self) -> None:
         movie = self._movie
