@@ -53,6 +53,7 @@ SUPPORTED_BUILTIN_TARGETS = frozenset(
         "library",
         "spotify",
         "about",
+        "companion",
     }
 )
 

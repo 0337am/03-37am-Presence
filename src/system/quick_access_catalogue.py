@@ -229,6 +229,15 @@ _QUICK_ACCESS_CATALOGUE = (
         detail="Open app information",
         icon_key="about",
     ),
+    QuickAccessCatalogueEntry(
+        item_id="builtin.companion",
+        kind="builtin",
+        target="companion",
+        title="Desktop Companion",
+        detail="Show or hide Desktop Companion",
+        icon_key="presence",
+        included_by_default=False,
+    ),
 )
 
 

@@ -52,6 +52,7 @@ class QuickAccessPickerTests(
                 "builtin.library",
                 "builtin.spotify",
                 "builtin.about",
+                "builtin.companion",
             ],
         )
 

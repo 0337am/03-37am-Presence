@@ -1411,6 +1411,59 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def toggle_companion_from_dashboard(
+        self,
+    ):
+        runtime = getattr(
+            self,
+            "companion_runtime",
+            None,
+        )
+
+        if runtime is None:
+            return
+
+        try:
+            if bool(
+                getattr(
+                    runtime,
+                    "is_shutdown",
+                    False,
+                )
+            ):
+                return
+
+            preferences = getattr(
+                runtime,
+                "preferences",
+                None,
+            )
+
+            updater = getattr(
+                runtime,
+                "update_preferences",
+                None,
+            )
+
+            if (
+                preferences is None
+                or not callable(updater)
+            ):
+                return
+
+            updater(
+                enabled=not bool(
+                    getattr(
+                        preferences,
+                        "enabled",
+                        False,
+                    )
+                )
+            )
+
+        except Exception:
+            return
+
     def refresh_dashboard_quick_access(self):
         refresh_quick_access = getattr(
             self.dashboard_page,
@@ -2372,6 +2425,10 @@ class MainWindow(QMainWindow):
 
         self.dashboard_page.spotify_playlist_requested.connect(
             self.open_spotify_playlist_from_dashboard
+        )
+
+        self.dashboard_page.companion_toggle_requested.connect(
+            self.toggle_companion_from_dashboard
         )
 
         self.spotify_playlist_runtime.playlists_ready.connect(

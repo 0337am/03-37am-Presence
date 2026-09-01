@@ -37,6 +37,7 @@ class QuickAccessCatalogueTests(
                 "builtin.library",
                 "builtin.spotify",
                 "builtin.about",
+                "builtin.companion",
             ],
         )
 
@@ -69,6 +70,7 @@ class QuickAccessCatalogueTests(
                 "builtin.library",
                 "builtin.spotify",
                 "builtin.about",
+                "builtin.companion",
             ],
         )
 
@@ -203,6 +205,7 @@ class QuickAccessCatalogueTests(
                 "builtin.settings",
                 "builtin.presence",
                 "builtin.about",
+                "builtin.companion",
             ],
         )
 

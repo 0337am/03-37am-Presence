@@ -740,6 +740,7 @@ class QuickAccessPreferencesTests(
             "library",
             "spotify",
             "about",
+            "companion",
         ):
             with self.subTest(
                 target=target

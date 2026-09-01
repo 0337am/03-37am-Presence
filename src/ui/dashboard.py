@@ -934,6 +934,7 @@ class DashboardPage(QWidget):
     apply_presence_mode_requested = pyqtSignal(str)
     apply_presence_preset_requested = pyqtSignal(str)
     spotify_playlist_requested = pyqtSignal(str, str)
+    companion_toggle_requested = pyqtSignal()
 
     playback_control_requested = pyqtSignal(
         str,
@@ -12592,6 +12593,12 @@ class DashboardPage(QWidget):
                     self.apply_presence_mode_requested.emit(
                         "afk"
                     )
+                )
+
+            elif quick_access_item.target == "companion":
+                callback = (
+                    lambda checked=False:
+                    self.companion_toggle_requested.emit()
                 )
 
             else:
