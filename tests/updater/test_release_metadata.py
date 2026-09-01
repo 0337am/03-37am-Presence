@@ -12,17 +12,17 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_python_version_metadata(self):
         self.assertEqual(
             APP_VERSION,
-            "3.2.1",
+            "3.2.2",
         )
 
         self.assertEqual(
             RELEASE_NAME,
-            "Custom Presence Party",
+            "Window & Tray Fixes",
         )
 
         self.assertEqual(
             DISPLAY_VERSION,
-            "v3.2.1 - Custom Presence Party",
+            "v3.2.2 - Window & Tray Fixes",
         )
 
     def test_windows_version_metadata(self):
@@ -33,47 +33,82 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "filevers=(3, 2, 1, 0)",
+            "filevers=(3, 2, 2, 0)",
             source,
         )
 
         self.assertIn(
-            "prodvers=(3, 2, 1, 0)",
+            "prodvers=(3, 2, 2, 0)",
             source,
         )
 
         self.assertEqual(
-            source.count('"3.2.1.0"'),
+            source.count('"3.2.2.0"'),
             2,
         )
 
         self.assertIn(
-            "03:37am Presence - Custom Presence Party",
+            "03:37am Presence - Window & Tray Fixes",
             source,
         )
 
-    def test_changelog_starts_with_v321(self):
+    def test_changelog_starts_with_v322(self):
         source = Path(
             "CHANGELOG.md"
         ).read_text(
             encoding="utf-8"
         )
 
-        v32 = source.index(
+        v322 = source.index(
+            "## v3.2.2 - Window & Tray Fixes"
+        )
+
+        v321 = source.index(
             "## v3.2.1 - Custom Presence Party"
         )
 
-        v31 = source.index(
-            "## v3.1.0 - Discord Presence Studio"
-        )
-
         self.assertLess(
-            v32,
-            v31,
+            v322,
+            v321,
         )
 
         self.assertIn(
-            "Released 28 August 2026.",
+            "Released 1 September 2026.",
+            source,
+        )
+
+        self.assertIn(
+            "recreated Qt window handle",
+            source,
+        )
+
+        self.assertIn(
+            "close button (`X`)",
+            source,
+        )
+
+        self.assertIn(
+            "Tray -> Hide window",
+            source,
+        )
+
+        self.assertIn(
+            "Startup hide suppression",
+            source,
+        )
+
+        self.assertIn(
+            "phantom-window protection",
+            source,
+        )
+
+        self.assertIn(
+            "Normal Windows taskbar minimize behavior is unchanged",
+            source,
+        )
+
+        self.assertIn(
+            "## v3.2.1 - Custom Presence Party",
             source,
         )
 
@@ -88,16 +123,6 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "Dashboard playback control row",
-            source,
-        )
-
-        self.assertIn(
-            "Loop ×N",
-            source,
-        )
-
-        self.assertIn(
             "Spotify Queue",
             source,
         )
@@ -107,22 +132,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             source,
         )
 
-        self.assertIn(
-            "Launcher Cards",
-            source,
-        )
-
-        self.assertIn(
-            "Spotify playlists",
-            source,
-        )
-
-        self.assertIn(
-            "does not start playback automatically",
-            source,
-        )
-
-    def test_readme_describes_v321(self):
+    def test_readme_describes_v322(self):
         source = Path(
             "README.MD"
         ).read_text(
@@ -130,7 +140,42 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "## v3.2.1 highlights",
+            "## v3.2.2 highlights",
+            source,
+        )
+
+        self.assertIn(
+            "main-window startup handoff",
+            source,
+        )
+
+        self.assertIn(
+            "close button (`X`)",
+            source,
+        )
+
+        self.assertIn(
+            "Tray -> Hide window",
+            source,
+        )
+
+        self.assertIn(
+            "Tray -> Open",
+            source,
+        )
+
+        self.assertIn(
+            "Tray -> Quit",
+            source,
+        )
+
+        self.assertIn(
+            "Normal Windows taskbar minimize behavior remains unchanged",
+            source,
+        )
+
+        self.assertIn(
+            "### v3.2.1 feature highlights",
             source,
         )
 
@@ -144,18 +189,8 @@ class ReleaseMetadataTests(unittest.TestCase):
             source,
         )
 
-        self.assertNotIn(
-            "## v3.1.0 highlights",
-            source,
-        )
-
         self.assertIn(
             "Dashboard playback row",
-            source,
-        )
-
-        self.assertIn(
-            "Loop ×N",
             source,
         )
 
@@ -169,17 +204,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             source,
         )
 
-        self.assertIn(
-            "Launcher Cards",
-            source,
-        )
-
-        self.assertIn(
-            "Spotify playlists",
-            source,
-        )
-
-    def test_spotify_user_agent_tracks_v321(self):
+    def test_spotify_user_agent_tracks_v322(self):
         source = Path(
             "src/spotify/web_api.py"
         ).read_text(
@@ -187,12 +212,12 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "03-37am-Presence/3.2.1 Spotify-Web-API",
+            "03-37am-Presence/3.2.2 Spotify-Web-API",
             source,
         )
 
         self.assertNotIn(
-            "03-37am-Presence/3.1.0 Spotify-Web-API",
+            "03-37am-Presence/3.2.1 Spotify-Web-API",
             source,
         )
 

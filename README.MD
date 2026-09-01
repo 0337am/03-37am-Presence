@@ -2,7 +2,13 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.2.1 highlights
+## v3.2.2 highlights
+
+- Fixed the main-window startup handoff so runtime window hiding remains reliable after the native phantom-window prevention stage completes.
+- The close button (`X`) and **Tray -> Hide window** now hide 03:37am Presence to the system tray while keeping the app running; **Tray -> Open** restores it and **Tray -> Quit** remains the full-exit action.
+- Normal Windows taskbar minimize behavior remains unchanged.
+
+### v3.2.1 feature highlights
 
 - Added optional Custom Presence Party / Group controls with editable current and maximum member counts. Discord uses the native Rich Presence party metadata to render its own group icon and `(x of y)` member count.
 - Added a complete Dashboard playback row for Shuffle, Previous, Play/Pause, Next, and Repeat with app-owned themed controls.

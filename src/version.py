@@ -1,5 +1,5 @@
-APP_VERSION = "3.2.1"
-RELEASE_NAME = "Custom Presence Party"
+APP_VERSION = "3.2.2"
+RELEASE_NAME = "Window & Tray Fixes"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

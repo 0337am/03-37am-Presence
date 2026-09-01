@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.2.2 - Window & Tray Fixes
+
+Released 1 September 2026.
+
+### Fixed
+
+- Fixed the main-window startup handoff so a recreated Qt window handle is recovered before the staged window is moved to its final onscreen position.
+- Fixed the close button (`X`) so it reliably hides the main window to the system tray while keeping 03:37am Presence running.
+- Fixed **Tray -> Hide window** so it reliably hides the main window after startup, while **Tray -> Open** restores it normally and **Tray -> Quit** remains the explicit full-shutdown path.
+
+### Safety, compatibility, and upgrade behavior
+
+- Startup hide suppression is now limited to the active native startup staging window and cannot remain active after that staging phase has ended.
+- The existing startup phantom-window protection remains in place, including the native offscreen staging and final handoff behavior.
+- Normal Windows taskbar minimize behavior is unchanged.
+- Existing settings, Presence data, Discord behavior, Spotify playback, Library data, Dashboard layouts, Quick Access configuration, and updater identity continue using their established upgrade paths.
+
 ## v3.2.1 - Custom Presence Party
 
 Released 28 August 2026.
