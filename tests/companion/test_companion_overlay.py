@@ -9,11 +9,16 @@ os.environ.setdefault(
     "offscreen",
 )
 
-from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt
 from PyQt6.QtGui import QImage, QMovie
 from PyQt6.QtWidgets import QApplication
 
-from src.companion.overlay import CompanionOverlay
+from src.companion.overlay import (
+    CompanionOverlay,
+    _center_position_on_screen,
+    _clamp_position_to_screen,
+    _resolve_placement_screen,
+)
 from src.companion.preferences import CompanionPreferences
 
 
@@ -30,6 +35,38 @@ _ANIMATED_GIF_BASE64 = (
     "AAP///wAAAAAAAAgzAAEIDECwoMGDAhMeXLhQIcOHBQFAnEixosWLGDNq3Mi"
     "xo8ePIEOKHClxo0OMCQdeTBgQADs="
 )
+
+
+class _FakeScreen:
+    def __init__(
+        self,
+        name: str,
+        geometry: QRect,
+        available_geometry: QRect | None = None,
+    ) -> None:
+        self._name = name
+        self._geometry = QRect(
+            geometry
+        )
+
+        self._available_geometry = QRect(
+            available_geometry
+            if available_geometry is not None
+            else geometry
+        )
+
+    def name(self) -> str:
+        return self._name
+
+    def geometry(self) -> QRect:
+        return QRect(
+            self._geometry
+        )
+
+    def availableGeometry(self) -> QRect:
+        return QRect(
+            self._available_geometry
+        )
 
 
 class CompanionOverlayTests(unittest.TestCase):
@@ -787,6 +824,254 @@ class CompanionOverlayTests(unittest.TestCase):
 
         self.assertTrue(
             self.overlay.click_through
+        )
+
+
+    def test_monitor_policy_prefers_saved_screen_name(self):
+        primary = _FakeScreen(
+            "PRIMARY",
+            QRect(
+                0,
+                0,
+                1920,
+                1080,
+            ),
+        )
+
+        secondary = _FakeScreen(
+            "SECONDARY",
+            QRect(
+                1920,
+                0,
+                1920,
+                1080,
+            ),
+        )
+
+        resolved = _resolve_placement_screen(
+            [
+                primary,
+                secondary,
+            ],
+            primary,
+            preferred_name="SECONDARY",
+            saved_position=QPoint(
+                100,
+                100,
+            ),
+        )
+
+        self.assertIs(
+            resolved,
+            secondary,
+        )
+
+    def test_monitor_policy_falls_back_to_coordinate_screen(self):
+        primary = _FakeScreen(
+            "PRIMARY",
+            QRect(
+                0,
+                0,
+                1920,
+                1080,
+            ),
+        )
+
+        secondary = _FakeScreen(
+            "SECONDARY",
+            QRect(
+                1920,
+                0,
+                1920,
+                1080,
+            ),
+        )
+
+        resolved = _resolve_placement_screen(
+            [
+                primary,
+                secondary,
+            ],
+            primary,
+            preferred_name="MISSING",
+            saved_position=QPoint(
+                2100,
+                300,
+            ),
+        )
+
+        self.assertIs(
+            resolved,
+            secondary,
+        )
+
+    def test_monitor_policy_falls_back_to_primary_screen(self):
+        primary = _FakeScreen(
+            "PRIMARY",
+            QRect(
+                0,
+                0,
+                1920,
+                1080,
+            ),
+        )
+
+        secondary = _FakeScreen(
+            "SECONDARY",
+            QRect(
+                1920,
+                0,
+                1920,
+                1080,
+            ),
+        )
+
+        resolved = _resolve_placement_screen(
+            [
+                primary,
+                secondary,
+            ],
+            primary,
+            preferred_name="MISSING",
+            saved_position=QPoint(
+                9000,
+                9000,
+            ),
+        )
+
+        self.assertIs(
+            resolved,
+            primary,
+        )
+
+    def test_clamp_position_keeps_window_inside_available_geometry(self):
+        screen = _FakeScreen(
+            "SECONDARY",
+            QRect(
+                1920,
+                0,
+                1920,
+                1080,
+            ),
+            QRect(
+                1920,
+                0,
+                1920,
+                1032,
+            ),
+        )
+
+        position = _clamp_position_to_screen(
+            screen,
+            QSize(
+                200,
+                100,
+            ),
+            QPoint(
+                9000,
+                9000,
+            ),
+        )
+
+        self.assertEqual(
+            position,
+            QPoint(
+                3640,
+                932,
+            ),
+        )
+
+    def test_center_position_uses_available_geometry(self):
+        screen = _FakeScreen(
+            "SECONDARY",
+            QRect(
+                1920,
+                0,
+                1920,
+                1080,
+            ),
+            QRect(
+                1920,
+                0,
+                1920,
+                1032,
+            ),
+        )
+
+        position = _center_position_on_screen(
+            screen,
+            QSize(
+                200,
+                100,
+            ),
+        )
+
+        self.assertEqual(
+            position,
+            QPoint(
+                2780,
+                466,
+            ),
+        )
+
+    def test_apply_preferences_clamps_remembered_position(self):
+        primary = self.app.primaryScreen()
+
+        self.assertIsNotNone(
+            primary
+        )
+
+        preferences = CompanionPreferences(
+            enabled=False,
+            remember_position=True,
+            position_x=1_000_000,
+            position_y=1_000_000,
+            screen_name=primary.name(),
+        )
+
+        self.overlay.apply_preferences(
+            preferences
+        )
+
+        expected = _clamp_position_to_screen(
+            primary,
+            self.overlay.size(),
+            QPoint(
+                1_000_000,
+                1_000_000,
+            ),
+        )
+
+        self.assertEqual(
+            self.overlay.pos(),
+            expected,
+        )
+
+    def test_apply_preferences_centers_without_remembered_position(self):
+        primary = self.app.primaryScreen()
+
+        self.assertIsNotNone(
+            primary
+        )
+
+        preferences = CompanionPreferences(
+            enabled=False,
+            remember_position=False,
+            screen_name=primary.name(),
+        )
+
+        self.overlay.apply_preferences(
+            preferences
+        )
+
+        expected = _center_position_on_screen(
+            primary,
+            self.overlay.size(),
+        )
+
+        self.assertEqual(
+            self.overlay.pos(),
+            expected,
         )
 
 

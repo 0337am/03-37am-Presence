@@ -11,6 +11,7 @@ from PyQt6.QtCore import (
     Qt,
     pyqtSignal,
 )
+from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtGui import QMovie, QPixmap
 from PyQt6.QtWidgets import (
     QLabel,
@@ -43,6 +44,184 @@ ANIMATED_ASSET_SUFFIXES = frozenset(
         ".gif",
     }
 )
+
+
+def _screen_name(screen) -> str:
+    if screen is None:
+        return ""
+
+    try:
+        return str(
+            screen.name()
+        )
+    except Exception:
+        return ""
+
+
+def _find_screen_by_name(
+    screens,
+    name: str,
+):
+    if not name:
+        return None
+
+    for screen in screens:
+        if _screen_name(screen) == name:
+            return screen
+
+    return None
+
+
+def _screen_for_point(
+    screens,
+    point: QPoint,
+):
+    for screen in screens:
+        try:
+            if screen.geometry().contains(
+                point
+            ):
+                return screen
+        except Exception:
+            continue
+
+    return None
+
+
+def _resolve_placement_screen(
+    screens,
+    primary_screen,
+    *,
+    preferred_name: str,
+    saved_position: QPoint | None,
+):
+    screens = list(
+        screens
+    )
+
+    named = _find_screen_by_name(
+        screens,
+        preferred_name,
+    )
+
+    if named is not None:
+        return named
+
+    if saved_position is not None:
+        coordinate_screen = _screen_for_point(
+            screens,
+            saved_position,
+        )
+
+        if coordinate_screen is not None:
+            return coordinate_screen
+
+    if primary_screen is not None:
+        return primary_screen
+
+    if screens:
+        return screens[0]
+
+    return None
+
+
+def _clamp_position_to_screen(
+    screen,
+    window_size: QSize,
+    desired_position: QPoint,
+) -> QPoint:
+    area = screen.availableGeometry()
+
+    maximum_x = (
+        area.x()
+        + max(
+            0,
+            area.width()
+            - max(
+                1,
+                window_size.width(),
+            ),
+        )
+    )
+
+    maximum_y = (
+        area.y()
+        + max(
+            0,
+            area.height()
+            - max(
+                1,
+                window_size.height(),
+            ),
+        )
+    )
+
+    x = min(
+        max(
+            desired_position.x(),
+            area.x(),
+        ),
+        maximum_x,
+    )
+
+    y = min(
+        max(
+            desired_position.y(),
+            area.y(),
+        ),
+        maximum_y,
+    )
+
+    return QPoint(
+        x,
+        y,
+    )
+
+
+def _center_position_on_screen(
+    screen,
+    window_size: QSize,
+) -> QPoint:
+    area = screen.availableGeometry()
+
+    width = max(
+        1,
+        window_size.width(),
+    )
+
+    height = max(
+        1,
+        window_size.height(),
+    )
+
+    x = (
+        area.x()
+        + max(
+            0,
+            (
+                area.width()
+                - width
+            )
+            // 2,
+        )
+    )
+
+    y = (
+        area.y()
+        + max(
+            0,
+            (
+                area.height()
+                - height
+            )
+            // 2,
+        )
+    )
+
+    return QPoint(
+        x,
+        y,
+    )
 
 
 class CompanionOverlay(QWidget):
@@ -151,6 +330,12 @@ class CompanionOverlay(QWidget):
     @property
     def click_through(self) -> bool:
         return self._click_through
+
+    @property
+    def current_screen_name(self) -> str:
+        return _screen_name(
+            self.screen()
+        )
 
     @property
     def is_dragging(self) -> bool:
@@ -619,15 +804,9 @@ class CompanionOverlay(QWidget):
         else:
             self.clear_asset()
 
-        if (
-            preferences.remember_position
-            and preferences.position_x is not None
-            and preferences.position_y is not None
-        ):
-            self.move(
-                preferences.position_x,
-                preferences.position_y,
-            )
+        self._apply_preferred_placement(
+            preferences
+        )
 
         has_asset = (
             self._movie is not None
@@ -647,6 +826,61 @@ class CompanionOverlay(QWidget):
                 self._movie.stop()
 
             self.hide()
+
+    def _apply_preferred_placement(
+        self,
+        preferences: CompanionPreferences,
+    ) -> None:
+        screens = list(
+            QGuiApplication.screens()
+        )
+
+        primary_screen = (
+            QGuiApplication.primaryScreen()
+        )
+
+        saved_position = None
+
+        if (
+            preferences.remember_position
+            and preferences.position_x is not None
+            and preferences.position_y is not None
+        ):
+            saved_position = QPoint(
+                preferences.position_x,
+                preferences.position_y,
+            )
+
+        target_screen = _resolve_placement_screen(
+            screens,
+            primary_screen,
+            preferred_name=preferences.screen_name,
+            saved_position=saved_position,
+        )
+
+        if target_screen is None:
+            if saved_position is not None:
+                self.move(
+                    saved_position
+                )
+
+            return
+
+        if saved_position is not None:
+            target_position = _clamp_position_to_screen(
+                target_screen,
+                self.size(),
+                saved_position,
+            )
+        else:
+            target_position = _center_position_on_screen(
+                target_screen,
+                self.size(),
+            )
+
+        self.move(
+            target_position
+        )
 
     def closeEvent(
         self,
