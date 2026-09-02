@@ -1,5 +1,10 @@
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
+from src.discord.application_library import (
+    BUILTIN_APPLICATION_ENTRY_ID,
+    is_valid_user_entry_id,
+)
+
 from src.discord.presence_modes import (
     DEFAULT_PARTY_CURRENT,
     DEFAULT_PARTY_MAXIMUM,
@@ -46,6 +51,33 @@ class PresenceController(QObject):
 
         return mode
 
+    @staticmethod
+    def _normalized_application_entry_id(
+        value,
+    ) -> str:
+        entry_id = (
+            str(
+                value or ""
+            )
+            .replace("\x00", "")
+            .strip()
+        )
+
+        if (
+            entry_id
+            == BUILTIN_APPLICATION_ENTRY_ID
+        ):
+            return entry_id
+
+        if is_valid_user_entry_id(
+            entry_id
+        ):
+            return entry_id
+
+        return (
+            BUILTIN_APPLICATION_ENTRY_ID
+        )
+
     def load_mode(
         self,
         mode: str,
@@ -63,6 +95,19 @@ class PresenceController(QObject):
                 "title": "",
                 "message": "",
             },
+        )
+
+        application_entry_id = (
+            PresenceController
+            ._normalized_application_entry_id(
+                self.store.value(
+                    (
+                        f"presence/{normalized}/"
+                        "application_entry_id"
+                    ),
+                    BUILTIN_APPLICATION_ENTRY_ID,
+                )
+            )
         )
 
         title = str(
@@ -136,6 +181,9 @@ class PresenceController(QObject):
 
         return PresenceMode(
             mode=normalized,
+            application_entry_id=(
+                application_entry_id
+            ),
             title=title,
             message=message,
             image_path=image_path,
@@ -178,6 +226,29 @@ class PresenceController(QObject):
             "presence/active_mode",
             mode,
         )
+
+        requested_application_entry_id = (
+            presence_mode
+            .normalized_application_entry_id()
+        )
+
+        if (
+            mode != "disabled"
+            and requested_application_entry_id
+            is not None
+        ):
+            self.store.setValue(
+                (
+                    f"presence/{mode}/"
+                    "application_entry_id"
+                ),
+                (
+                    PresenceController
+                    ._normalized_application_entry_id(
+                        requested_application_entry_id
+                    )
+                ),
+            )
 
         if mode == "music":
             self.store.setValue(

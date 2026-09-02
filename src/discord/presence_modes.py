@@ -73,6 +73,7 @@ class PresenceMode:
     show_party: bool = False
     party_current: int = DEFAULT_PARTY_CURRENT
     party_maximum: int = DEFAULT_PARTY_MAXIMUM
+    application_entry_id: str | None = None
 
     def normalized_mode(self) -> str:
         normalized = str(
@@ -83,6 +84,25 @@ class PresenceMode:
             return "custom"
 
         return normalized
+
+    def normalized_application_entry_id(
+        self,
+    ) -> str | None:
+        if self.application_entry_id is None:
+            return None
+
+        entry_id = (
+            str(
+                self.application_entry_id
+            )
+            .replace("\x00", "")
+            .strip()
+        )
+
+        return (
+            entry_id
+            or None
+        )
 
     @staticmethod
     def _normalized_party_value(
@@ -225,6 +245,9 @@ class PresenceMode:
 
         return {
             "mode": self.normalized_mode(),
+            "application_entry_id": (
+                self.normalized_application_entry_id()
+            ),
             "title": self.resolved_title(),
             "message": self.resolved_message(),
             "image_bytes": self.image_bytes(),
