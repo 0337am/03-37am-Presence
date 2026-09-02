@@ -110,7 +110,7 @@ class DiscordApplicationEditorDialog(QDialog):
             True
         )
         self.name_edit.setPlaceholderText(
-            "e.g. Sword Art Online"
+            "e.g. 03:37am"
         )
 
         self.application_id_edit = QLineEdit()
@@ -422,7 +422,7 @@ class DiscordApplicationLibrarySettingsCard(QFrame):
             (
                 "Save Discord applications once, then reuse "
                 "them across custom Presences. The built-in "
-                "03:37am Music application is always available."
+                "03:37am Presence application is always available."
             )
         )
         description.setObjectName(

@@ -1083,6 +1083,9 @@ class MainWindow(QMainWindow):
             spotify_runtime=(
                 self.spotify_connection_runtime
             ),
+            discord_application_store=(
+                self.discord_application_library_store
+            ),
             discord_identity_store=(
                 self.discord_identity_preferences_store
             ),

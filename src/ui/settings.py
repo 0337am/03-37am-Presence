@@ -69,6 +69,10 @@ from src.ui.artwork_hosting_card import (
     ArtworkHostingCard,
 )
 
+from src.ui.discord_application_library_card import (
+    DiscordApplicationLibrarySettingsCard,
+)
+
 from src.ui.discord_identity_card import (
     DiscordIdentitySettingsCard,
 )
@@ -216,10 +220,15 @@ class SettingsPage(QWidget):
         theme_manager=None,
         *,
         spotify_runtime=None,
+        discord_application_store=None,
         discord_identity_store=None,
         discord_identity_runtime=None,
     ):
         super().__init__()
+
+        self.discord_application_store = (
+            discord_application_store
+        )
 
         self.discord_identity_store = (
             discord_identity_store
@@ -1070,6 +1079,22 @@ class SettingsPage(QWidget):
 
         sources_layout.addWidget(
             browser_help
+        )
+
+        self.discord_application_library_card = (
+            DiscordApplicationLibrarySettingsCard(
+                application_store=(
+                    self.discord_application_store
+                ),
+            )
+        )
+
+        self.discord_application_library_card.message_changed.connect(
+            lambda message:
+            self.set_status_message(
+                message,
+                category="discord",
+            )
         )
 
         self.discord_identity_card = (
@@ -2046,6 +2071,9 @@ class SettingsPage(QWidget):
         root.addWidget(theme_card)
         root.addWidget(atmosphere_card)
         root.addWidget(
+            self.discord_application_library_card
+        )
+        root.addWidget(
             self.discord_identity_card
         )
         root.addWidget(sources)
@@ -2082,6 +2110,9 @@ class SettingsPage(QWidget):
             "theme": theme_card,
             "atmosphere": atmosphere_card,
             "media_sources": sources,
+            "discord_applications": (
+                self.discord_application_library_card
+            ),
             "discord_identity": (
                 self.discord_identity_card
             ),
@@ -2112,6 +2143,7 @@ class SettingsPage(QWidget):
             "appearance": "general",
             "windows_startup": "general",
             "media_sources": "discord",
+            "discord_applications": "discord",
             "discord_identity": "discord",
             "artwork_hosting": "discord",
             "auto_afk": "discord",
@@ -2133,6 +2165,7 @@ class SettingsPage(QWidget):
                 startup,
             ),
             "discord": (
+                self.discord_application_library_card,
                 self.discord_identity_card,
                 sources,
                 self.artwork_hosting_card,
@@ -4044,6 +4077,10 @@ class SettingsPage(QWidget):
             "discord identity": "discord_identity",
             "presence identity": "discord_identity",
             "application id": "discord_identity",
+            "discord applications": "discord_applications",
+            "discord application": "discord_applications",
+            "discord application library": "discord_applications",
+            "application library": "discord_applications",
             "customization": "branding",
             "customisation": "branding",
             "branding": "branding",

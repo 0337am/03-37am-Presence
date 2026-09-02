@@ -61,7 +61,7 @@ class DiscordApplicationEditorDialogTests(
         )
 
         self.assertIn(
-            "Sword Art Online",
+            "03:37am",
             dialog.name_edit.placeholderText(),
         )
 
@@ -269,7 +269,7 @@ class DiscordApplicationLibrarySettingsCardTests(
 
         self.assertEqual(
             row.name_label.text(),
-            "03:37am Music",
+            "03:37am Presence",
         )
 
     def test_builtin_row_is_protected(
