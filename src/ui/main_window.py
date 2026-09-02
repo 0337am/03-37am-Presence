@@ -49,6 +49,13 @@ from PyQt6.QtWidgets import (
 from src.discord.extended_presence import (
     ExtendedDiscordPresence,
 )
+from src.discord.application_library import (
+    DiscordApplicationLibraryStore,
+)
+from src.discord.application_library_migration import (
+    migrate_legacy_discord_identity_to_library,
+)
+
 from src.discord.identity_preferences import (
     DiscordIdentityPreferencesStore,
 )
@@ -486,12 +493,21 @@ class MainWindow(QMainWindow):
             680,
         )
 
+        self.discord_application_library_store = (
+            DiscordApplicationLibraryStore()
+        )
+
         self.discord_identity_preferences_store = (
             DiscordIdentityPreferencesStore()
         )
 
         discord_identity_preferences = (
             self.discord_identity_preferences_store.load()
+        )
+
+        migrate_legacy_discord_identity_to_library(
+            discord_identity_preferences,
+            self.discord_application_library_store,
         )
 
         self.discord = (
