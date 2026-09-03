@@ -407,13 +407,27 @@ class DiscordApplicationLibraryMigrationTests(
             "discord_identity_preferences = ("
         )
 
-        migration_index = source.index(
-            "migrate_legacy_discord_identity_to_library("
+        migration_start = source.index(
+            "migrated_legacy_discord_application = ("
         )
 
         rpc_index = source.index(
-            "self.discord = ("
+            "self.discord = (",
+            migration_start,
         )
+
+        migration_source = source[
+            migration_start:
+            rpc_index
+        ]
+
+        rpc_source = source[
+            rpc_index:
+            source.index(
+                "self.presence_controller = (",
+                rpc_index,
+            )
+        ]
 
         self.assertLess(
             library_index,
@@ -427,24 +441,36 @@ class DiscordApplicationLibraryMigrationTests(
 
         self.assertLess(
             load_index,
-            migration_index,
+            migration_start,
         )
 
         self.assertLess(
-            migration_index,
+            migration_start,
             rpc_index,
         )
 
         self.assertIn(
-            "discord_identity_preferences,\n"
-            "            self.discord_application_library_store,",
-            source,
+            "migrate_legacy_discord_identity_to_library(",
+            migration_source,
         )
 
         self.assertIn(
-            "discord_identity_preferences\n"
-            "                    .resolved_application_id",
-            source,
+            "discord_identity_preferences,",
+            migration_source,
+        )
+
+        self.assertIn(
+            "self.discord_application_library_store,",
+            migration_source,
+        )
+
+        self.assertIn(
+            (
+                "discord_identity_preferences\n"
+                "                    "
+                ".resolved_application_id"
+            ),
+            rpc_source,
         )
 
 

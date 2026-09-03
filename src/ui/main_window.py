@@ -54,6 +54,7 @@ from src.discord.application_library import (
 )
 from src.discord.application_library_migration import (
     migrate_legacy_discord_identity_to_library,
+    migrate_legacy_discord_identity_to_presence_assignments,
 )
 
 from src.discord.identity_preferences import (
@@ -505,9 +506,11 @@ class MainWindow(QMainWindow):
             self.discord_identity_preferences_store.load()
         )
 
-        migrate_legacy_discord_identity_to_library(
-            discord_identity_preferences,
-            self.discord_application_library_store,
+        migrated_legacy_discord_application = (
+            migrate_legacy_discord_identity_to_library(
+                discord_identity_preferences,
+                self.discord_application_library_store,
+            )
         )
 
         self.discord = (
@@ -523,6 +526,12 @@ class MainWindow(QMainWindow):
             PresenceController(
                 self.discord
             )
+        )
+
+        migrate_legacy_discord_identity_to_presence_assignments(
+            discord_identity_preferences,
+            migrated_legacy_discord_application,
+            self.presence_controller.store,
         )
 
         self.afk_preferences_store = (
