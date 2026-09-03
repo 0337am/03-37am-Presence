@@ -1374,6 +1374,32 @@ class PresencePage(QWidget):
             "Switch back to Music presence."
         )
 
+        self.apply_secondary_button = QPushButton(
+            "Apply as Secondary"
+        )
+        self.apply_secondary_button.setObjectName(
+            "secondaryButton"
+        )
+        self.apply_secondary_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.apply_secondary_button.setToolTip(
+            "Publish the current editor values as an independent Secondary Presence while Music remains primary."
+        )
+
+        self.clear_secondary_button = QPushButton(
+            "Clear Secondary"
+        )
+        self.clear_secondary_button.setObjectName(
+            "secondaryButton"
+        )
+        self.clear_secondary_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.clear_secondary_button.setToolTip(
+            "Clear only the Secondary Presence without stopping the primary Music Presence."
+        )
+
         self.apply_button = QPushButton(
             "Apply to Discord"
         )
@@ -1926,6 +1952,14 @@ class PresencePage(QWidget):
 
         action_layout.addWidget(
             self.library_save_button
+        )
+
+        action_layout.addWidget(
+            self.apply_secondary_button
+        )
+
+        action_layout.addWidget(
+            self.clear_secondary_button
         )
 
         action_layout.addWidget(
@@ -2816,8 +2850,20 @@ class PresencePage(QWidget):
         self.music_mode_button.clicked.connect(
             self.switch_to_music_presence
         )
+        self.apply_secondary_button.clicked.connect(
+            self.apply_secondary_presence
+        )
+
+        self.clear_secondary_button.clicked.connect(
+            self.clear_secondary_presence
+        )
+
         self.apply_button.clicked.connect(
             self.apply_presence
+        )
+
+        self.controller.secondary_mode_changed.connect(
+            self._refresh_secondary_controls
         )
 
         self.theme_manager.branding_changed.connect(
@@ -4315,6 +4361,8 @@ class PresencePage(QWidget):
                 mode != "disabled"
             )
 
+        self._refresh_secondary_controls()
+
         self._refresh_studio_mode_controls()
 
     @pyqtSlot(dict)
@@ -4890,6 +4938,242 @@ class PresencePage(QWidget):
         }
         self.open_image_button.setEnabled(editable)
         self.remove_image_button.setEnabled(editable)
+
+    def _secondary_editor_application_entry_id(
+        self,
+    ) -> str | None:
+        selected_preset = getattr(
+            self,
+            "selected_preset",
+            None,
+        )
+
+        if callable(
+            selected_preset
+        ):
+            try:
+                preset = selected_preset()
+
+            except Exception:
+                preset = None
+
+            if preset is not None:
+                try:
+                    preset_mode = (
+                        preset.to_presence_mode()
+                    )
+
+                    if (
+                        preset_mode.normalized_mode()
+                        == self.current_mode
+                    ):
+                        return (
+                            preset_mode
+                            .normalized_application_entry_id()
+                        )
+
+                except Exception:
+                    pass
+
+        controller = getattr(
+            self,
+            "controller",
+            None,
+        )
+
+        load_mode = getattr(
+            controller,
+            "load_mode",
+            None,
+        )
+
+        if not callable(
+            load_mode
+        ):
+            return None
+
+        try:
+            stored_mode = load_mode(
+                self.current_mode
+            )
+
+            return (
+                stored_mode
+                .normalized_application_entry_id()
+            )
+
+        except Exception:
+            return None
+
+    def _refresh_secondary_controls(
+        self,
+        *_,
+    ):
+        apply_button = getattr(
+            self,
+            "apply_secondary_button",
+            None,
+        )
+
+        clear_button = getattr(
+            self,
+            "clear_secondary_button",
+            None,
+        )
+
+        controller = getattr(
+            self,
+            "controller",
+            None,
+        )
+
+        current_mode = getattr(
+            self,
+            "current_mode",
+            None,
+        )
+
+        editable_secondary = (
+            current_mode
+            not in {
+                "music",
+                "disabled",
+            }
+        )
+
+        primary_mode = getattr(
+            controller,
+            "active_mode",
+            None,
+        )
+
+        primary_is_music = (
+            primary_mode == "music"
+        )
+
+        secondary_active = (
+            getattr(
+                controller,
+                "secondary_presence_mode",
+                None,
+            )
+            is not None
+        )
+
+        if apply_button is not None:
+            apply_button.setVisible(
+                editable_secondary
+            )
+
+            apply_button.setEnabled(
+                editable_secondary
+                and primary_is_music
+            )
+
+        if clear_button is not None:
+            clear_button.setVisible(
+                secondary_active
+            )
+
+            clear_button.setEnabled(
+                secondary_active
+            )
+
+    def apply_secondary_presence(
+        self,
+    ):
+        if self.current_mode in {
+            "music",
+            "disabled",
+        }:
+            self.status_label.setText(
+                "Music and Disabled cannot be used as a Secondary Presence."
+            )
+
+            self._refresh_secondary_controls()
+            return
+
+        if (
+            getattr(
+                self.controller,
+                "active_mode",
+                None,
+            )
+            != "music"
+        ):
+            self.status_label.setText(
+                "Secondary Presence is available while Music is the active primary Presence."
+            )
+
+            self._refresh_secondary_controls()
+            return
+
+        try:
+            presence_mode = (
+                self.current_editor_presence_mode()
+            )
+
+        except PresenceLinkButtonError as error:
+            self.status_label.setText(
+                str(error)
+            )
+
+            self._refresh_secondary_controls()
+            return
+
+        presence_mode.application_entry_id = (
+            self
+            ._secondary_editor_application_entry_id()
+        )
+
+        try:
+            published = bool(
+                self.controller.apply_secondary_mode(
+                    presence_mode
+                )
+            )
+
+        except Exception:
+            published = False
+
+        if published:
+            mode_name = (
+                self.mode_box.currentText()
+            )
+
+            self.status_label.setText(
+                f"{mode_name} applied as Secondary Presence."
+            )
+
+        else:
+            self.status_label.setText(
+                "Secondary Presence could not be published. Check that its Discord Application exists and is not already used by Music."
+            )
+
+        self._refresh_secondary_controls()
+
+    def clear_secondary_presence(
+        self,
+    ):
+        try:
+            cleared = bool(
+                self.controller.clear_secondary_mode()
+            )
+
+        except Exception:
+            cleared = False
+
+        if cleared:
+            self.status_label.setText(
+                "Secondary Presence cleared."
+            )
+
+        else:
+            self.status_label.setText(
+                "Secondary Presence could not be cleared."
+            )
+
+        self._refresh_secondary_controls()
 
     def apply_presence(self):
         try:
