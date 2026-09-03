@@ -471,41 +471,34 @@ class PresenceApplicationAssignmentBoundaryTests(
             source.casefold(),
         )
 
-    def test_main_window_controller_wiring_is_unchanged(
+    def test_main_window_controller_wiring_uses_music_session_manager(
         self,
     ):
-        source = Path(
-            "src/ui/main_window.py"
-        ).read_text(
-            encoding="utf-8-sig"
-        )
-
-        start = source.index(
-            "self.presence_controller = ("
-        )
-
-        end = source.index(
-            "self.afk_preferences_store = (",
-            start,
-        )
-
-        wiring = source[
-            start:end
-        ]
+        with open(
+            "src/ui/main_window.py",
+            "r",
+            encoding="utf-8-sig",
+        ) as handle:
+            source = handle.read()
 
         self.assertIn(
             "PresenceController(",
-            wiring,
+            source,
         )
 
         self.assertIn(
-            "self.discord",
-            wiring,
+            "self.discord,",
+            source,
         )
 
-        self.assertNotIn(
-            "discord_application_library_store",
-            wiring,
+        self.assertIn(
+            "discord_session_manager=(",
+            source,
+        )
+
+        self.assertIn(
+            "self.discord_session_manager",
+            source,
         )
 
 

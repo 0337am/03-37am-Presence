@@ -92,7 +92,7 @@ def _method_source(
 class DiscordPresenceSessionManagerWiringTests(
     unittest.TestCase
 ):
-    def test_main_window_imports_session_manager(
+    def test_main_window_imports_manager_and_music_lane(
         self,
     ):
         source = _read(
@@ -100,15 +100,16 @@ class DiscordPresenceSessionManagerWiringTests(
         )
 
         self.assertIn(
-            (
-                "from src.discord.session_manager import (\n"
-                "    DiscordPresenceSessionManager,\n"
-                ")"
-            ),
+            "MUSIC_LANE_ID",
             source,
         )
 
-    def test_manager_uses_shared_application_library_resolver(
+        self.assertIn(
+            "DiscordPresenceSessionManager",
+            source,
+        )
+
+    def test_manager_uses_shared_library_resolver_before_legacy_runtime(
         self,
     ):
         source = _read(
@@ -121,14 +122,16 @@ class DiscordPresenceSessionManagerWiringTests(
             "__init__",
         )
 
-        self.assertIn(
-            "self.discord_session_manager = (",
-            init_source,
+        manager_index = (
+            init_source.index(
+                "self.discord_session_manager = ("
+            )
         )
 
-        self.assertIn(
-            "DiscordPresenceSessionManager(",
-            init_source,
+        legacy_index = (
+            init_source.index(
+                "self.discord = ("
+            )
         )
 
         self.assertIn(
@@ -139,12 +142,12 @@ class DiscordPresenceSessionManagerWiringTests(
             init_source,
         )
 
-        self.assertNotIn(
-            "session_factory=",
-            init_source,
+        self.assertLess(
+            manager_index,
+            legacy_index,
         )
 
-    def test_manager_is_composed_after_library_migration_before_legacy_rpc(
+    def test_presence_controller_receives_legacy_and_manager(
         self,
     ):
         source = _read(
@@ -156,78 +159,28 @@ class DiscordPresenceSessionManagerWiringTests(
             "MainWindow",
             "__init__",
         )
-
-        migration_index = (
-            init_source.index(
-                "migrate_legacy_discord_identity_to_library("
-            )
-        )
-
-        manager_index = (
-            init_source.index(
-                "self.discord_session_manager = ("
-            )
-        )
-
-        legacy_rpc_index = (
-            init_source.index(
-                "self.discord = ("
-            )
-        )
-
-        self.assertLess(
-            migration_index,
-            manager_index,
-        )
-
-        self.assertLess(
-            manager_index,
-            legacy_rpc_index,
-        )
-
-    def test_presence_controller_still_receives_legacy_discord_session(
-        self,
-    ):
-        source = _read(
-            MAIN_WINDOW_PATH
-        )
-
-        init_source = _method_source(
-            source,
-            "MainWindow",
-            "__init__",
-        )
-
-        controller_index = (
-            init_source.index(
-                "self.presence_controller = ("
-            )
-        )
-
-        controller_source = init_source[
-            controller_index:
-        ]
 
         self.assertIn(
             "PresenceController(",
-            controller_source,
+            init_source,
         )
 
         self.assertIn(
-            "self.discord",
-            controller_source,
+            "self.discord,",
+            init_source,
         )
 
-        self.assertNotIn(
-            (
-                "PresenceController(\n"
-                "                "
-                "self.discord_session_manager"
-            ),
-            controller_source,
+        self.assertIn(
+            "discord_session_manager=(",
+            init_source,
         )
 
-    def test_connect_services_starts_only_legacy_discord_session(
+        self.assertIn(
+            "self.discord_session_manager",
+            init_source,
+        )
+
+    def test_connect_services_defers_discord_startup_to_saved_mode(
         self,
     ):
         source = _read(
@@ -240,68 +193,125 @@ class DiscordPresenceSessionManagerWiringTests(
             "connect_services",
         )
 
-        self.assertEqual(
-            method.count(
-                "self.discord.connect()"
-            ),
-            1,
-        )
-
         self.assertNotIn(
-            "discord_session_manager",
+            "self.discord.connect()",
             method,
         )
 
         self.assertIn(
-            (
-                "self.presence_controller"
-                ".apply_saved_mode"
-            ),
+            "self.presence_controller.apply_saved_mode",
             method,
         )
 
-    def test_session_manager_is_dormant_outside_construction_and_shutdown(
+        self.assertIn(
+            "QTimer.singleShot(",
+            method,
+        )
+
+    def test_status_snapshot_reads_music_lane_observability(
         self,
     ):
         source = _read(
             MAIN_WINDOW_PATH
         )
 
-        self.assertEqual(
-            source.count(
-                "self.discord_session_manager"
-            ),
-            2,
+        method = _method_source(
+            source,
+            "MainWindow",
+            "_discord_status_snapshot",
         )
 
-        for forbidden in (
-            (
-                "self.discord_session_manager"
-                ".ensure_lane("
-            ),
-            (
-                "self.discord_session_manager"
-                ".update_music("
-            ),
-            (
-                "self.discord_session_manager"
-                ".update_secondary("
-            ),
-            (
-                "self.discord_session_manager"
-                ".clear_lane("
-            ),
-            (
-                "self.discord_session_manager"
-                ".release_lane("
-            ),
+        for expected in (
+            "MUSIC_LANE_ID",
+            "profile_identity_for_lane",
+            "lane_is_connected",
+            "lane_is_running",
         ):
-            self.assertNotIn(
-                forbidden,
-                source,
+            self.assertIn(
+                expected,
+                method,
             )
 
-    def test_shutdown_closes_manager_before_legacy_discord(
+    def test_status_snapshot_retains_legacy_branch_for_non_music_or_afk(
+        self,
+    ):
+        source = _read(
+            MAIN_WINDOW_PATH
+        )
+
+        method = _method_source(
+            source,
+            "MainWindow",
+            "_discord_status_snapshot",
+        )
+
+        self.assertIn(
+            'active_mode == "music"',
+            method,
+        )
+
+        self.assertIn(
+            "not auto_afk_active",
+            method,
+        )
+
+        self.assertIn(
+            '"discord"',
+            method,
+        )
+
+    def test_refresh_status_uses_transport_snapshot(
+        self,
+    ):
+        source = _read(
+            MAIN_WINDOW_PATH
+        )
+
+        method = _method_source(
+            source,
+            "MainWindow",
+            "refresh_discord_status",
+        )
+
+        self.assertIn(
+            "self._discord_status_snapshot()",
+            method,
+        )
+
+        self.assertNotIn(
+            "self.discord.is_connected",
+            method,
+        )
+
+        self.assertNotIn(
+            "self.discord.profile_identity",
+            method,
+        )
+
+    def test_diagnostics_uses_transport_snapshot(
+        self,
+    ):
+        source = _read(
+            MAIN_WINDOW_PATH
+        )
+
+        method = _method_source(
+            source,
+            "MainWindow",
+            "collect_diagnostics",
+        )
+
+        self.assertIn(
+            "self._discord_status_snapshot()",
+            method,
+        )
+
+        self.assertNotIn(
+            "self.discord.is_connected",
+            method,
+        )
+
+    def test_shutdown_closes_manager_before_legacy_runtime(
         self,
     ):
         source = _read(
@@ -330,91 +340,72 @@ class DiscordPresenceSessionManagerWiringTests(
             legacy_index,
         )
 
-    def test_manager_shutdown_failure_cannot_skip_legacy_close(
+        self.assertIn(
+            "except Exception:",
+            method[
+                manager_index:
+                legacy_index
+            ],
+        )
+
+    def test_transitional_identity_stays_legacy_and_secondary_is_inactive(
         self,
     ):
-        source = _read(
+        main_source = _read(
             MAIN_WINDOW_PATH
         )
 
-        method = _method_source(
-            source,
-            "MainWindow",
-            "shutdown",
-        )
-
-        manager_index = method.index(
-            (
-                "self.discord_session_manager"
-                ".close()"
-            )
-        )
-
-        legacy_index = method.index(
-            "self.discord.close()"
-        )
-
-        between = method[
-            manager_index:
-            legacy_index
-        ]
-
-        before_manager = method[
-            :manager_index
-        ]
-
-        self.assertIn(
-            "try:",
-            before_manager,
-        )
-
-        self.assertIn(
-            "except Exception:",
-            between,
-        )
-
-        self.assertIn(
-            "pass",
-            between,
-        )
-
-    def test_presence_controller_has_no_manager_wiring_yet(
-        self,
-    ):
-        source = _read(
+        controller_source = _read(
             CONTROLLER_PATH
+        )
+
+        presence_source = _read(
+            PRESENCE_PAGE_PATH
+        )
+
+        settings_source = _read(
+            SETTINGS_PATH
+        )
+
+        build_pages = _method_source(
+            main_source,
+            "MainWindow",
+            "build_pages",
+        )
+
+        self.assertIn(
+            "discord_identity_runtime=(",
+            build_pages,
+        )
+
+        self.assertIn(
+            "self.discord",
+            build_pages,
+        )
+
+        for source in (
+            main_source,
+            controller_source,
+        ):
+            self.assertNotIn(
+                "SECONDARY_LANE_ID",
+                source,
+            )
+
+            self.assertNotIn(
+                ".update_secondary(",
+                source,
+            )
+
+        self.assertNotIn(
+            "DiscordPresenceSessionManager",
+            presence_source,
         )
 
         self.assertNotIn(
             "DiscordPresenceSessionManager",
-            source,
+            settings_source,
         )
-
-        self.assertNotIn(
-            "discord_session_manager",
-            source,
-        )
-
-    def test_presence_ui_and_settings_have_no_manager_wiring_yet(
-        self,
-    ):
-        for path in (
-            PRESENCE_PAGE_PATH,
-            SETTINGS_PATH,
-        ):
-            source = _read(
-                path
-            )
-
-            self.assertNotIn(
-                "DiscordPresenceSessionManager",
-                source,
-            )
-
-            self.assertNotIn(
-                "discord_session_manager",
-                source,
-            )
 
 
 if __name__ == "__main__":

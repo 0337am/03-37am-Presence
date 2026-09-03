@@ -5,6 +5,10 @@ from src.discord.application_library import (
     is_valid_user_entry_id,
 )
 
+from src.discord.session_manager import (
+    MUSIC_LANE_ID,
+)
+
 from src.discord.presence_modes import (
     DEFAULT_PARTY_CURRENT,
     DEFAULT_PARTY_MAXIMUM,
@@ -23,10 +27,20 @@ from src.discord.presence_link_buttons import (
 class PresenceController(QObject):
     mode_changed = pyqtSignal(dict)
 
-    def __init__(self, discord_presence):
+    def __init__(
+        self,
+        discord_presence,
+        *,
+        discord_session_manager=None,
+    ):
         super().__init__()
 
         self.discord = discord_presence
+
+        self.discord_session_manager = (
+            discord_session_manager
+        )
+
         self.store = QSettings(
             "0337am",
             "Presence",
@@ -348,17 +362,278 @@ class PresenceController(QObject):
             )
         ]
 
+    def _release_music_lane(
+        self,
+    ) -> bool:
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is None:
+            return True
+
+        release_lane = getattr(
+            manager,
+            "release_lane",
+            None,
+        )
+
+        if not callable(
+            release_lane
+        ):
+            return False
+
+        try:
+            return bool(
+                release_lane(
+                    MUSIC_LANE_ID
+                )
+            )
+
+        except Exception:
+            return False
+
+    def _stop_legacy_discord(
+        self,
+    ) -> bool:
+        try:
+            is_connected = bool(
+                getattr(
+                    self.discord,
+                    "is_connected",
+                    False,
+                )
+            )
+
+        except Exception:
+            is_connected = True
+
+        try:
+            is_running = bool(
+                getattr(
+                    self.discord,
+                    "is_running",
+                    False,
+                )
+            )
+
+        except Exception:
+            is_running = True
+
+        if (
+            not is_connected
+            and not is_running
+        ):
+            return True
+
+        success = True
+
+        clear_presence = getattr(
+            self.discord,
+            "clear_presence",
+            None,
+        )
+
+        if callable(
+            clear_presence
+        ):
+            try:
+                clear_presence()
+
+            except Exception:
+                success = False
+
+        close = getattr(
+            self.discord,
+            "close",
+            None,
+        )
+
+        if callable(
+            close
+        ):
+            try:
+                close()
+
+            except Exception:
+                success = False
+
+        return success
+
+    def _start_legacy_discord(
+        self,
+    ) -> bool:
+        connect = getattr(
+            self.discord,
+            "connect",
+            None,
+        )
+
+        if not callable(
+            connect
+        ):
+            return False
+
+        try:
+            return (
+                connect()
+                is not False
+            )
+
+        except Exception:
+            return False
+
+    @staticmethod
+    def _music_application_entry_id(
+        presence_mode: PresenceMode,
+    ) -> str:
+        entry_id = (
+            presence_mode
+            .normalized_application_entry_id()
+        )
+
+        return (
+            entry_id
+            or BUILTIN_APPLICATION_ENTRY_ID
+        )
+
+    def _publish_music_with_manager(
+        self,
+        presence_mode: PresenceMode,
+        song,
+    ) -> bool:
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is None:
+            return False
+
+        application_entry_id = (
+            self._music_application_entry_id(
+                presence_mode
+            )
+        )
+
+        discord_buttons = (
+            self._discord_buttons_for_mode(
+                presence_mode
+            )
+        )
+
+        if self._has_song(
+            song
+        ):
+            update_music = getattr(
+                manager,
+                "update_music",
+                None,
+            )
+
+            if not callable(
+                update_music
+            ):
+                return False
+
+            try:
+                return bool(
+                    update_music(
+                        application_entry_id,
+                        song,
+                        buttons=discord_buttons,
+                        show_loop_count=bool(
+                            presence_mode
+                            .show_loop_count
+                        ),
+                    )
+                )
+
+            except Exception:
+                return False
+
+        ensure_lane = getattr(
+            manager,
+            "ensure_lane",
+            None,
+        )
+
+        clear_lane = getattr(
+            manager,
+            "clear_lane",
+            None,
+        )
+
+        if (
+            not callable(
+                ensure_lane
+            )
+            or not callable(
+                clear_lane
+            )
+        ):
+            return False
+
+        try:
+            binding = ensure_lane(
+                MUSIC_LANE_ID,
+                application_entry_id,
+            )
+
+            if binding is None:
+                return False
+
+            return bool(
+                clear_lane(
+                    MUSIC_LANE_ID
+                )
+            )
+
+        except Exception:
+            return False
+
     def set_music_loop_count_enabled(
         self,
         enabled: bool,
     ):
-        checked = bool(enabled)
+        checked = bool(
+            enabled
+        )
 
         self.store.setValue(
             "presence/music/show_loop_count",
             checked,
         )
+
         self.store.sync()
+
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is not None:
+            if self.active_mode != "music":
+                return
+
+            music_mode = self.load_mode(
+                "music"
+            )
+
+            if not self._stop_legacy_discord():
+                self._release_music_lane()
+                return
+
+            self._publish_music_with_manager(
+                music_mode,
+                self._latest_song,
+            )
+
+            return
 
         loop_count_setter = getattr(
             self.discord,
@@ -376,7 +651,9 @@ class PresenceController(QObject):
         if self.active_mode != "music":
             return
 
-        latest_song = self._latest_song
+        latest_song = (
+            self._latest_song
+        )
 
         if not self._has_song(
             latest_song
@@ -402,7 +679,10 @@ class PresenceController(QObject):
         self,
         presence_mode: PresenceMode,
     ):
-        mode = presence_mode.normalized_mode()
+        mode = (
+            presence_mode
+            .normalized_mode()
+        )
 
         if self._auto_afk_active:
             self._auto_afk_active = False
@@ -410,55 +690,130 @@ class PresenceController(QObject):
 
         self.save_mode(presence_mode)
 
-        discord_buttons = (
-            self._discord_buttons_for_mode(
-                presence_mode
-            )
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
         )
 
-        if mode == "music":
-            loop_count_setter = getattr(
-                self.discord,
-                "set_music_loop_count_enabled",
-                None,
-            )
-
-            if callable(
-                loop_count_setter
-            ):
-                loop_count_setter(
-                    bool(
-                        presence_mode.show_loop_count
+        if manager is not None:
+            if mode == "music":
+                if self._stop_legacy_discord():
+                    music_mode = self.load_mode(
+                        "music"
                     )
-                )
 
-            latest_song = self._latest_song
+                    self._publish_music_with_manager(
+                        music_mode,
+                        self._latest_song,
+                    )
 
-            if self._has_song(
-                latest_song
-            ):
-                self.discord.update_song(
-                    latest_song,
-                    buttons=discord_buttons,
-                )
+                else:
+                    self._release_music_lane()
+
+            elif mode == "disabled":
+                self._release_music_lane()
+                self._stop_legacy_discord()
+
             else:
-                self.discord.clear_presence()
+                if (
+                    self._release_music_lane()
+                    and self._start_legacy_discord()
+                ):
+                    payload = (
+                        presence_mode
+                        .to_payload()
+                    )
 
-        elif mode == "disabled":
-            self.discord.clear_presence()
+                    discord_buttons = (
+                        self._discord_buttons_for_mode(
+                            presence_mode
+                        )
+                    )
+
+                    self.discord.update_custom(
+                        title=payload["title"],
+                        message=payload["message"],
+                        image_bytes=(
+                            payload["image_bytes"]
+                        ),
+                        image_name=(
+                            payload["image_name"]
+                        ),
+                        show_elapsed=(
+                            payload["show_elapsed"]
+                        ),
+                        buttons=discord_buttons,
+                        party_size=(
+                            payload["party_size"]
+                        ),
+                    )
 
         else:
-            payload = presence_mode.to_payload()
-
-            self.discord.update_custom(
-                title=payload["title"],
-                message=payload["message"],
-                image_bytes=payload["image_bytes"],
-                image_name=payload["image_name"],
-                show_elapsed=payload["show_elapsed"],
-                buttons=discord_buttons,
-                party_size=payload["party_size"],
+            discord_buttons = (
+                self._discord_buttons_for_mode(
+                    presence_mode
+                )
             )
+
+            if mode == "music":
+                loop_count_setter = getattr(
+                    self.discord,
+                    "set_music_loop_count_enabled",
+                    None,
+                )
+
+                if callable(
+                    loop_count_setter
+                ):
+                    loop_count_setter(
+                        bool(
+                            presence_mode
+                            .show_loop_count
+                        )
+                    )
+
+                latest_song = (
+                    self._latest_song
+                )
+
+                if self._has_song(
+                    latest_song
+                ):
+                    self.discord.update_song(
+                        latest_song,
+                        buttons=discord_buttons,
+                    )
+
+                else:
+                    self.discord.clear_presence()
+
+            elif mode == "disabled":
+                self.discord.clear_presence()
+
+            else:
+                payload = (
+                    presence_mode
+                    .to_payload()
+                )
+
+                self.discord.update_custom(
+                    title=payload["title"],
+                    message=payload["message"],
+                    image_bytes=(
+                        payload["image_bytes"]
+                    ),
+                    image_name=(
+                        payload["image_name"]
+                    ),
+                    show_elapsed=(
+                        payload["show_elapsed"]
+                    ),
+                    buttons=discord_buttons,
+                    party_size=(
+                        payload["party_size"]
+                    ),
+                )
 
         self.mode_changed.emit(
             presence_mode.to_payload()
@@ -475,11 +830,15 @@ class PresenceController(QObject):
     def auto_afk_active(self) -> bool:
         return self._auto_afk_active
 
-    def enter_auto_afk(self):
+    def enter_auto_afk(
+        self,
+    ):
         if self._auto_afk_active:
             return
 
-        current_mode = self.active_mode
+        current_mode = (
+            self.active_mode
+        )
 
         if current_mode not in {
             "music",
@@ -497,7 +856,9 @@ class PresenceController(QObject):
             "afk"
         )
 
-        payload = afk_mode.to_payload()
+        payload = (
+            afk_mode.to_payload()
+        )
 
         discord_buttons = (
             self._discord_buttons_for_mode(
@@ -505,12 +866,37 @@ class PresenceController(QObject):
             )
         )
 
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is not None:
+            if not self._release_music_lane():
+                self.mode_changed.emit(
+                    payload
+                )
+                return
+
+            if not self._start_legacy_discord():
+                self.mode_changed.emit(
+                    payload
+                )
+                return
+
         self.discord.update_custom(
             title=payload["title"],
             message=payload["message"],
-            image_bytes=payload["image_bytes"],
-            image_name=payload["image_name"],
-            show_elapsed=payload["show_elapsed"],
+            image_bytes=(
+                payload["image_bytes"]
+            ),
+            image_name=(
+                payload["image_name"]
+            ),
+            show_elapsed=(
+                payload["show_elapsed"]
+            ),
             buttons=discord_buttons,
         )
 
@@ -538,13 +924,38 @@ class PresenceController(QObject):
             presence_mode
         )
 
-    def handle_song(self, song):
+    def handle_song(
+        self,
+        song,
+    ):
         self._latest_song = song
 
         if self._auto_afk_active:
             return
 
         if self.active_mode != "music":
+            return
+
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is not None:
+            if not self._stop_legacy_discord():
+                self._release_music_lane()
+                return
+
+            music_mode = self.load_mode(
+                "music"
+            )
+
+            self._publish_music_with_manager(
+                music_mode,
+                song,
+            )
+
             return
 
         if self._has_song(
@@ -564,6 +975,7 @@ class PresenceController(QObject):
                 song,
                 buttons=discord_buttons,
             )
+
             return
 
         self.discord.clear_presence()

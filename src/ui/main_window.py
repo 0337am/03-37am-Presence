@@ -67,6 +67,7 @@ from src.discord.presence_modes import (
     VALID_MODES,
 )
 from src.discord.session_manager import (
+    MUSIC_LANE_ID,
     DiscordPresenceSessionManager,
 )
 from src.system.afk_preferences import (
@@ -533,7 +534,10 @@ class MainWindow(QMainWindow):
 
         self.presence_controller = (
             PresenceController(
-                self.discord
+                self.discord,
+                discord_session_manager=(
+                    self.discord_session_manager
+                ),
             )
         )
 
@@ -1796,9 +1800,15 @@ class MainWindow(QMainWindow):
     def collect_diagnostics(
         self,
     ) -> dict[str, str]:
+        (
+            _discord_profile_identity,
+            discord_connected,
+            _discord_running,
+        ) = self._discord_status_snapshot()
+
         discord_status = (
             "Connected"
-            if self.discord.is_connected
+            if discord_connected
             else "Disconnected"
         )
 
@@ -2499,8 +2509,6 @@ class MainWindow(QMainWindow):
             self.apply_atmosphere
         )
 
-        self.discord.connect()
-
         QTimer.singleShot(
             0,
             self.presence_controller.apply_saved_mode,
@@ -2629,16 +2637,173 @@ class MainWindow(QMainWindow):
         else:
             self.presence_controller.leave_auto_afk()
 
-    def refresh_discord_status(self):
+    def _discord_status_snapshot(
+        self,
+    ) -> tuple[dict, bool, bool]:
+        controller = getattr(
+            self,
+            "presence_controller",
+            None,
+        )
+
+        try:
+            active_mode = str(
+                getattr(
+                    controller,
+                    "active_mode",
+                    "music",
+                )
+                or "music"
+            ).strip().lower()
+
+        except Exception:
+            active_mode = "music"
+
+        try:
+            auto_afk_active = bool(
+                getattr(
+                    controller,
+                    "auto_afk_active",
+                    False,
+                )
+            )
+
+        except Exception:
+            auto_afk_active = False
+
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if (
+            manager is not None
+            and active_mode == "music"
+            and not auto_afk_active
+        ):
+            try:
+                profile_identity = (
+                    manager
+                    .profile_identity_for_lane(
+                        MUSIC_LANE_ID
+                    )
+                )
+
+                is_connected = bool(
+                    manager.lane_is_connected(
+                        MUSIC_LANE_ID
+                    )
+                )
+
+                is_running = bool(
+                    manager.lane_is_running(
+                        MUSIC_LANE_ID
+                    )
+                )
+
+            except Exception:
+                return (
+                    {},
+                    False,
+                    False,
+                )
+
+            if not isinstance(
+                profile_identity,
+                dict,
+            ):
+                profile_identity = {}
+
+            return (
+                dict(
+                    profile_identity
+                ),
+                is_connected,
+                is_running,
+            )
+
+        discord = getattr(
+            self,
+            "discord",
+            None,
+        )
+
+        if discord is None:
+            return (
+                {},
+                False,
+                False,
+            )
+
+        try:
+            profile_identity = getattr(
+                discord,
+                "profile_identity",
+                {},
+            )
+
+        except Exception:
+            profile_identity = {}
+
+        if not isinstance(
+            profile_identity,
+            dict,
+        ):
+            profile_identity = {}
+
+        try:
+            is_connected = bool(
+                getattr(
+                    discord,
+                    "is_connected",
+                    False,
+                )
+            )
+
+        except Exception:
+            is_connected = False
+
+        try:
+            is_running = bool(
+                getattr(
+                    discord,
+                    "is_running",
+                    False,
+                )
+            )
+
+        except Exception:
+            is_running = False
+
+        return (
+            dict(
+                profile_identity
+            ),
+            is_connected,
+            is_running,
+        )
+
+    def refresh_discord_status(
+        self,
+    ):
+        (
+            profile_identity,
+            is_connected,
+            is_running,
+        ) = self._discord_status_snapshot()
+
         set_profile_identity = getattr(
             self.dashboard_page,
             "set_discord_profile_identity",
             None,
         )
 
-        if callable(set_profile_identity):
+        if callable(
+            set_profile_identity
+        ):
             set_profile_identity(
-                self.discord.profile_identity
+                profile_identity
             )
 
         status_label = getattr(
@@ -2650,12 +2815,12 @@ class MainWindow(QMainWindow):
         if status_label is None:
             return
 
-        if self.discord.is_connected:
+        if is_connected:
             status_label.setText(
                 "Connected"
             )
 
-        elif self.discord.is_running:
+        elif is_running:
             status_label.setText(
                 "Waiting for Discord"
             )
