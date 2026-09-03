@@ -409,7 +409,23 @@ class DiscordPresenceSessionManager:
         song,
         *,
         buttons=None,
+        show_loop_count: bool | None = None,
     ) -> bool:
+        if (
+            show_loop_count is not None
+            and not isinstance(
+                show_loop_count,
+                bool,
+            )
+        ):
+            self._last_errors[
+                MUSIC_LANE_ID
+            ] = (
+                "Discord music loop-count "
+                "setting is invalid."
+            )
+            return False
+
         binding = self.ensure_lane(
             MUSIC_LANE_ID,
             application_entry_id,
@@ -424,6 +440,30 @@ class DiscordPresenceSessionManager:
 
         if state is None:
             return False
+
+        if show_loop_count is not None:
+            loop_count_setter = getattr(
+                state.session,
+                "set_music_loop_count_enabled",
+                None,
+            )
+
+            if callable(
+                loop_count_setter
+            ):
+                try:
+                    loop_count_setter(
+                        show_loop_count
+                    )
+
+                except Exception:
+                    self._last_errors[
+                        MUSIC_LANE_ID
+                    ] = (
+                        "Discord music loop-count "
+                        "setting failed."
+                    )
+                    return False
 
         try:
             state.session.update_song(
