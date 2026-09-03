@@ -195,6 +195,95 @@ class DiscordPresenceSessionManager:
             if lane_id in self._sessions
         )
 
+    def lane_is_connected(
+        self,
+        lane_id: object,
+    ) -> bool:
+        lane = self._normalize_lane_id(
+            lane_id
+        )
+
+        state = self._sessions.get(
+            lane
+        )
+
+        if state is None:
+            return False
+
+        try:
+            return bool(
+                getattr(
+                    state.session,
+                    "is_connected",
+                    False,
+                )
+            )
+
+        except Exception:
+            return False
+
+    def lane_is_running(
+        self,
+        lane_id: object,
+    ) -> bool:
+        lane = self._normalize_lane_id(
+            lane_id
+        )
+
+        state = self._sessions.get(
+            lane
+        )
+
+        if state is None:
+            return False
+
+        try:
+            return bool(
+                getattr(
+                    state.session,
+                    "is_running",
+                    False,
+                )
+            )
+
+        except Exception:
+            return False
+
+    def profile_identity_for_lane(
+        self,
+        lane_id: object,
+    ) -> dict:
+        lane = self._normalize_lane_id(
+            lane_id
+        )
+
+        state = self._sessions.get(
+            lane
+        )
+
+        if state is None:
+            return {}
+
+        try:
+            snapshot = getattr(
+                state.session,
+                "profile_identity",
+                {},
+            )
+
+        except Exception:
+            return {}
+
+        if not isinstance(
+            snapshot,
+            dict,
+        ):
+            return {}
+
+        return dict(
+            snapshot
+        )
+
     def last_error_for_lane(
         self,
         lane_id: object,
