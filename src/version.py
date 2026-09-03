@@ -1,5 +1,5 @@
-APP_VERSION = "3.3.0"
-RELEASE_NAME = "Desktop Companion"
+APP_VERSION = "3.4.0"
+RELEASE_NAME = "Multi-Presence"
 DISPLAY_VERSION = (
     f"v{APP_VERSION} - {RELEASE_NAME}"
 )

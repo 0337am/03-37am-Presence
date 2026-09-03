@@ -2,32 +2,33 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, an optional local Desktop Companion overlay, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.3.0 highlights
+## v3.4.0 highlights
 
-- Added **Desktop Companion**, an optional transparent desktop overlay using a user-selected local PNG, JPG/JPEG, WebP, or animated GIF.
-- Companion controls include scale, opacity, always-on-top, click-through, remembered position and monitor, optional fullscreen hiding, and GIF playback speed.
-- When click-through is disabled, the Companion can be dragged directly and remembers its position without unnecessarily snapping partially off-screen placement back onto the monitor.
-- Companion can be enabled or disabled from Settings, the system tray, or an optional **Desktop Companion** Quick Access shortcut.
-- Quick Access now fills resized card space correctly in both directions, including evenly filling incomplete final rows after the Dashboard is resized.
-- Desktop Companion remains local-only and does not monitor keyboard presses, mouse clicks, global input activity, or upload Companion assets to Cloudinary.
+### Multi-Presence
 
-### v3.2.2 maintenance highlights
+- **Discord Application Library:** save friendly names for public Discord Application IDs and reuse them across Presence configurations.
+- **Per-Presence applications:** Custom, Working, Sleep, AFK, and saved Presences can remember their selected Discord application identity.
+- **Music + Secondary Presence:** keep Music active while publishing an independent non-Music Secondary Presence through a different Discord application.
+- **Presence Studio controls:** apply the current editor as Secondary, clear Secondary independently, and select applications from the shared library.
+- **Safe lane isolation:** Music and Secondary updates do not overwrite one another, and duplicate Application IDs are rejected for simultaneous lanes.
 
-- Fixed the main-window startup handoff so runtime window hiding remains reliable after the native phantom-window prevention stage completes.
-- The close button (`X`) and **Tray -> Hide window** now hide 03:37am Presence to the system tray while keeping the app running; **Tray -> Open** restores it and **Tray -> Quit** remains the full-exit action.
-- Normal Windows taskbar minimize behavior remains unchanged.
+### Presence persistence and backup
 
-### v3.2.1 feature highlights
+- Saved Presences retain their Discord Application assignment.
+- Discord Application Library entries are included in supported Settings Backup and Restore data.
+- Existing custom Application ID settings migrate without losing the previous identity selection.
+- Missing or deleted application references fail closed instead of silently substituting another identity.
 
-- Added optional Custom Presence Party / Group controls with editable current and maximum member counts. Discord uses the native Rich Presence party metadata to render its own group icon and `(x of y)` member count.
-- Added a complete Dashboard playback row for Shuffle, Previous, Play/Pause, Next, and Repeat with app-owned themed controls.
-- Added direct Dashboard seeking while preserving the existing playback service and coordinator boundaries.
-- Added trusted Spotify Repeat One loop tracking, including Discord timer resets and an optional `Loop ×N` counter.
-- Added an optional Spotify Queue Dashboard card with truthful local-file reconstruction while Shuffle is off and an explicitly partial Spotify-visible presentation while Shuffle is on.
-- Expanded Quick Access into Quick Access 2.0 with persistent ordering, visibility, add/remove management, reset-to-defaults, and app-owned shortcut icons.
-- Quick Access can now open Presence modes and saved Presence presets, Launcher Cards, and Spotify playlists.
-- Spotify playlist shortcuts use a grouped and searchable playlist picker and open the existing in-app playlist detail without starting playback automatically.
-- Playback and Quick Access additions preserve the app's established safety boundaries without simulated input, foreground focus stealing, or direct Spotify URI launching from Quick Access.
+### Artwork hover text
+
+- Non-Music Presences can choose the text Discord displays when hovering the large artwork.
+- Leaving **Artwork hover text** blank sends no artwork tooltip at all.
+- Custom text is supported for Custom, Working, Sleep, manual AFK, Auto AFK, saved Presences, and Secondary Presence.
+- Music keeps its existing artwork and Presence behavior unchanged.
+
+### Discord safety
+
+03:37am Presence only needs public Discord Application IDs for the Application Library. It does not request Discord Client Secrets, bot tokens, user tokens, or self-bot credentials.
 
 ## Core features
 

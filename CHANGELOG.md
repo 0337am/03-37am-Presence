@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.4.0 - Multi-Presence
+
+Released 4 September 2026.
+
+### Added
+
+- Added the Discord Application Library for saving named public Discord Application IDs with stable references that can be reused across Presences.
+- Added per-Presence Discord Application assignment so Custom, Working, Sleep, AFK, and saved Presences can remember which Discord application identity they use.
+- Added simultaneous Music + Secondary Presence support using independent Discord application sessions, allowing Music to remain active while a separate non-Music activity is shown.
+- Added Secondary Presence controls to Presence Studio, including Apply as Secondary and Clear Secondary while Music remains the primary Presence.
+- Added a Discord Application selector directly to Presence Studio using the shared Application Library.
+- Added configurable artwork hover text for non-Music Presences. Leaving the field blank omits the Discord artwork tooltip entirely, while entered text is shown as the chosen hover label.
+- Added artwork hover-text support to manual AFK, Auto AFK, Working, Sleep, saved Presences, and Secondary Presence.
+
+### Improved
+
+- Saved Presences now retain both their Discord Application assignment and artwork hover text when saved, reopened, duplicated, or updated.
+- Settings Backup and Restore now includes Discord Application Library entries so application assignments remain portable with the rest of the supported Presence configuration.
+- Existing global custom Discord Application ID configuration migrates into the Application Library without discarding the user's existing identity choice.
+- Deleted or unavailable application references fail closed instead of silently switching to an unintended identity.
+- Simultaneous lanes reject duplicate Discord Application IDs, preventing two Presence sessions from competing for the same Discord application.
+- Music and Secondary updates remain isolated so changing or clearing one lane does not incorrectly replace the other.
+
+### Safety and privacy
+
+- Discord Application Library entries contain public Application IDs only. 03:37am Presence does not request Discord Client Secrets, bot tokens, user tokens, or self-bot credentials.
+- Discord RPC lifecycle and multi-session ownership remain worker-managed rather than being moved into the UI.
+- Music playback behavior and the existing Spotify safety boundaries remain unchanged.
+
+### Upgrade notes
+
+- Existing saved Presences that do not contain the new optional fields remain compatible and default safely.
+- Existing v3.3.0 settings and Desktop Companion configuration remain part of the normal in-place upgrade path.
+- The v3.4.0 installer and standalone build continue to use the established release, checksum, and update infrastructure.
+
 ## v3.3.0 - Desktop Companion
 
 Released 1 September 2026.
