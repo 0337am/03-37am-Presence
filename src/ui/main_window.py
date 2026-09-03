@@ -66,6 +66,9 @@ from src.discord.presence_controller import (
 from src.discord.presence_modes import (
     VALID_MODES,
 )
+from src.discord.session_manager import (
+    DiscordPresenceSessionManager,
+)
 from src.system.afk_preferences import (
     AfkPreferencesStore,
 )
@@ -510,6 +513,12 @@ class MainWindow(QMainWindow):
             migrate_legacy_discord_identity_to_library(
                 discord_identity_preferences,
                 self.discord_application_library_store,
+            )
+        )
+
+        self.discord_session_manager = (
+            DiscordPresenceSessionManager(
+                self.discord_application_library_store.get
             )
         )
 
@@ -2796,6 +2805,11 @@ class MainWindow(QMainWindow):
                     shutdown_spotify()
                 except Exception:
                     pass
+
+        try:
+            self.discord_session_manager.close()
+        except Exception:
+            pass
 
         self.discord.close()
 
