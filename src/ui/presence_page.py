@@ -245,12 +245,22 @@ class PresencePage(QWidget):
         self,
         controller,
         theme_manager=None,
+        *,
+        discord_application_store=None,
     ):
         super().__init__()
 
         self.setObjectName("presenceRoot")
 
         self.controller = controller
+
+        self.discord_application_store = (
+            discord_application_store
+        )
+
+        self._application_store_available = False
+        self._loading_application_box = False
+
         self.theme_manager = (
             theme_manager
             or ThemeManager(self)
@@ -1648,6 +1658,55 @@ class PresencePage(QWidget):
             self.studio_workspace_subtitle
         )
 
+        application_row = QHBoxLayout()
+        application_row.setContentsMargins(
+            0,
+            7,
+            0,
+            0,
+        )
+        application_row.setSpacing(
+            9
+        )
+
+        self.application_label = QLabel(
+            "Discord Application"
+        )
+        self.application_label.setObjectName(
+            "fieldTitle"
+        )
+
+        self.application_box = QComboBox()
+        self.application_box.setObjectName(
+            "applicationBox"
+        )
+        self.application_box.setMinimumWidth(
+            230
+        )
+        self.application_box.setMaximumWidth(
+            330
+        )
+        self.application_box.setToolTip(
+            "Choose which Discord Application Library "
+            "entry this Presence uses."
+        )
+
+        application_row.addWidget(
+            self.application_label
+        )
+        application_row.addStretch()
+        application_row.addWidget(
+            self.application_box
+        )
+
+        heading_group.addLayout(
+            application_row
+        )
+
+        self.refresh_application_box(
+            ""
+        )
+
         workspace_header.addLayout(
             heading_group
         )
@@ -2493,6 +2552,10 @@ class PresencePage(QWidget):
 
         presence_mode = preset.to_presence_mode()
 
+        self._sync_application_box_from_mode(
+            presence_mode
+        )
+
         index = self.mode_box.findData(
             presence_mode.mode
         )
@@ -2860,6 +2923,10 @@ class PresencePage(QWidget):
 
         self.apply_button.clicked.connect(
             self.apply_presence
+        )
+
+        self.application_box.currentIndexChanged.connect(
+            self._on_application_changed
         )
 
         self.controller.secondary_mode_changed.connect(
@@ -3299,8 +3366,28 @@ class PresencePage(QWidget):
             else DEFAULT_PARTY_MAXIMUM
         )
 
+        current_application_entry_id = getattr(
+            self,
+            "current_application_entry_id",
+            None,
+        )
+
+        application_entry_id = None
+
+        if callable(
+            current_application_entry_id
+        ):
+            try:
+                application_entry_id = (
+                    current_application_entry_id()
+                )
+
+            except Exception:
+                application_entry_id = None
+
         return PresenceMode(
             mode=mode,
+            application_entry_id=application_entry_id,
             title=self.title_input.text().strip(),
             message=self.message_input.text().strip(),
             image_path=self.image_path,
@@ -3441,6 +3528,11 @@ class PresencePage(QWidget):
             return
 
         presence_mode = preset.to_presence_mode()
+
+        self._sync_application_box_from_mode(
+            presence_mode
+        )
+
         index = self.mode_box.findData(
             presence_mode.mode
         )
@@ -3817,6 +3909,7 @@ class PresencePage(QWidget):
 
             QComboBox#modeBox,
             QComboBox#presetBox,
+            QComboBox#applicationBox,
             QLineEdit#presenceInput {{
                 color: {theme["text"]};
                 background: {card_alt_glass};
@@ -3827,7 +3920,8 @@ class PresencePage(QWidget):
             }}
 
             QComboBox#modeBox,
-            QComboBox#presetBox {{
+            QComboBox#presetBox,
+            QComboBox#applicationBox {{
                 font-size: 9pt;
             }}
 
@@ -3839,13 +3933,16 @@ class PresencePage(QWidget):
             QComboBox#modeBox:focus,
             QComboBox#presetBox:hover,
             QComboBox#presetBox:focus,
+            QComboBox#applicationBox:hover,
+            QComboBox#applicationBox:focus,
             QLineEdit#presenceInput:hover,
             QLineEdit#presenceInput:focus {{
                 border: 1px solid {theme["accent"]};
             }}
 
             QComboBox#modeBox::drop-down,
-            QComboBox#presetBox::drop-down {{
+            QComboBox#presetBox::drop-down,
+            QComboBox#applicationBox::drop-down {{
                 border: none;
                 width: 22px;
             }}
@@ -4084,6 +4181,10 @@ class PresencePage(QWidget):
     def load_mode(self, mode: str):
         presence_mode = (
             self.controller.load_mode(mode)
+        )
+
+        self._sync_application_box_from_mode(
+            presence_mode
         )
 
         self.title_input.blockSignals(True)
@@ -4939,9 +5040,351 @@ class PresencePage(QWidget):
         self.open_image_button.setEnabled(editable)
         self.remove_image_button.setEnabled(editable)
 
+    def current_application_entry_id(
+        self,
+    ) -> str | None:
+        box = getattr(
+            self,
+            "application_box",
+            None,
+        )
+
+        if box is not None:
+            try:
+                value = box.currentData()
+
+            except Exception:
+                value = None
+
+            entry_id = (
+                str(
+                    value or ""
+                )
+                .replace(
+                    "\x00",
+                    "",
+                )
+                .strip()
+            )
+
+            if entry_id:
+                return entry_id
+
+        controller = getattr(
+            self,
+            "controller",
+            None,
+        )
+
+        load_mode = getattr(
+            controller,
+            "load_mode",
+            None,
+        )
+
+        if not callable(
+            load_mode
+        ):
+            return None
+
+        try:
+            stored_mode = load_mode(
+                self.current_mode
+            )
+
+            return (
+                stored_mode
+                .normalized_application_entry_id()
+            )
+
+        except Exception:
+            return None
+
+
+    def refresh_application_box(
+        self,
+        preferred_entry_id=None,
+    ):
+        box = getattr(
+            self,
+            "application_box",
+            None,
+        )
+
+        if box is None:
+            return
+
+        if preferred_entry_id is None:
+            preferred_entry_id = (
+                self.current_application_entry_id()
+            )
+
+        preferred = (
+            str(
+                preferred_entry_id or ""
+            )
+            .replace(
+                "\x00",
+                "",
+            )
+            .strip()
+        )
+
+        store = getattr(
+            self,
+            "discord_application_store",
+            None,
+        )
+
+        list_entries = getattr(
+            store,
+            "list_entries",
+            None,
+        )
+
+        entries = []
+        store_available = False
+
+        if callable(
+            list_entries
+        ):
+            try:
+                entries = list(
+                    list_entries()
+                )
+
+                store_available = True
+
+            except Exception:
+                entries = []
+                store_available = False
+
+        normalized_entries = []
+
+        for entry in entries:
+            entry_id = (
+                str(
+                    getattr(
+                        entry,
+                        "entry_id",
+                        "",
+                    )
+                    or ""
+                )
+                .replace(
+                    "\x00",
+                    "",
+                )
+                .strip()
+            )
+
+            if not entry_id:
+                continue
+
+            name = (
+                str(
+                    getattr(
+                        entry,
+                        "name",
+                        "",
+                    )
+                    or ""
+                )
+                .replace(
+                    "\x00",
+                    "",
+                )
+                .strip()
+            )
+
+            normalized_entries.append(
+                (
+                    entry_id,
+                    (
+                        name
+                        or "Unnamed Discord Application"
+                    ),
+                )
+            )
+
+        self._application_store_available = bool(
+            store_available
+            and normalized_entries
+        )
+
+        self._loading_application_box = True
+
+        box.blockSignals(
+            True
+        )
+
+        try:
+            box.clear()
+
+            for (
+                entry_id,
+                name,
+            ) in normalized_entries:
+                box.addItem(
+                    name,
+                    entry_id,
+                )
+
+            if (
+                preferred
+                and box.findData(
+                    preferred
+                )
+                < 0
+            ):
+                box.addItem(
+                    (
+                        "Unavailable application "
+                        "(saved reference)"
+                    ),
+                    preferred,
+                )
+
+                unavailable_index = (
+                    box.count() - 1
+                )
+
+                box.setItemData(
+                    unavailable_index,
+                    (
+                        "This saved Discord Application "
+                        "is no longer present in the "
+                        "Application Library. Its stable "
+                        "reference is being preserved."
+                    ),
+                    Qt.ItemDataRole.ToolTipRole,
+                )
+
+            if preferred:
+                selected_index = (
+                    box.findData(
+                        preferred
+                    )
+                )
+
+            else:
+                selected_index = (
+                    0
+                    if box.count()
+                    else -1
+                )
+
+            if selected_index >= 0:
+                box.setCurrentIndex(
+                    selected_index
+                )
+
+            if box.count() == 0:
+                box.addItem(
+                    (
+                        "Application Library "
+                        "unavailable"
+                    ),
+                    None,
+                )
+
+                box.setCurrentIndex(
+                    0
+                )
+
+            box.setEnabled(
+                bool(
+                    self._application_store_available
+                    and getattr(
+                        self,
+                        "current_mode",
+                        "",
+                    )
+                    != "disabled"
+                )
+            )
+
+        finally:
+            box.blockSignals(
+                False
+            )
+
+            self._loading_application_box = False
+
+
+    def _sync_application_box_from_mode(
+        self,
+        presence_mode,
+    ):
+        try:
+            entry_id = (
+                presence_mode
+                .normalized_application_entry_id()
+            )
+
+        except Exception:
+            entry_id = None
+
+        self.refresh_application_box(
+            entry_id
+            or ""
+        )
+
+
+    def _on_application_changed(
+        self,
+        *_,
+    ):
+        if getattr(
+            self,
+            "_loading_application_box",
+            False,
+        ):
+            return
+
+        status_label = getattr(
+            self,
+            "status_label",
+            None,
+        )
+
+        set_text = getattr(
+            status_label,
+            "setText",
+            None,
+        )
+
+        if callable(
+            set_text
+        ):
+            set_text(
+                "Discord Application changed. "
+                "Press Apply to update Discord."
+            )
+
     def _secondary_editor_application_entry_id(
         self,
     ) -> str | None:
+        current_application_entry_id = getattr(
+            self,
+            "current_application_entry_id",
+            None,
+        )
+
+        if callable(
+            current_application_entry_id
+        ):
+            try:
+                selected_entry_id = (
+                    current_application_entry_id()
+                )
+
+            except Exception:
+                selected_entry_id = None
+
+            if selected_entry_id:
+                return selected_entry_id
+
         selected_preset = getattr(
             self,
             "selected_preset",

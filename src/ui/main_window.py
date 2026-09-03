@@ -1028,6 +1028,9 @@ class MainWindow(QMainWindow):
         self.presence_page = PresencePage(
             self.presence_controller,
             self.theme_manager,
+            discord_application_store=(
+                self.discord_application_library_store
+            ),
         )
 
         self.presence_controller.mode_changed.connect(
@@ -1115,6 +1118,18 @@ class MainWindow(QMainWindow):
                 self.discord
             ),
         )
+
+        discord_application_library_card = getattr(
+            self.settings_page,
+            "discord_application_library_card",
+            None,
+        )
+
+        if discord_application_library_card is not None:
+            discord_application_library_card.entries_changed.connect(
+                lambda *_:
+                self.presence_page.refresh_application_box()
+            )
 
         self.spotify_local_candidate_snapshot = (
             LocalCandidateSnapshot()
