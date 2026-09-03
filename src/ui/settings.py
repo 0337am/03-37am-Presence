@@ -300,6 +300,9 @@ class SettingsPage(QWidget):
                 media_hotkey_store=(
                     self.media_hotkey_preferences_store
                 ),
+                discord_application_store=(
+                    self.discord_application_store
+                ),
             )
         )
 
@@ -1577,7 +1580,8 @@ class SettingsPage(QWidget):
         backup_privacy_help = QLabel(
             (
                 "Custom Link cards, Atmosphere slider values, "
-                "and global media hotkeys are included. "
+                "global media hotkeys, and Discord Application "
+                "Library entries are included. "
                 "Listening history, "
                 "artwork cache, Link-card icon cache, "
                 "OAuth tokens, API credentials, "
@@ -3551,8 +3555,9 @@ class SettingsPage(QWidget):
                 "branding text, media sources, "
                 "Auto AFK settings, global media "
                 "hotkeys, dashboard layout, custom "
-                "Link cards, window preferences, and "
-                "Windows startup preference."
+                "Link cards, window preferences, Windows "
+                "startup preference, and Discord Application "
+                "Library entries when included by the backup."
                 "\n\n"
                 "Listening history, artwork cache, "
                 "and Link-card icon cache will not "
@@ -3828,6 +3833,48 @@ class SettingsPage(QWidget):
             )
 
             hotkeys_live = False
+
+        application_library_card = getattr(
+            self,
+            "discord_application_library_card",
+            None,
+        )
+
+        refresh_applications = getattr(
+            application_library_card,
+            "refresh_from_store",
+            None,
+        )
+
+        if callable(
+            refresh_applications
+        ):
+            try:
+                refresh_applications()
+
+                entries_changed = getattr(
+                    application_library_card,
+                    "entries_changed",
+                    None,
+                )
+
+                emit_entries_changed = getattr(
+                    entries_changed,
+                    "emit",
+                    None,
+                )
+
+                if callable(
+                    emit_entries_changed
+                ):
+                    emit_entries_changed()
+
+            except Exception as error:
+                print(
+                    "Discord Application Library "
+                    "restore refresh error:",
+                    error,
+                )
 
         self.refresh_storage_summary()
         self.refresh_diagnostics()

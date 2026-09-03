@@ -228,7 +228,7 @@ class SettingsHotkeyBackupTests(
 
         self.assertEqual(
             BACKUP_SCHEMA_VERSION,
-            6,
+            7,
         )
 
         hotkeys = payload[

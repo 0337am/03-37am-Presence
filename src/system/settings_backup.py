@@ -9,6 +9,10 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
+from src.discord.application_library import (
+    DiscordApplicationLibraryStore,
+    storage_from_dict as discord_application_storage_from_dict,
+)
 from src.discord.presence_presets import (
     MAX_PRESETS as PRESENCE_PRESET_MAX_PRESETS,
     SCHEMA_VERSION as PRESENCE_PRESET_STORAGE_SCHEMA_VERSION,
@@ -64,7 +68,8 @@ from src.system.media_hotkey_preferences import (
 
 BACKUP_KIND = "0337am-presence-settings"
 MEDIA_HOTKEY_BACKUP_INTRODUCED_SCHEMA_VERSION = 6
-BACKUP_SCHEMA_VERSION = 6
+DISCORD_APPLICATION_BACKUP_INTRODUCED_SCHEMA_VERSION = 7
+BACKUP_SCHEMA_VERSION = 7
 MAX_BACKUP_BYTES = 1024 * 1024
 
 _COLOUR_PATTERN = re.compile(
@@ -117,6 +122,7 @@ class SettingsBackupManager:
         custom_card_store: CustomCardStore | None = None,
         presence_preset_store: PresencePresetStore | None = None,
         media_hotkey_store: MediaHotkeyPreferencesStore | None = None,
+        discord_application_store: DiscordApplicationLibraryStore | None = None,
     ):
         self.settings = (
             settings
@@ -164,6 +170,11 @@ class SettingsBackupManager:
         self.media_hotkey_store = (
             media_hotkey_store
             or MediaHotkeyPreferencesStore()
+        )
+
+        self.discord_application_store = (
+            discord_application_store
+            or DiscordApplicationLibraryStore()
         )
 
     @staticmethod
@@ -312,6 +323,9 @@ class SettingsBackupManager:
                 ),
                 "custom_cards": (
                     self._capture_custom_cards()
+                ),
+                "discord_applications": (
+                    self._capture_discord_applications()
                 ),
                 "presence_presets": (
                     self._capture_presence_presets()
@@ -659,6 +673,18 @@ class SettingsBackupManager:
             )
         )
 
+        discord_applications = (
+            cls._validate_discord_applications(
+                settings.get(
+                    "discord_applications"
+                ),
+                required=(
+                    schema_version
+                    >= DISCORD_APPLICATION_BACKUP_INTRODUCED_SCHEMA_VERSION
+                ),
+            )
+        )
+
         cls._validate_custom_layout_membership(
             dashboard_layout,
             custom_cards,
@@ -744,6 +770,9 @@ class SettingsBackupManager:
                 "custom_cards": (
                     custom_cards
                 ),
+                "discord_applications": (
+                    discord_applications
+                ),
                 "presence_presets": (
                     presence_presets
                 ),
@@ -810,6 +839,20 @@ class SettingsBackupManager:
                 CUSTOM_CARD_STORAGE_SCHEMA_VERSION
             ),
             "cards": portable_cards,
+        }
+
+
+    def _capture_discord_applications(
+        self,
+    ) -> dict:
+        storage = (
+            self.discord_application_store
+            .load_storage()
+        )
+
+        return {
+            "included": True,
+            "storage": storage.to_dict(),
         }
 
 
@@ -1050,6 +1093,25 @@ class SettingsBackupManager:
         self.custom_card_store.save(
             custom_cards
         )
+
+        discord_applications = settings[
+            "discord_applications"
+        ]
+
+        if discord_applications[
+            "included"
+        ]:
+            application_storage = (
+                discord_application_storage_from_dict(
+                    discord_applications[
+                        "storage"
+                    ]
+                )
+            )
+
+            self.discord_application_store.save(
+                application_storage.applications
+            )
 
         presence_presets = tuple(
             preset_from_dict(
@@ -1672,6 +1734,78 @@ class SettingsBackupManager:
                 card.to_dict()
                 for card in cards
             ],
+        }
+
+
+    @classmethod
+    def _validate_discord_applications(
+        cls,
+        value,
+        *,
+        required: bool,
+    ) -> dict:
+        if value is None:
+            if required:
+                raise SettingsBackupValidationError(
+                    "This settings backup is missing "
+                    "the Discord Application Library."
+                )
+
+            return {
+                "included": False,
+                "storage": None,
+            }
+
+        payload = cls._require_object(
+            value,
+            "discord_applications",
+        )
+
+        if "included" not in payload:
+            raise SettingsBackupValidationError(
+                "Discord Application Library backup "
+                "metadata is incomplete."
+            )
+
+        included = cls._require_boolean(
+            payload.get(
+                "included"
+            ),
+            "discord_applications.included",
+        )
+
+        if not included:
+            return {
+                "included": False,
+                "storage": None,
+            }
+
+        storage_payload = cls._require_object(
+            payload.get(
+                "storage"
+            ),
+            "discord_applications.storage",
+        )
+
+        try:
+            storage = (
+                discord_application_storage_from_dict(
+                    storage_payload
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise SettingsBackupValidationError(
+                "The Discord Application Library "
+                "in the backup is invalid."
+            ) from error
+
+        return {
+            "included": True,
+            "storage": storage.to_dict(),
         }
 
 
