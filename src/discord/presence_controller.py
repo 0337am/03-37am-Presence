@@ -7,6 +7,7 @@ from src.discord.application_library import (
 
 from src.discord.session_manager import (
     MUSIC_LANE_ID,
+    SECONDARY_LANE_ID,
 )
 
 from src.discord.presence_modes import (
@@ -26,6 +27,7 @@ from src.discord.presence_link_buttons import (
 
 class PresenceController(QObject):
     mode_changed = pyqtSignal(dict)
+    secondary_mode_changed = pyqtSignal(dict)
 
     def __init__(
         self,
@@ -50,6 +52,7 @@ class PresenceController(QObject):
         self._mode_before_auto_afk = None
 
         self._latest_song = None
+        self._secondary_presence_mode = None
 
     @property
     def active_mode(self) -> str:
@@ -361,6 +364,304 @@ class PresenceController(QObject):
                 .normalized_buttons()
             )
         ]
+
+    @property
+    def secondary_presence_mode(
+        self,
+    ) -> PresenceMode | None:
+        candidate = getattr(
+            self,
+            "_secondary_presence_mode",
+            None,
+        )
+
+        if isinstance(
+            candidate,
+            PresenceMode,
+        ):
+            return candidate
+
+        return None
+
+    @property
+    def secondary_mode(
+        self,
+    ) -> str | None:
+        candidate = (
+            self.secondary_presence_mode
+        )
+
+        if candidate is None:
+            return None
+
+        try:
+            mode = (
+                candidate.normalized_mode()
+            )
+
+        except Exception:
+            return None
+
+        if mode in {
+            "music",
+            "disabled",
+        }:
+            return None
+
+        return mode
+
+    @staticmethod
+    def _secondary_application_entry_id(
+        presence_mode: PresenceMode,
+    ) -> str:
+        entry_id = (
+            presence_mode
+            .normalized_application_entry_id()
+        )
+
+        return (
+            entry_id
+            or BUILTIN_APPLICATION_ENTRY_ID
+        )
+
+    def _release_secondary_lane(
+        self,
+    ) -> bool:
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is None:
+            return True
+
+        release_lane = getattr(
+            manager,
+            "release_lane",
+            None,
+        )
+
+        if not callable(
+            release_lane
+        ):
+            return False
+
+        try:
+            return bool(
+                release_lane(
+                    SECONDARY_LANE_ID
+                )
+            )
+
+        except Exception:
+            return False
+
+    def _publish_secondary_with_manager(
+        self,
+        presence_mode: PresenceMode,
+    ) -> bool:
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is None:
+            return False
+
+        try:
+            application_entry_id = (
+                self
+                ._secondary_application_entry_id(
+                    presence_mode
+                )
+            )
+
+            payload = (
+                presence_mode.to_payload()
+            )
+
+            discord_buttons = (
+                self._discord_buttons_for_mode(
+                    presence_mode
+                )
+            )
+
+        except Exception:
+            return False
+
+        update_secondary = getattr(
+            manager,
+            "update_secondary",
+            None,
+        )
+
+        if not callable(
+            update_secondary
+        ):
+            return False
+
+        try:
+            published = bool(
+                update_secondary(
+                    application_entry_id,
+                    title=payload["title"],
+                    message=payload["message"],
+                    image_bytes=(
+                        payload["image_bytes"]
+                    ),
+                    image_name=(
+                        payload["image_name"]
+                    ),
+                    show_elapsed=(
+                        payload["show_elapsed"]
+                    ),
+                    buttons=discord_buttons,
+                    party_size=(
+                        payload["party_size"]
+                    ),
+                )
+            )
+
+        except Exception:
+            published = False
+
+        if published:
+            return True
+
+        self._release_secondary_lane()
+
+        return False
+
+    def apply_secondary_mode(
+        self,
+        presence_mode: PresenceMode,
+    ) -> bool:
+        if not isinstance(
+            presence_mode,
+            PresenceMode,
+        ):
+            return False
+
+        try:
+            mode = (
+                presence_mode
+                .normalized_mode()
+            )
+
+        except Exception:
+            return False
+
+        if mode == "music":
+            return False
+
+        if mode == "disabled":
+            return self.clear_secondary_mode()
+
+        if not self._publish_secondary_with_manager(
+            presence_mode
+        ):
+            previous = getattr(
+                self,
+                "_secondary_presence_mode",
+                None,
+            )
+
+            self._secondary_presence_mode = None
+
+            if previous is not None:
+                secondary_signal = getattr(
+                    self,
+                    "secondary_mode_changed",
+                    None,
+                )
+
+                emit = getattr(
+                    secondary_signal,
+                    "emit",
+                    None,
+                )
+
+                if callable(
+                    emit
+                ):
+                    try:
+                        emit({})
+
+                    except Exception:
+                        pass
+
+            return False
+
+        self._secondary_presence_mode = (
+            presence_mode
+        )
+
+        secondary_signal = getattr(
+            self,
+            "secondary_mode_changed",
+            None,
+        )
+
+        emit = getattr(
+            secondary_signal,
+            "emit",
+            None,
+        )
+
+        if callable(
+            emit
+        ):
+            try:
+                emit(
+                    presence_mode.to_payload()
+                )
+
+            except Exception:
+                pass
+
+        return True
+
+    def clear_secondary_mode(
+        self,
+    ) -> bool:
+        if not self._release_secondary_lane():
+            return False
+
+        previous = getattr(
+            self,
+            "_secondary_presence_mode",
+            None,
+        )
+
+        self._secondary_presence_mode = None
+
+        if previous is None:
+            return True
+
+        secondary_signal = getattr(
+            self,
+            "secondary_mode_changed",
+            None,
+        )
+
+        emit = getattr(
+            secondary_signal,
+            "emit",
+            None,
+        )
+
+        if callable(
+            emit
+        ):
+            try:
+                emit({})
+
+            except Exception:
+                pass
+
+        return True
 
     def _release_music_lane(
         self,
@@ -712,12 +1013,14 @@ class PresenceController(QObject):
                     self._release_music_lane()
 
             elif mode == "disabled":
+                self.clear_secondary_mode()
                 self._release_music_lane()
                 self._stop_legacy_discord()
 
             else:
                 if (
-                    self._release_music_lane()
+                    self.clear_secondary_mode()
+                    and self._release_music_lane()
                     and self._start_legacy_discord()
                 ):
                     payload = (

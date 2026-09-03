@@ -348,7 +348,7 @@ class DiscordPresenceSessionManagerWiringTests(
             ],
         )
 
-    def test_transitional_identity_stays_legacy_and_secondary_is_inactive(
+    def test_secondary_runtime_is_controller_owned_but_ui_inactive(
         self,
     ):
         main_source = _read(
@@ -383,19 +383,40 @@ class DiscordPresenceSessionManagerWiringTests(
             build_pages,
         )
 
-        for source in (
-            main_source,
+        self.assertIn(
+            "SECONDARY_LANE_ID",
             controller_source,
-        ):
-            self.assertNotIn(
-                "SECONDARY_LANE_ID",
-                source,
-            )
+        )
 
-            self.assertNotIn(
-                ".update_secondary(",
-                source,
-            )
+        self.assertIn(
+            "apply_secondary_mode",
+            controller_source,
+        )
+
+        self.assertIn(
+            "_publish_secondary_with_manager",
+            controller_source,
+        )
+
+        self.assertIn(
+            "update_secondary",
+            controller_source,
+        )
+
+        self.assertNotIn(
+            "SECONDARY_LANE_ID",
+            main_source,
+        )
+
+        self.assertNotIn(
+            ".update_secondary(",
+            main_source,
+        )
+
+        self.assertNotIn(
+            "apply_secondary_mode",
+            main_source,
+        )
 
         self.assertNotIn(
             "DiscordPresenceSessionManager",
