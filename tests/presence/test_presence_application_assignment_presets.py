@@ -150,9 +150,7 @@ class PresencePresetApplicationSchemaTests(
                     LEGACY_PRESET_FIELDS
                 ):
             ],
-            [
-                "application_entry_id",
-            ],
+            ["application_entry_id", "artwork_hover_text"],
         )
 
     def test_schema_one_storage_migrates_in_memory_to_two(

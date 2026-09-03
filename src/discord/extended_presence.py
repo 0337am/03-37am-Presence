@@ -543,12 +543,21 @@ class ExtendedDiscordPresence(DiscordPresence):
                 artwork_url
             )
 
-            options["large_text"] = (
-                self._discord_text(
-                    update.image_name,
-                    fallback=title,
+            artwork_hover_text = (
+                str(
+                    update.image_name
+                    or ""
                 )
+                .replace("\x00", "")
+                .strip()[
+                    :128
+                ]
             )
+
+            if artwork_hover_text:
+                options["large_text"] = (
+                    artwork_hover_text
+                )
 
         self.rpc.update(**options)
 

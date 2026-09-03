@@ -74,6 +74,7 @@ class PresenceMode:
     party_current: int = DEFAULT_PARTY_CURRENT
     party_maximum: int = DEFAULT_PARTY_MAXIMUM
     application_entry_id: str | None = None
+    artwork_hover_text: str = ""
 
     def normalized_mode(self) -> str:
         normalized = str(
@@ -102,6 +103,26 @@ class PresenceMode:
         return (
             entry_id
             or None
+        )
+
+    def normalized_artwork_hover_text(
+        self,
+    ) -> str:
+        if self.normalized_mode() in {
+            "music",
+            "disabled",
+        }:
+            return ""
+
+        return (
+            str(
+                self.artwork_hover_text
+                or ""
+            )
+            .replace("\x00", "")
+            .strip()[
+                :128
+            ]
         )
 
     @staticmethod

@@ -151,6 +151,17 @@ class PresenceController(QObject):
             or ""
         )
 
+        artwork_hover_text = str(
+            self.store.value(
+                (
+                    f"presence/{normalized}/"
+                    "artwork_hover_text"
+                ),
+                "",
+            )
+            or ""
+        )
+
         show_elapsed = self.store.value(
             f"presence/{normalized}/show_elapsed",
             False,
@@ -204,6 +215,15 @@ class PresenceController(QObject):
             title=title,
             message=message,
             image_path=image_path,
+            artwork_hover_text=(
+                artwork_hover_text
+                if normalized
+                not in {
+                    "music",
+                    "disabled",
+                }
+                else ""
+            ),
             show_elapsed=show_elapsed,
             show_buttons=show_buttons,
             buttons=buttons,
@@ -312,6 +332,17 @@ class PresenceController(QObject):
             self.store.setValue(
                 f"presence/{mode}/image_path",
                 presence_mode.image_path,
+            )
+
+            self.store.setValue(
+                (
+                    f"presence/{mode}/"
+                    "artwork_hover_text"
+                ),
+                (
+                    presence_mode
+                    .normalized_artwork_hover_text()
+                ),
             )
 
             self.store.setValue(
@@ -512,7 +543,8 @@ class PresenceController(QObject):
                         payload["image_bytes"]
                     ),
                     image_name=(
-                        payload["image_name"]
+                        presence_mode
+                        .normalized_artwork_hover_text()
                     ),
                     show_elapsed=(
                         payload["show_elapsed"]
@@ -1041,7 +1073,8 @@ class PresenceController(QObject):
                             payload["image_bytes"]
                         ),
                         image_name=(
-                            payload["image_name"]
+                            presence_mode
+                            .normalized_artwork_hover_text()
                         ),
                         show_elapsed=(
                             payload["show_elapsed"]
@@ -1107,7 +1140,8 @@ class PresenceController(QObject):
                         payload["image_bytes"]
                     ),
                     image_name=(
-                        payload["image_name"]
+                        presence_mode
+                        .normalized_artwork_hover_text()
                     ),
                     show_elapsed=(
                         payload["show_elapsed"]
@@ -1195,7 +1229,8 @@ class PresenceController(QObject):
                 payload["image_bytes"]
             ),
             image_name=(
-                payload["image_name"]
+                afk_mode
+                .normalized_artwork_hover_text()
             ),
             show_elapsed=(
                 payload["show_elapsed"]

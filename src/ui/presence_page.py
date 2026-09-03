@@ -1077,6 +1077,29 @@ class PresencePage(QWidget):
         )
         self.image_details.setWordWrap(True)
 
+        artwork_hover_label = QLabel(
+            "Artwork hover text"
+        )
+        artwork_hover_label.setObjectName(
+            "fieldTitle"
+        )
+
+        self.artwork_hover_input = QLineEdit()
+        self.artwork_hover_input.setObjectName(
+            "presenceInput"
+        )
+        self.artwork_hover_input.setPlaceholderText(
+            "Leave blank for no hover text"
+        )
+        self.artwork_hover_input.setMaxLength(
+            128
+        )
+        self.artwork_hover_input.setToolTip(
+            "Optional text shown when hovering "
+            "this Presence artwork on Discord. "
+            "Leave blank to show no hover text."
+        )
+
         image_buttons = QHBoxLayout()
         image_buttons.setSpacing(7)
 
@@ -1145,6 +1168,12 @@ class PresencePage(QWidget):
         )
         image_layout.addWidget(
             self.image_details
+        )
+        image_layout.addWidget(
+            artwork_hover_label
+        )
+        image_layout.addWidget(
+            self.artwork_hover_input
         )
         image_layout.addLayout(
             image_buttons
@@ -2636,6 +2665,10 @@ class PresencePage(QWidget):
                 False
             )
 
+        self._load_artwork_hover_editor(
+            presence_mode
+        )
+
         self._load_link_button_editor(
             presence_mode
         )
@@ -2777,6 +2810,7 @@ class PresencePage(QWidget):
 
         self.title_input.clear()
         self.message_input.clear()
+        self.artwork_hover_input.clear()
 
         self.elapsed_box.setChecked(
             False
@@ -2877,6 +2911,9 @@ class PresencePage(QWidget):
             self.update_preview
         )
         self.message_input.textChanged.connect(
+            self.update_preview
+        )
+        self.artwork_hover_input.textChanged.connect(
             self.update_preview
         )
         self.elapsed_box.toggled.connect(
@@ -3302,6 +3339,40 @@ class PresencePage(QWidget):
                 int(value)
             )
 
+    def _load_artwork_hover_editor(
+        self,
+        presence_mode,
+    ):
+        hover_input = getattr(
+            self,
+            "artwork_hover_input",
+            None,
+        )
+
+        if hover_input is None:
+            return
+
+        hover_input.blockSignals(
+            True
+        )
+
+        try:
+            hover_input.setText(
+                str(
+                    getattr(
+                        presence_mode,
+                        "artwork_hover_text",
+                        "",
+                    )
+                    or ""
+                )
+            )
+
+        finally:
+            hover_input.blockSignals(
+                False
+            )
+
     def current_editor_presence_mode(
         self,
     ) -> PresenceMode:
@@ -3385,12 +3456,48 @@ class PresencePage(QWidget):
             except Exception:
                 application_entry_id = None
 
+        artwork_hover_text = ""
+
+        artwork_hover_input = getattr(
+            self,
+            "artwork_hover_input",
+            None,
+        )
+
+        if artwork_hover_input is not None:
+            hover_text_getter = getattr(
+                artwork_hover_input,
+                "text",
+                None,
+            )
+
+            if callable(
+                hover_text_getter
+            ):
+                try:
+                    artwork_hover_text = str(
+                        hover_text_getter()
+                        or ""
+                    ).strip()
+
+                except Exception:
+                    artwork_hover_text = ""
+
+        if (
+            mode == "music"
+            or mode == "disabled"
+        ):
+            artwork_hover_text = ""
+
         return PresenceMode(
             mode=mode,
             application_entry_id=application_entry_id,
             title=self.title_input.text().strip(),
             message=self.message_input.text().strip(),
             image_path=self.image_path,
+            artwork_hover_text=(
+                artwork_hover_text
+            ),
             show_elapsed=(
                 self.elapsed_box.isChecked()
             ),
@@ -3584,6 +3691,10 @@ class PresencePage(QWidget):
         )
         if _loop_count_box is not None:
             _loop_count_box.blockSignals(False)
+
+        self._load_artwork_hover_editor(
+            presence_mode
+        )
 
         self._load_link_button_editor(
             presence_mode
@@ -4228,6 +4339,10 @@ class PresencePage(QWidget):
         if _loop_count_box is not None:
             _loop_count_box.blockSignals(False)
 
+        self._load_artwork_hover_editor(
+            presence_mode
+        )
+
         self._load_link_button_editor(
             presence_mode
         )
@@ -4283,6 +4398,10 @@ class PresencePage(QWidget):
         )
 
         self.elapsed_box.setEnabled(
+            editable
+        )
+
+        self.artwork_hover_input.setEnabled(
             editable
         )
 
@@ -4720,6 +4839,7 @@ class PresencePage(QWidget):
             "presence/custom/title",
             "presence/custom/message",
             "presence/custom/image_path",
+            "presence/custom/artwork_hover_text",
             "presence/custom/show_elapsed",
             "presence/custom/show_party",
             "presence/custom/party_current",

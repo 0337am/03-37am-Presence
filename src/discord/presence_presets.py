@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import shutil
@@ -202,6 +202,7 @@ class PresencePreset:
     party_current: int = DEFAULT_PARTY_CURRENT
     party_maximum: int = DEFAULT_PARTY_MAXIMUM
     application_entry_id: str | None = None
+    artwork_hover_text: str = ""
 
     def normalized(self) -> "PresencePreset":
         now = utc_now_iso()
@@ -223,6 +224,18 @@ class PresencePreset:
                     self.application_entry_id
                 )
             )
+
+        artwork_hover_text = (
+            ""
+            if mode in {
+                "music",
+                "disabled",
+            }
+            else clean_text(
+                self.artwork_hover_text,
+                limit=128,
+            )
+        )
 
         title = clean_text(
             self.title,
@@ -309,6 +322,9 @@ class PresencePreset:
             application_entry_id=(
                 application_entry_id
             ),
+            artwork_hover_text=(
+                artwork_hover_text
+            ),
             created_at=str(
                 self.created_at or now
             ),
@@ -324,6 +340,9 @@ class PresencePreset:
             mode=preset.mode,
             application_entry_id=(
                 preset.application_entry_id
+            ),
+            artwork_hover_text=(
+                preset.artwork_hover_text
             ),
             title=preset.title,
             message=preset.message,
@@ -355,6 +374,9 @@ class PresencePreset:
             "party_maximum": preset.party_maximum,
             "application_entry_id": (
                 preset.application_entry_id
+            ),
+            "artwork_hover_text": (
+                preset.artwork_hover_text
             ),
             "buttons": [
                 button.to_dict()
@@ -441,6 +463,12 @@ def preset_from_dict(data: dict) -> PresencePreset:
             data.get(
                 "application_entry_id"
             )
+        ),
+        artwork_hover_text=str(
+            data.get(
+                "artwork_hover_text"
+            )
+            or ""
         ),
         show_buttons=bool(
             data.get("show_buttons", False)
@@ -713,6 +741,10 @@ class PresencePresetStore:
                 presence_mode
                 .normalized_application_entry_id()
             ),
+            artwork_hover_text=(
+                presence_mode
+                .normalized_artwork_hover_text()
+            ),
             pinned=pinned,
             created_at=now,
             updated_at=now,
@@ -791,6 +823,10 @@ class PresencePresetStore:
             party_maximum=presence_mode.party_maximum,
             application_entry_id=(
                 application_entry_id
+            ),
+            artwork_hover_text=(
+                presence_mode
+                .normalized_artwork_hover_text()
             ),
             pinned=(
                 existing.pinned
