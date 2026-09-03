@@ -417,18 +417,34 @@ class PresenceControllerApplicationAssignmentTests(
 class PresenceApplicationAssignmentBoundaryTests(
     unittest.TestCase
 ):
-    def test_a04_does_not_change_preset_schema(
+    def test_a04_controller_does_not_own_preset_persistence(
         self,
     ):
-        source = Path(
-            "src/discord/presence_presets.py"
+        controller_source = Path(
+            "src/discord/presence_controller.py"
+        ).read_text(
+            encoding="utf-8-sig"
+        )
+
+        mode_source = Path(
+            "src/discord/presence_modes.py"
         ).read_text(
             encoding="utf-8-sig"
         )
 
         self.assertNotIn(
-            "application_entry_id",
-            source,
+            "PresencePresetStore",
+            controller_source,
+        )
+
+        self.assertNotIn(
+            "PresencePreset",
+            controller_source,
+        )
+
+        self.assertNotIn(
+            "presence_presets",
+            mode_source,
         )
 
     def test_controller_does_not_switch_discord_identity(

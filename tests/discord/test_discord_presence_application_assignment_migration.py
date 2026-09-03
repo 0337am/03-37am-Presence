@@ -593,17 +593,11 @@ class LegacyPresenceAssignmentMigrationBoundaryTests(
             rpc_source,
         )
 
-    def test_migration_layer_owns_no_rpc_or_preset_schema(
+    def test_migration_layer_owns_no_rpc_runtime(
         self,
     ):
         migration_source = Path(
             "src/discord/application_library_migration.py"
-        ).read_text(
-            encoding="utf-8-sig"
-        )
-
-        preset_source = Path(
-            "src/discord/presence_presets.py"
         ).read_text(
             encoding="utf-8-sig"
         )
@@ -623,10 +617,6 @@ class LegacyPresenceAssignmentMigrationBoundaryTests(
             migration_source.casefold(),
         )
 
-        self.assertNotIn(
-            "application_entry_id",
-            preset_source,
-        )
 
 
 if __name__ == "__main__":

@@ -165,12 +165,12 @@ class MemoryPresetStore(
 class PresencePresetLinkButtonTests(
     unittest.TestCase
 ):
-    def test_schema_version_remains_one(
+    def test_schema_version_is_two(
         self,
     ):
         self.assertEqual(
             SCHEMA_VERSION,
-            1,
+            2,
         )
 
     def test_old_schema_one_preset_defaults_buttons_off(

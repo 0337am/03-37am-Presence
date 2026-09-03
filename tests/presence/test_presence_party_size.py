@@ -311,7 +311,7 @@ class PresencePartyPresetTests(
     def test_schema_one_old_preset_defaults_party_off(self):
         self.assertEqual(
             SCHEMA_VERSION,
-            1,
+            2,
         )
 
         preset = preset_from_dict(

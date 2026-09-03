@@ -8,6 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from src.discord.application_library import (
+    BUILTIN_APPLICATION_ENTRY_ID,
+    is_valid_user_entry_id,
+)
+
 from src.discord.presence_modes import (
     APP_DATA_DIRECTORY,
     DEFAULT_PARTY_CURRENT,
@@ -25,7 +30,8 @@ from src.discord.presence_link_buttons import (
 
 
 PRESET_STORAGE_KIND = "0337am-presence-presets"
-SCHEMA_VERSION = 1
+LEGACY_SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_PRESETS = 60
 MAX_PINNED_PRESETS = 8
 MAX_NAME_LENGTH = 64
@@ -63,6 +69,39 @@ def normalize_mode(mode: str) -> str:
         return "custom"
 
     return normalized
+
+
+def normalize_application_entry_id(
+    value,
+) -> str | None:
+    if value is None:
+        return None
+
+    entry_id = (
+        str(
+            value
+        )
+        .replace("\x00", "")
+        .strip()
+    )
+
+    if not entry_id:
+        return None
+
+    if (
+        entry_id
+        == BUILTIN_APPLICATION_ENTRY_ID
+    ):
+        return entry_id
+
+    if is_valid_user_entry_id(
+        entry_id
+    ):
+        return entry_id
+
+    raise PresencePresetError(
+        "Preset Discord application reference is invalid."
+    )
 
 
 def clean_text(value: str, *, limit: int) -> str:
@@ -162,6 +201,7 @@ class PresencePreset:
     show_party: bool = False
     party_current: int = DEFAULT_PARTY_CURRENT
     party_maximum: int = DEFAULT_PARTY_MAXIMUM
+    application_entry_id: str | None = None
 
     def normalized(self) -> "PresencePreset":
         now = utc_now_iso()
@@ -174,6 +214,15 @@ class PresencePreset:
             preset_id = make_preset_id()
 
         mode = normalize_mode(self.mode)
+
+        if mode == "disabled":
+            application_entry_id = None
+        else:
+            application_entry_id = (
+                normalize_application_entry_id(
+                    self.application_entry_id
+                )
+            )
 
         title = clean_text(
             self.title,
@@ -257,6 +306,9 @@ class PresencePreset:
             show_party=show_party,
             party_current=party_current,
             party_maximum=party_maximum,
+            application_entry_id=(
+                application_entry_id
+            ),
             created_at=str(
                 self.created_at or now
             ),
@@ -270,6 +322,9 @@ class PresencePreset:
 
         return PresenceMode(
             mode=preset.mode,
+            application_entry_id=(
+                preset.application_entry_id
+            ),
             title=preset.title,
             message=preset.message,
             image_path=preset.image_path,
@@ -298,6 +353,9 @@ class PresencePreset:
             "show_party": preset.show_party,
             "party_current": preset.party_current,
             "party_maximum": preset.party_maximum,
+            "application_entry_id": (
+                preset.application_entry_id
+            ),
             "buttons": [
                 button.to_dict()
                 for button in preset.buttons
@@ -379,6 +437,11 @@ def preset_from_dict(data: dict) -> PresencePreset:
             "party_maximum",
             DEFAULT_PARTY_MAXIMUM,
         ),
+        application_entry_id=(
+            data.get(
+                "application_entry_id"
+            )
+        ),
         show_buttons=bool(
             data.get("show_buttons", False)
         ),
@@ -419,7 +482,10 @@ def storage_from_dict(data: dict) -> PresencePresetStorage:
         data.get("schema_version", 0)
     )
 
-    if schema_version != SCHEMA_VERSION:
+    if schema_version not in {
+        LEGACY_SCHEMA_VERSION,
+        SCHEMA_VERSION,
+    }:
         raise PresencePresetError(
             "Preset storage schema is not supported."
         )
@@ -461,7 +527,7 @@ def storage_from_dict(data: dict) -> PresencePresetStorage:
 
     return PresencePresetStorage(
         presets=tuple(presets),
-        schema_version=schema_version,
+        schema_version=SCHEMA_VERSION,
     )
 
 
@@ -643,6 +709,10 @@ class PresencePresetStore:
             show_party=presence_mode.show_party,
             party_current=presence_mode.party_current,
             party_maximum=presence_mode.party_maximum,
+            application_entry_id=(
+                presence_mode
+                .normalized_application_entry_id()
+            ),
             pinned=pinned,
             created_at=now,
             updated_at=now,
@@ -693,6 +763,18 @@ class PresencePresetStore:
                 "Presence preset was not found."
             )
 
+        requested_application_entry_id = (
+            presence_mode
+            .normalized_application_entry_id()
+        )
+
+        application_entry_id = (
+            existing.application_entry_id
+            if requested_application_entry_id
+            is None
+            else requested_application_entry_id
+        )
+
         updated = replace(
             existing,
             name=name,
@@ -707,6 +789,9 @@ class PresencePresetStore:
             show_party=presence_mode.show_party,
             party_current=presence_mode.party_current,
             party_maximum=presence_mode.party_maximum,
+            application_entry_id=(
+                application_entry_id
+            ),
             pinned=(
                 existing.pinned
                 if pinned is None

@@ -39,39 +39,11 @@ class PresenceLoopCountPresetTests(
     def test_legacy_field_order_is_preserved(
         self,
     ):
-        tree = ast.parse(
-            PRESETS_PATH.read_text(
-                encoding="utf-8-sig"
-            )
+        fields = list(
+            PresencePreset
+            .__dataclass_fields__
+            .keys()
         )
-
-        preset_class = next(
-            node
-            for node in tree.body
-            if (
-                isinstance(
-                    node,
-                    ast.ClassDef,
-                )
-                and node.name
-                == "PresencePreset"
-            )
-        )
-
-        fields = [
-            node.target.id
-            for node in preset_class.body
-            if (
-                isinstance(
-                    node,
-                    ast.AnnAssign,
-                )
-                and isinstance(
-                    node.target,
-                    ast.Name,
-                )
-            )
-        ]
 
         legacy_fields = [
             "preset_id",
@@ -89,18 +61,32 @@ class PresenceLoopCountPresetTests(
             "show_loop_count",
         ]
 
+        historical_party_fields = [
+            "show_party",
+            "party_current",
+            "party_maximum",
+        ]
+
         self.assertEqual(
-            fields[:len(legacy_fields)],
+            fields[
+                :len(legacy_fields)
+            ],
             legacy_fields,
         )
 
+        party_start = len(
+            legacy_fields
+        )
+
         self.assertEqual(
-            fields[len(legacy_fields):],
-            [
-                "show_party",
-                "party_current",
-                "party_maximum",
+            fields[
+                party_start:
+                party_start
+                + len(
+                    historical_party_fields
+                )
             ],
+            historical_party_fields,
         )
 
     def test_music_normalization_preserves_loop_count(
