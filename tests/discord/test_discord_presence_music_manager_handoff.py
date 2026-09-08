@@ -239,6 +239,36 @@ class FakeManager:
 
         return self.update_result
 
+
+    def update_primary_custom(
+        self,
+        application_entry_id,
+        *,
+        title,
+        message,
+        image_bytes=None,
+        image_name="",
+        show_elapsed=False,
+        buttons=None,
+        party_size=None,
+    ):
+        self.events.append(
+            (
+                "manager",
+                "update_primary_custom",
+                application_entry_id,
+                title,
+                message,
+                image_bytes,
+                image_name,
+                show_elapsed,
+                buttons,
+                party_size,
+            )
+        )
+
+        return self.update_result
+
     def ensure_lane(
         self,
         lane_id,
@@ -943,7 +973,8 @@ class DiscordPresenceMusicManagerHandoffTests(
             events,
         )
 
-    def test_auto_afk_releases_music_before_legacy_publish(
+
+    def test_auto_afk_routes_primary_through_manager_without_legacy_publish(
         self,
     ):
         (
@@ -957,41 +988,46 @@ class DiscordPresenceMusicManagerHandoffTests(
 
         controller.enter_auto_afk()
 
-        self.assertLess(
-            first_index(
-                events,
-                (
+        self.assertTrue(
+            controller.auto_afk_active
+        )
+
+        self.assertTrue(
+            any(
+                event[
+                    :2
+                ] == (
                     "manager",
-                    "release",
-                ),
-            ),
-            first_index(
-                events,
-                (
-                    "legacy",
-                    "connect",
-                ),
-            ),
+                    "update_primary_custom",
+                )
+                for event in events
+            )
         )
 
-        self.assertLess(
-            first_index(
-                events,
-                (
-                    "legacy",
-                    "connect",
-                ),
-            ),
-            first_index(
-                events,
-                (
-                    "legacy",
-                    "custom",
-                ),
-            ),
+        self.assertFalse(
+            any(
+                event[
+                    :2
+                ] in {
+                    (
+                        "manager",
+                        "release",
+                    ),
+                    (
+                        "legacy",
+                        "connect",
+                    ),
+                    (
+                        "legacy",
+                        "custom",
+                    ),
+                }
+                for event in events
+            )
         )
 
-    def test_auto_afk_release_failure_blocks_legacy_publish(
+
+    def test_auto_afk_manager_failure_never_falls_back_to_legacy(
         self,
     ):
         (
@@ -1003,9 +1039,30 @@ class DiscordPresenceMusicManagerHandoffTests(
             active_mode="music"
         )
 
-        manager.release_result = False
+        manager.update_result = False
 
         controller.enter_auto_afk()
+
+        self.assertTrue(
+            any(
+                event[
+                    :2
+                ] == (
+                    "manager",
+                    "update_primary_custom",
+                )
+                for event in events
+            )
+        )
+
+        self.assertIn(
+            (
+                "manager",
+                "release",
+                MUSIC_LANE_ID,
+            ),
+            events,
+        )
 
         self.assertFalse(
             any(

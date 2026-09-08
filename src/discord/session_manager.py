@@ -576,6 +576,61 @@ class DiscordPresenceSessionManager:
 
         return True
 
+
+    def update_primary_custom(
+        self,
+        application_entry_id: object,
+        *,
+        title: str,
+        message: str,
+        image_bytes=None,
+        image_name: str = "",
+        show_elapsed: bool = False,
+        buttons=None,
+        party_size=None,
+    ) -> bool:
+        binding = self.ensure_lane(
+            MUSIC_LANE_ID,
+            application_entry_id,
+        )
+
+        if binding is None:
+            return False
+
+        state = self._sessions.get(
+            MUSIC_LANE_ID
+        )
+
+        if state is None:
+            return False
+
+        try:
+            state.session.update_custom(
+                title=title,
+                message=message,
+                image_bytes=image_bytes,
+                image_name=image_name,
+                show_elapsed=show_elapsed,
+                buttons=buttons,
+                party_size=party_size,
+            )
+
+        except Exception:
+            self._last_errors[
+                MUSIC_LANE_ID
+            ] = (
+                "Discord primary Presence "
+                "update failed."
+            )
+            return False
+
+        self._last_errors.pop(
+            MUSIC_LANE_ID,
+            None,
+        )
+
+        return True
+
     def update_secondary(
         self,
         application_entry_id: object,

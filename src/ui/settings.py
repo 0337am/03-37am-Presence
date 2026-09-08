@@ -485,10 +485,10 @@ class SettingsPage(QWidget):
             button.setMinimumHeight(36)
 
             button.clicked.connect(
-                lambda checked=False,
-                target=section_target:
-                self.show_section(
-                    target
+                lambda _checked=False,
+                category=category_key:
+                self._set_active_settings_category(
+                    category
                 )
             )
 

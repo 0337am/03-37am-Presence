@@ -1,3 +1,4 @@
+import json
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
 from src.discord.application_library import (
@@ -396,6 +397,353 @@ class PresenceController(QObject):
             )
         ]
 
+
+    _SECONDARY_PERSISTENCE_KEY = (
+        "presence/secondary_persisted"
+    )
+
+    _SECONDARY_PERSISTENCE_SCHEMA = 1
+
+    def _secondary_persistence_payload(
+        self,
+        presence_mode: PresenceMode,
+    ) -> dict:
+        party_current, party_maximum = (
+            presence_mode
+            .normalized_party_size()
+        )
+
+        return {
+            "schema_version": (
+                self
+                ._SECONDARY_PERSISTENCE_SCHEMA
+            ),
+            "mode": (
+                presence_mode
+                .normalized_mode()
+            ),
+            "application_entry_id": (
+                presence_mode
+                .normalized_application_entry_id()
+                or ""
+            ),
+            "title": str(
+                presence_mode.title
+                or ""
+            ),
+            "message": str(
+                presence_mode.message
+                or ""
+            ),
+            "image_path": str(
+                presence_mode.image_path
+                or ""
+            ),
+            "artwork_hover_text": (
+                presence_mode
+                .normalized_artwork_hover_text()
+            ),
+            "show_elapsed": bool(
+                presence_mode.show_elapsed
+            ),
+            "show_buttons": bool(
+                presence_mode
+                .link_buttons_enabled()
+            ),
+            "buttons": (
+                encode_presence_buttons(
+                    presence_mode
+                    .normalized_buttons()
+                )
+            ),
+            "show_party": bool(
+                presence_mode.party_enabled()
+            ),
+            "party_current": party_current,
+            "party_maximum": party_maximum,
+        }
+
+    def _persist_secondary_mode(
+        self,
+        presence_mode: PresenceMode,
+    ) -> bool:
+        try:
+            encoded = json.dumps(
+                self
+                ._secondary_persistence_payload(
+                    presence_mode
+                ),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(
+                    ",",
+                    ":",
+                ),
+            )
+
+            self.store.setValue(
+                self
+                ._SECONDARY_PERSISTENCE_KEY,
+                encoded,
+            )
+
+            sync = getattr(
+                self.store,
+                "sync",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
+        except Exception:
+            return False
+
+        return True
+
+    def _clear_persisted_secondary_mode(
+        self,
+    ) -> bool:
+        remove = getattr(
+            self.store,
+            "remove",
+            None,
+        )
+
+        if not callable(
+            remove
+        ):
+            contains = getattr(
+                self.store,
+                "contains",
+                None,
+            )
+
+            if callable(
+                contains
+            ):
+                try:
+                    if contains(
+                        self
+                        ._SECONDARY_PERSISTENCE_KEY
+                    ):
+                        return False
+
+                except Exception:
+                    return False
+
+            return True
+
+        try:
+            remove(
+                self
+                ._SECONDARY_PERSISTENCE_KEY
+            )
+
+            sync = getattr(
+                self.store,
+                "sync",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
+            contains = getattr(
+                self.store,
+                "contains",
+                None,
+            )
+
+            if (
+                callable(
+                    contains
+                )
+                and contains(
+                    self
+                    ._SECONDARY_PERSISTENCE_KEY
+                )
+            ):
+                return False
+
+        except Exception:
+            return False
+
+        return True
+
+    def _load_persisted_secondary_mode(
+        self,
+    ) -> PresenceMode | None:
+        encoded = str(
+            self.store.value(
+                self
+                ._SECONDARY_PERSISTENCE_KEY,
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not encoded:
+            return None
+
+        try:
+            payload = json.loads(
+                encoded
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return None
+
+        if not isinstance(
+            payload,
+            dict,
+        ):
+            return None
+
+        if payload.get(
+            "schema_version"
+        ) != (
+            self
+            ._SECONDARY_PERSISTENCE_SCHEMA
+        ):
+            return None
+
+        mode = str(
+            payload.get(
+                "mode",
+                "",
+            )
+            or ""
+        ).strip().lower()
+
+        if mode not in {
+            "custom",
+            "working",
+            "sleep",
+            "afk",
+        }:
+            return None
+
+        try:
+            buttons = (
+                decode_presence_buttons(
+                    str(
+                        payload.get(
+                            "buttons",
+                            "",
+                        )
+                        or ""
+                    )
+                )
+            )
+
+        except Exception:
+            return None
+
+        return PresenceMode(
+            mode=mode,
+            application_entry_id=(
+                str(
+                    payload.get(
+                        "application_entry_id",
+                        "",
+                    )
+                    or ""
+                ).strip()
+                or None
+            ),
+            title=str(
+                payload.get(
+                    "title",
+                    "",
+                )
+                or ""
+            ),
+            message=str(
+                payload.get(
+                    "message",
+                    "",
+                )
+                or ""
+            ),
+            image_path=str(
+                payload.get(
+                    "image_path",
+                    "",
+                )
+                or ""
+            ),
+            artwork_hover_text=str(
+                payload.get(
+                    "artwork_hover_text",
+                    "",
+                )
+                or ""
+            ).replace(
+                "\x00",
+                "",
+            ).strip()[
+                :128
+            ],
+            show_elapsed=bool(
+                payload.get(
+                    "show_elapsed",
+                    False,
+                )
+            ),
+            show_buttons=bool(
+                payload.get(
+                    "show_buttons",
+                    False,
+                )
+            ),
+            buttons=buttons,
+            show_party=bool(
+                payload.get(
+                    "show_party",
+                    False,
+                )
+            ),
+            party_current=(
+                payload.get(
+                    "party_current",
+                    1,
+                )
+            ),
+            party_maximum=(
+                payload.get(
+                    "party_maximum",
+                    2,
+                )
+            ),
+        )
+
+    def restore_secondary_mode(
+        self,
+    ) -> bool:
+        if self.active_mode != "music":
+            return False
+
+        presence_mode = (
+            self
+            ._load_persisted_secondary_mode()
+        )
+
+        if presence_mode is None:
+            return False
+
+        return self.apply_secondary_mode(
+            presence_mode,
+            persist=False,
+        )
+
     @property
     def secondary_presence_mode(
         self,
@@ -488,6 +836,84 @@ class PresenceController(QObject):
         except Exception:
             return False
 
+
+    def _publish_primary_custom_with_manager(
+        self,
+        presence_mode: PresenceMode,
+        *,
+        artwork_hover_text: str,
+    ) -> bool:
+        manager = getattr(
+            self,
+            "discord_session_manager",
+            None,
+        )
+
+        if manager is None:
+            return False
+
+        try:
+            application_entry_id = (
+                self
+                ._secondary_application_entry_id(
+                    presence_mode
+                )
+            )
+
+            payload = (
+                presence_mode.to_payload()
+            )
+
+            discord_buttons = (
+                self._discord_buttons_for_mode(
+                    presence_mode
+                )
+            )
+
+        except Exception:
+            return False
+
+        update_primary_custom = getattr(
+            manager,
+            "update_primary_custom",
+            None,
+        )
+
+        if not callable(
+            update_primary_custom
+        ):
+            return False
+
+        try:
+            published = bool(
+                update_primary_custom(
+                    application_entry_id,
+                    title=payload["title"],
+                    message=payload["message"],
+                    image_bytes=(
+                        payload["image_bytes"]
+                    ),
+                    image_name=artwork_hover_text,
+                    show_elapsed=(
+                        payload["show_elapsed"]
+                    ),
+                    buttons=discord_buttons,
+                    party_size=(
+                        payload["party_size"]
+                    ),
+                )
+            )
+
+        except Exception:
+            published = False
+
+        if published:
+            return True
+
+        self._release_music_lane()
+
+        return False
+
     def _publish_secondary_with_manager(
         self,
         presence_mode: PresenceMode,
@@ -566,9 +992,12 @@ class PresenceController(QObject):
 
         return False
 
+
     def apply_secondary_mode(
         self,
         presence_mode: PresenceMode,
+        *,
+        persist: bool = True,
     ) -> bool:
         if not isinstance(
             presence_mode,
@@ -630,6 +1059,16 @@ class PresenceController(QObject):
             presence_mode
         )
 
+        if (
+            persist
+            and not self._persist_secondary_mode(
+                presence_mode
+            )
+        ):
+            self._release_secondary_lane()
+            self._secondary_presence_mode = None
+            return False
+
         secondary_signal = getattr(
             self,
             "secondary_mode_changed",
@@ -655,9 +1094,19 @@ class PresenceController(QObject):
 
         return True
 
+
+
     def clear_secondary_mode(
         self,
+        *,
+        persist: bool = True,
     ) -> bool:
+        if (
+            persist
+            and not self._clear_persisted_secondary_mode()
+        ):
+            return False
+
         if not self._release_secondary_lane():
             return False
 
@@ -1156,6 +1605,7 @@ class PresenceController(QObject):
             presence_mode.to_payload()
         )
 
+
     def apply_saved_mode(self):
         presence_mode = self.load_mode(
             self.active_mode
@@ -1163,9 +1613,12 @@ class PresenceController(QObject):
 
         self.apply_mode(presence_mode)
 
+        self.restore_secondary_mode()
+
     @property
     def auto_afk_active(self) -> bool:
         return self._auto_afk_active
+
 
     def enter_auto_afk(
         self,
@@ -1203,6 +1656,11 @@ class PresenceController(QObject):
             )
         )
 
+        artwork_hover_text = (
+            afk_mode
+                .normalized_artwork_hover_text()
+        )
+
         manager = getattr(
             self,
             "discord_session_manager",
@@ -1210,33 +1668,38 @@ class PresenceController(QObject):
         )
 
         if manager is not None:
-            if not self._release_music_lane():
+            if not self._stop_legacy_discord():
+                self._release_music_lane()
                 self.mode_changed.emit(
                     payload
                 )
                 return
 
-            if not self._start_legacy_discord():
+            if not self._publish_primary_custom_with_manager(
+                afk_mode,
+                artwork_hover_text=artwork_hover_text,
+            ):
                 self.mode_changed.emit(
                     payload
                 )
                 return
 
-        self.discord.update_custom(
-            title=payload["title"],
-            message=payload["message"],
-            image_bytes=(
-                payload["image_bytes"]
-            ),
-            image_name=(
-                afk_mode
-                .normalized_artwork_hover_text()
-            ),
-            show_elapsed=(
-                payload["show_elapsed"]
-            ),
-            buttons=discord_buttons,
-        )
+        if manager is None:
+            self.discord.update_custom(
+                title=payload["title"],
+                message=payload["message"],
+                image_bytes=(
+                    payload["image_bytes"]
+                ),
+                image_name=(
+                    afk_mode
+                    .normalized_artwork_hover_text()
+                ),
+                show_elapsed=(
+                    payload["show_elapsed"]
+                ),
+                buttons=discord_buttons,
+            )
 
         self.mode_changed.emit(
             payload
