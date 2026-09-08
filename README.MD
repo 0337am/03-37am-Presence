@@ -2,33 +2,16 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, an optional local Desktop Companion overlay, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
-## v3.4.0 highlights
+## v3.4.1 highlights
 
-### Multi-Presence
+v3.4.1 is a focused stability update for Multi-Presence.
 
-- **Discord Application Library:** save friendly names for public Discord Application IDs and reuse them across Presence configurations.
-- **Per-Presence applications:** Custom, Working, Sleep, AFK, and saved Presences can remember their selected Discord application identity.
-- **Music + Secondary Presence:** keep Music active while publishing an independent non-Music Secondary Presence through a different Discord application.
-- **Presence Studio controls:** apply the current editor as Secondary, clear Secondary independently, and select applications from the shared library.
-- **Safe lane isolation:** Music and Secondary updates do not overwrite one another, and duplicate Application IDs are rejected for simultaneous lanes.
-
-### Presence persistence and backup
-
-- Saved Presences retain their Discord Application assignment.
-- Discord Application Library entries are included in supported Settings Backup and Restore data.
-- Existing custom Application ID settings migrate without losing the previous identity selection.
-- Missing or deleted application references fail closed instead of silently substituting another identity.
-
-### Artwork hover text
-
-- Non-Music Presences can choose the text Discord displays when hovering the large artwork.
-- Leaving **Artwork hover text** blank sends no artwork tooltip at all.
-- Custom text is supported for Custom, Working, Sleep, manual AFK, Auto AFK, saved Presences, and Secondary Presence.
-- Music keeps its existing artwork and Presence behavior unchanged.
-
-### Discord safety
-
-03:37am Presence only needs public Discord Application IDs for the Application Library. It does not request Discord Client Secrets, bot tokens, user tokens, or self-bot credentials.
+- Secondary Presence can persist safely across normal app restarts.
+- Auto AFK temporarily replaces only the primary Presence and no longer disturbs Secondary Presence.
+- Clear Secondary removes its saved state as well as the live Discord activity.
+- Disabled continues to hard-stop both Presence lanes and prevents Secondary restoration.
+- Settings categories switch directly without flashing the previous settings card.
+- Existing Discord privacy boundaries and Spotify/local-file playback safety remain unchanged.
 
 ## Core features
 

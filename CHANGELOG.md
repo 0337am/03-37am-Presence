@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.4.1 - Multi-Presence Stability
+
+Released 8 September 2026.
+
+### Improved
+- Secondary Presence is now persistent across normal app restarts while Music remains the primary Presence.
+- Auto AFK now acts as a temporary primary-lane state and leaves an active Secondary Presence untouched.
+- Clear Secondary now removes both the live Secondary Presence and its persisted configuration so it cannot return after restart.
+- Disabled remains an intentional hard-stop that clears Music, Secondary Presence, and persisted Secondary state.
+- Settings category navigation now switches directly without briefly flashing the previous card or its menu controls.
+
+### Safety
+- Missing or deleted Discord Application references continue to fail closed instead of silently switching identity.
+- Discord sessions remain worker/session-manager owned, with no Discord tokens, Client Secrets, or self-bot credentials.
+- Existing Spotify playback and local-file safety boundaries are unchanged.
+
 ## v3.4.0 - Multi-Presence
 
 Released 4 September 2026.
