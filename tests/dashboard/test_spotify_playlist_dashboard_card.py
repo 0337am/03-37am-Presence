@@ -219,6 +219,88 @@ class SpotifyPlaylistDashboardCardTests(
             )
         )
 
+    def test_scroll_viewport_has_explicit_theme_target(
+        self,
+    ):
+        card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        self.assertEqual(
+            card.scroll_area
+            .viewport()
+            .objectName(),
+            "spotifyPlaylistDashboardViewport",
+        )
+
+    def test_apply_theme_uses_dashboard_palette(
+        self,
+    ):
+        card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        theme = {
+            "background": "#180b10",
+            "card": "#3b1d2a",
+            "card_alt": "#4a2535",
+            "border": "#6b354a",
+            "accent": "#ff7fa8",
+            "text": "#fff5f8",
+            "muted": "#d8aab9",
+        }
+
+        card.apply_theme(
+            theme
+        )
+
+        stylesheet = (
+            card.styleSheet()
+            .casefold()
+        )
+
+        for value in theme.values():
+            with self.subTest(
+                value=value
+            ):
+                self.assertIn(
+                    value.casefold(),
+                    stylesheet,
+                )
+
+        self.assertIn(
+            "qframe#spotifyplaylistdashboardcard",
+            stylesheet,
+        )
+
+        self.assertIn(
+            "qwidget#spotifyplaylistdashboardviewport",
+            stylesheet,
+        )
+
+        self.assertIn(
+            "qpushbutton#spotifyplaylistdashboardplaybutton",
+            stylesheet,
+        )
+
+    def test_apply_theme_rejects_non_mapping_safely(
+        self,
+    ):
+        card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        before = card.styleSheet()
+
+        card.apply_theme(
+            None
+        )
+
+        self.assertEqual(
+            card.styleSheet(),
+            before,
+        )
+
     def test_snapshot_updates_header(self):
         card = (
             SpotifyPlaylistDashboardCard()

@@ -13,7 +13,7 @@ from src.ui.custom_cards import (
 )
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 CANVAS_UNITS = 10000
 
 
@@ -85,6 +85,12 @@ CARD_SPECS = {
     "queue": DashboardCardSpec(
         card_id="queue",
         title="Spotify Queue",
+        minimum_column_span=4,
+        maximum_column_span=12,
+    ),
+    "spotify_playlist": DashboardCardSpec(
+        card_id="spotify_playlist",
+        title="Spotify Playlist",
         minimum_column_span=4,
         maximum_column_span=12,
     ),
@@ -258,6 +264,11 @@ class DashboardLayout:
 
         if schema_version == 2:
             return _migrate_v2_payload(
+                payload
+            )
+
+        if schema_version == 3:
+            return _migrate_v3_payload(
                 payload
             )
 
@@ -641,43 +652,73 @@ def _with_hidden_queue_card(
         cards
     )
 
-    queue_cards = tuple(
-        card
-        for card in cards
-        if card.card_id == "queue"
-    )
-
-    if len(queue_cards) > 1:
-        raise ValueError(
-            "The dashboard layout contains duplicate Queue cards."
-        )
-
-    if queue_cards:
-        return cards
-
-    z_index = (
-        max(
-            (
-                card.z_index
-                for card in cards
-            ),
-            default=0,
-        )
-        + 1
-    )
-
-    return (
-        *cards,
-        DashboardCardLayout(
-            card_id="queue",
-            x=0,
-            y=3600,
-            width=4900,
-            height=4300,
-            z_index=z_index,
-            visible=False,
+    optional_cards = (
+        (
+            "queue",
+            "Queue",
+            0,
+            3600,
+            4900,
+            4300,
+        ),
+        (
+            "spotify_playlist",
+            "Spotify Playlist",
+            5100,
+            3600,
+            4900,
+            5200,
         ),
     )
+
+    for (
+        card_id,
+        title,
+        x,
+        y,
+        width,
+        height,
+    ) in optional_cards:
+        matches = tuple(
+            card
+            for card in cards
+            if card.card_id == card_id
+        )
+
+        if len(matches) > 1:
+            raise ValueError(
+                "The dashboard layout contains "
+                f"duplicate {title} cards."
+            )
+
+        if matches:
+            continue
+
+        z_index = (
+            max(
+                (
+                    card.z_index
+                    for card in cards
+                ),
+                default=0,
+            )
+            + 1
+        )
+
+        cards = (
+            *cards,
+            DashboardCardLayout(
+                card_id=card_id,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                z_index=z_index,
+                visible=False,
+            ),
+        )
+
+    return cards
 
 
 def _make_layout(
@@ -812,6 +853,64 @@ def preset_layout(
     )
 
 
+
+def _migrate_v3_payload(
+    payload,
+) -> DashboardLayout:
+    cards_payload = payload.get(
+        "cards"
+    )
+
+    if not isinstance(
+        cards_payload,
+        list,
+    ):
+        raise ValueError(
+            "Dashboard cards must be a list."
+        )
+
+    cards = tuple(
+        DashboardCardLayout.from_dict(
+            card
+        )
+        for card in cards_payload
+    )
+
+    queue_cards = tuple(
+        card
+        for card in cards
+        if card.card_id == "queue"
+    )
+
+    if len(queue_cards) != 1:
+        raise ValueError(
+            "Dashboard schema 3 must contain exactly one Queue card."
+        )
+
+    migrated = DashboardLayout(
+        cards=_with_hidden_queue_card(
+            cards
+        ),
+        locked=_strict_boolean(
+            payload.get(
+                "locked",
+                True,
+            ),
+            "locked",
+        ),
+        preset=str(
+            payload.get(
+                "preset",
+                "Custom",
+            )
+            or "Custom"
+        ).strip(),
+        schema_version=SCHEMA_VERSION,
+    )
+
+    return validate_layout(
+        migrated
+    )
 
 def _migrate_v2_payload(
     payload,
@@ -1136,7 +1235,7 @@ class DashboardLayoutStore:
                 payload
             )
 
-            if source_version in {1, 2}:
+            if source_version in {1, 2, 3}:
                 self._backup_legacy_file()
 
                 try:

@@ -168,7 +168,7 @@ class DashboardQueueLayoutMigrationTests(
     ):
         self.assertEqual(
             SCHEMA_VERSION,
-            3,
+            4,
         )
 
         self.assertIn(
@@ -184,7 +184,7 @@ class DashboardQueueLayoutMigrationTests(
         )
 
         self.assertEqual(
-            CARD_ORDER[-1],
+            CARD_ORDER[-2],
             "queue",
         )
 
@@ -260,7 +260,7 @@ class DashboardQueueLayoutMigrationTests(
 
         self.assertEqual(
             migrated.schema_version,
-            3,
+            4,
         )
 
     def test_v2_migration_adds_stable_hidden_queue_geometry(
@@ -356,7 +356,7 @@ class DashboardQueueLayoutMigrationTests(
 
         self.assertEqual(
             migrated.schema_version,
-            3,
+            4,
         )
 
         self.assertFalse(
@@ -382,7 +382,7 @@ class DashboardQueueLayoutMigrationTests(
 
         self.assertEqual(
             profile.layout.schema_version,
-            3,
+            4,
         )
 
         self.assertFalse(
@@ -408,7 +408,7 @@ class DashboardQueueLayoutMigrationTests(
 
         self.assertEqual(
             migrated.schema_version,
-            3,
+            4,
         )
 
         self.assertEqual(
@@ -453,7 +453,7 @@ class DashboardQueueLayoutMigrationTests(
 
         self.assertEqual(
             migrated.schema_version,
-            3,
+            4,
         )
 
         self.assertFalse(

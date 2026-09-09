@@ -169,6 +169,24 @@ from src.spotify.queue_models import (
     QUEUE_PARTIAL_REASON_SHUFFLE_LOCAL_ORDER,
 )
 
+from src.system.spotify_playlist_card_preferences import (
+    SpotifyPlaylistCardConfig,
+    SpotifyPlaylistCardPreferencesError,
+    SpotifyPlaylistCardPreferencesStore,
+)
+from src.ui.quick_access_picker import (
+    QuickAccessPickerDialog,
+)
+from src.ui.spotify_playlist_dashboard_card import (
+    SpotifyPlaylistDashboardCard,
+    SpotifyPlaylistDashboardSnapshot,
+)
+
+
+SPOTIFY_PLAYLIST_DASHBOARD_CARD_CONFIG_ID = (
+    "spotify_playlist_card.dashboard"
+)
+
 
 def colour_with_alpha(
     colour: str,
@@ -1310,6 +1328,7 @@ class DashboardPage(QWidget):
         self.build_recent_card()
         self.build_quick_access_card()
         self.build_library_status_card()
+        self.build_spotify_playlist_card()
         self.build_queue_card()
 
         self.now_playing_card.setMinimumHeight(
@@ -1392,6 +1411,9 @@ class DashboardPage(QWidget):
             ),
             "queue": (
                 self.queue_card
+            ),
+            "spotify_playlist": (
+                self.spotify_playlist_card
             ),
         }
 
@@ -5175,6 +5197,23 @@ class DashboardPage(QWidget):
             self.layout_add_card_button
         )
 
+        self.layout_add_spotify_playlist_action = QAction(
+            "Spotify Playlist",
+            self.layout_add_card_menu,
+        )
+        self.layout_add_spotify_playlist_action.setToolTip(
+            "Choose a Spotify playlist to show on the dashboard"
+        )
+        self.layout_add_spotify_playlist_action.triggered.connect(
+            lambda _checked=False:
+            DashboardPage.add_spotify_playlist_card(
+                self
+            )
+        )
+        self.layout_add_card_menu.addAction(
+            self.layout_add_spotify_playlist_action
+        )
+
         self.layout_add_queue_action = QAction(
             "Spotify Queue",
             self.layout_add_card_menu,
@@ -5937,6 +5976,515 @@ class DashboardPage(QWidget):
                 "Profile not deleted",
                 str(error),
             )
+
+    def _spotify_playlist_dashboard_store(
+        self,
+    ):
+        store = getattr(
+            self,
+            "spotify_playlist_card_preferences_store",
+            None,
+        )
+
+        if store is not None:
+            return store
+
+        try:
+            store = (
+                SpotifyPlaylistCardPreferencesStore()
+            )
+
+        except (
+            OSError,
+            SpotifyPlaylistCardPreferencesError,
+        ):
+            return None
+
+        self.spotify_playlist_card_preferences_store = (
+            store
+        )
+
+        return store
+
+
+    def _spotify_playlist_dashboard_config(
+        self,
+    ):
+        store = (
+            DashboardPage
+            ._spotify_playlist_dashboard_store(
+                self
+            )
+        )
+
+        if store is None:
+            return None
+
+        try:
+            preferences = store.load()
+
+            return preferences.get(
+                SPOTIFY_PLAYLIST_DASHBOARD_CARD_CONFIG_ID
+            )
+
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+            SpotifyPlaylistCardPreferencesError,
+        ):
+            return None
+
+
+    def _spotify_playlist_dashboard_summary(
+        self,
+        playlist_id,
+    ):
+        live_playlists = getattr(
+            self,
+            "_spotify_quick_access_playlists",
+            {},
+        )
+
+        if not isinstance(
+            live_playlists,
+            dict,
+        ):
+            return None
+
+        summary = live_playlists.get(
+            playlist_id
+        )
+
+        if isinstance(
+            summary,
+            SpotifyPlaylistSummary,
+        ):
+            return summary
+
+        normalized = str(
+            playlist_id
+            or ""
+        ).strip().casefold()
+
+        if not normalized:
+            return None
+
+        for (
+            candidate_id,
+            candidate,
+        ) in live_playlists.items():
+            if (
+                str(
+                    candidate_id
+                    or ""
+                ).strip().casefold()
+                == normalized
+                and isinstance(
+                    candidate,
+                    SpotifyPlaylistSummary,
+                )
+            ):
+                return candidate
+
+        return None
+
+
+    def refresh_spotify_playlist_dashboard_card(
+        self,
+    ):
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        if card is None:
+            return False
+
+        config = (
+            DashboardPage
+            ._spotify_playlist_dashboard_config(
+                self
+            )
+        )
+
+        if config is None:
+            clear_snapshot = getattr(
+                card,
+                "clear_snapshot",
+                None,
+            )
+
+            if callable(
+                clear_snapshot
+            ):
+                clear_snapshot()
+
+            return False
+
+        summary = (
+            DashboardPage
+            ._spotify_playlist_dashboard_summary(
+                self,
+                config.playlist_id,
+            )
+        )
+
+        if summary is None:
+            title = "Spotify Playlist"
+            owner = "Waiting for Spotify"
+            track_count = 0
+
+        else:
+            title = (
+                str(
+                    summary.name
+                    or ""
+                ).strip()
+                or "Spotify Playlist"
+            )
+
+            owner = (
+                str(
+                    summary.owner_name
+                    or ""
+                ).strip()
+                or "Spotify"
+            )
+
+            track_count = max(
+                0,
+                int(
+                    summary.total_items
+                    or 0
+                ),
+            )
+
+        try:
+            snapshot = (
+                SpotifyPlaylistDashboardSnapshot
+                .build(
+                    playlist_id=(
+                        config.playlist_id
+                    ),
+                    title=title,
+                    owner=owner,
+                    track_count=track_count,
+                    tracks=(),
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        set_snapshot = getattr(
+            card,
+            "set_snapshot",
+            None,
+        )
+
+        if not callable(
+            set_snapshot
+        ):
+            return False
+
+        set_snapshot(
+            snapshot
+        )
+
+        return True
+
+
+    def configure_spotify_playlist_dashboard_card(
+        self,
+        playlist_id,
+    ):
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if layout is None:
+            return False
+
+        if bool(
+            getattr(
+                layout,
+                "locked",
+                True,
+            )
+        ):
+            sync = getattr(
+                self,
+                "sync_dashboard_layout_controls",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
+            return False
+
+        try:
+            playlist_layout = layout.card(
+                "spotify_playlist"
+            )
+
+        except (
+            AttributeError,
+            KeyError,
+        ):
+            return False
+
+        try:
+            config = (
+                SpotifyPlaylistCardConfig
+                .for_playlist(
+                    playlist_id,
+                    card_id=(
+                        SPOTIFY_PLAYLIST_DASHBOARD_CARD_CONFIG_ID
+                    ),
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+            SpotifyPlaylistCardPreferencesError,
+        ):
+            return False
+
+        store = (
+            DashboardPage
+            ._spotify_playlist_dashboard_store(
+                self
+            )
+        )
+
+        if store is None:
+            return False
+
+        try:
+            store.upsert(
+                config
+            )
+
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+            SpotifyPlaylistCardPreferencesError,
+        ):
+            return False
+
+        DashboardPage.refresh_spotify_playlist_dashboard_card(
+            self
+        )
+
+        if not bool(
+            playlist_layout.visible
+        ):
+            setter = getattr(
+                self,
+                "set_dashboard_card_visibility",
+                None,
+            )
+
+            if not callable(
+                setter
+            ):
+                return False
+
+            setter(
+                "spotify_playlist",
+                True,
+            )
+
+        else:
+            sync = getattr(
+                self,
+                "sync_dashboard_layout_controls",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
+        return True
+
+
+    def add_spotify_playlist_card(
+        self,
+    ):
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if layout is None:
+            return False
+
+        if bool(
+            getattr(
+                layout,
+                "locked",
+                True,
+            )
+        ):
+            sync = getattr(
+                self,
+                "sync_dashboard_layout_controls",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
+            return False
+
+        try:
+            playlist_layout = layout.card(
+                "spotify_playlist"
+            )
+
+        except (
+            AttributeError,
+            KeyError,
+        ):
+            return False
+
+        if bool(
+            playlist_layout.visible
+        ):
+            sync = getattr(
+                self,
+                "sync_dashboard_layout_controls",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
+            return False
+
+        dynamic_items = (
+            DashboardPage
+            ._spotify_playlist_quick_access_items(
+                self
+            )
+        )
+
+        if not dynamic_items:
+            status_label = getattr(
+                self,
+                "layout_status_label",
+                None,
+            )
+
+            set_text = getattr(
+                status_label,
+                "setText",
+                None,
+            )
+
+            if callable(
+                set_text
+            ):
+                set_text(
+                    "Load your Spotify playlists first, "
+                    "then choose Spotify Playlist again."
+                )
+
+            return False
+
+        theme_manager = getattr(
+            self,
+            "theme_manager",
+            None,
+        )
+
+        theme_getter = getattr(
+            theme_manager,
+            "theme",
+            None,
+        )
+
+        theme = (
+            theme_getter()
+            if callable(
+                theme_getter
+            )
+            else None
+        )
+
+        dialog = QuickAccessPickerDialog(
+            (),
+            theme=theme,
+            parent=self,
+            dynamic_items=dynamic_items,
+        )
+
+        if not dialog.exec():
+            return False
+
+        selected_item_id = str(
+            dialog.selected_item_id()
+            or ""
+        ).strip().casefold()
+
+        if not selected_item_id:
+            return False
+
+        selected = None
+
+        for item in dynamic_items:
+            if (
+                str(
+                    item.item_id
+                    or ""
+                ).strip().casefold()
+                == selected_item_id
+            ):
+                selected = item
+                break
+
+        if selected is None:
+            return False
+
+        try:
+            playlist_id = (
+                spotify_playlist_id_from_quick_access_target(
+                    selected.target
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        return bool(
+            DashboardPage
+            .configure_spotify_playlist_dashboard_card(
+                self,
+                playlist_id,
+            )
+        )
 
     def add_queue_card(
         self,
@@ -8304,6 +8852,71 @@ class DashboardPage(QWidget):
                 force=True,
             )
 
+    def sync_dashboard_add_spotify_playlist_action(
+        self,
+    ):
+        action = getattr(
+            self,
+            "layout_add_spotify_playlist_action",
+            None,
+        )
+
+        if action is None:
+            return
+
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if layout is None:
+            action.setVisible(
+                False
+            )
+
+            action.setEnabled(
+                False
+            )
+
+            return
+
+        try:
+            playlist_layout = layout.card(
+                "spotify_playlist"
+            )
+
+        except (
+            AttributeError,
+            KeyError,
+        ):
+            action.setVisible(
+                False
+            )
+
+            action.setEnabled(
+                False
+            )
+
+            return
+
+        available = (
+            not bool(
+                playlist_layout.visible
+            )
+        )
+
+        action.setVisible(
+            available
+        )
+
+        action.setEnabled(
+            available
+            and not bool(
+                layout.locked
+            )
+        )
+
     def sync_dashboard_add_queue_action(
         self,
     ):
@@ -8403,6 +9016,9 @@ class DashboardPage(QWidget):
 
         locked = bool(
             self.dashboard_layout_state.locked
+        )
+        DashboardPage.sync_dashboard_add_spotify_playlist_action(
+            self
         )
         DashboardPage.sync_dashboard_add_queue_action(
             self
@@ -11485,6 +12101,10 @@ class DashboardPage(QWidget):
                 force=True
             )
 
+        DashboardPage.refresh_spotify_playlist_dashboard_card(
+            self
+        )
+
 
     def _spotify_playlist_quick_access_items(
         self,
@@ -14082,6 +14702,70 @@ class DashboardPage(QWidget):
                     "Queue is empty"
                 )
 
+    def build_spotify_playlist_card(
+        self,
+    ):
+        self.spotify_playlist_card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        apply_theme = getattr(
+            self.spotify_playlist_card,
+            "apply_theme",
+            None,
+        )
+
+        theme_manager = getattr(
+            self,
+            "theme_manager",
+            None,
+        )
+
+        theme_getter = getattr(
+            theme_manager,
+            "theme",
+            None,
+        )
+
+        if (
+            callable(
+                apply_theme
+            )
+            and callable(
+                theme_getter
+            )
+        ):
+            apply_theme(
+                theme_getter()
+            )
+
+        layout = getattr(
+            self,
+            "dashboard_layout_state",
+            None,
+        )
+
+        if layout is None:
+            return
+
+        try:
+            playlist_layout = layout.card(
+                "spotify_playlist"
+            )
+
+        except (
+            AttributeError,
+            KeyError,
+        ):
+            return
+
+        if bool(
+            playlist_layout.visible
+        ):
+            DashboardPage.refresh_spotify_playlist_dashboard_card(
+                self
+            )
+
     def build_queue_card(
         self,
     ):
@@ -15343,6 +16027,25 @@ class DashboardPage(QWidget):
         self._refresh_quick_access_icons(
             theme
         )
+
+        playlist_card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        apply_playlist_theme = getattr(
+            playlist_card,
+            "apply_theme",
+            None,
+        )
+
+        if callable(
+            apply_playlist_theme
+        ):
+            apply_playlist_theme(
+                theme
+            )
 
     @pyqtSlot(dict)
     def apply_branding(self, branding: dict):

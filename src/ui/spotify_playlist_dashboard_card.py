@@ -840,6 +840,10 @@ class SpotifyPlaylistDashboardCard(
             "spotifyPlaylistDashboardScroll"
         )
 
+        self.scroll_area.viewport().setObjectName(
+            "spotifyPlaylistDashboardViewport"
+        )
+
         self.scroll_area.setWidgetResizable(
             True
         )
@@ -905,6 +909,253 @@ class SpotifyPlaylistDashboardCard(
         root.addWidget(
             self.scroll_area,
             1,
+        )
+
+    def apply_theme(
+        self,
+        theme: dict,
+    ) -> None:
+        if not isinstance(
+            theme,
+            dict,
+        ):
+            return
+
+        def theme_value(
+            key: str,
+            fallback: str,
+        ) -> str:
+            value = str(
+                theme.get(
+                    key,
+                    fallback,
+                )
+                or fallback
+            ).strip()
+
+            return (
+                value
+                or fallback
+            )
+
+        background = theme_value(
+            "background",
+            "#101014",
+        )
+
+        card = theme_value(
+            "card",
+            "#18181f",
+        )
+
+        card_alt = theme_value(
+            "card_alt",
+            "#202028",
+        )
+
+        border = theme_value(
+            "border",
+            "#34343e",
+        )
+
+        accent = theme_value(
+            "accent",
+            "#ff4f91",
+        )
+
+        text = theme_value(
+            "text",
+            "#f4f4f6",
+        )
+
+        muted = theme_value(
+            "muted",
+            "#a6a6b1",
+        )
+
+        self.setStyleSheet(
+            f"""
+            QFrame#spotifyPlaylistDashboardCard {{
+                background: {card};
+                border: 1px solid {border};
+                border-radius: 14px;
+            }}
+
+            QFrame#spotifyPlaylistDashboardHeader,
+            QWidget#spotifyPlaylistDashboardInformation,
+            QWidget#spotifyPlaylistDashboardTransport {{
+                background: transparent;
+                border: none;
+            }}
+
+            QLabel#spotifyPlaylistDashboardArtwork {{
+                background: {card_alt};
+                color: {muted};
+                border: 1px solid {border};
+                border-radius: 10px;
+                font-size: 8pt;
+                font-weight: 700;
+            }}
+
+            QLabel#spotifyPlaylistDashboardKind {{
+                color: {accent};
+                font-size: 8pt;
+                font-weight: 700;
+            }}
+
+            QLabel#spotifyPlaylistDashboardTitle {{
+                color: {text};
+                font-size: 18pt;
+                font-weight: 700;
+            }}
+
+            QLabel#spotifyPlaylistDashboardOwner {{
+                color: {text};
+                font-size: 10pt;
+            }}
+
+            QLabel#spotifyPlaylistDashboardCount {{
+                color: {muted};
+                font-size: 9pt;
+            }}
+
+            QLabel#spotifyPlaylistDashboardBrand {{
+                color: {text};
+                font-size: 9pt;
+                font-weight: 700;
+            }}
+
+            QLabel#spotifyPlaylistDashboardMore {{
+                color: {muted};
+                background: transparent;
+                border: none;
+                font-size: 15pt;
+                font-weight: 700;
+            }}
+
+            QPushButton#spotifyPlaylistDashboardPlayButton {{
+                color: {background};
+                background: {accent};
+                border: none;
+                border-radius: 26px;
+            }}
+
+            QPushButton#spotifyPlaylistDashboardPlayButton:hover {{
+                border: 1px solid {text};
+            }}
+
+            QPushButton#spotifyPlaylistDashboardPlayButton:disabled {{
+                color: {background};
+                background: {accent};
+                border: none;
+            }}
+
+            QFrame#spotifyPlaylistDashboardDivider {{
+                color: {border};
+                background: {border};
+                border: none;
+                max-height: 1px;
+            }}
+
+            QScrollArea#spotifyPlaylistDashboardScroll {{
+                background: transparent;
+                border: none;
+            }}
+
+            QWidget#spotifyPlaylistDashboardViewport {{
+                background: transparent;
+                border: none;
+            }}
+
+            QWidget#spotifyPlaylistDashboardTrackContainer {{
+                background: transparent;
+                border: none;
+            }}
+
+            QFrame#spotifyPlaylistDashboardTrackRow {{
+                background: transparent;
+                border: none;
+                border-radius: 8px;
+            }}
+
+            QFrame#spotifyPlaylistDashboardTrackRow:hover {{
+                background: {card_alt};
+            }}
+
+            QLabel#spotifyPlaylistDashboardTrackNumber {{
+                color: {muted};
+                font-size: 9pt;
+            }}
+
+            QLabel#spotifyPlaylistDashboardTrackTitle {{
+                color: {text};
+                font-size: 10pt;
+                font-weight: 650;
+            }}
+
+            QLabel#spotifyPlaylistDashboardTrackArtist {{
+                color: {muted};
+                font-size: 8.5pt;
+            }}
+
+            QLabel#spotifyPlaylistDashboardTrackDuration {{
+                color: {text};
+                font-size: 9pt;
+            }}
+
+            QLabel#spotifyPlaylistDashboardLocalBadge {{
+                color: {accent};
+                background: {background};
+                border: 1px solid {accent};
+                border-radius: 6px;
+                padding: 2px 5px;
+                font-size: 7pt;
+                font-weight: 700;
+            }}
+
+            QLabel#spotifyPlaylistDashboardUnavailableBadge {{
+                color: {muted};
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 6px;
+                padding: 2px 5px;
+                font-size: 7pt;
+                font-weight: 700;
+            }}
+
+            QLabel#spotifyPlaylistDashboardEmpty {{
+                color: {muted};
+                background: transparent;
+                border: none;
+            }}
+
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 8px;
+                margin: 2px;
+            }}
+
+            QScrollBar::handle:vertical {{
+                background: {border};
+                border: none;
+                border-radius: 4px;
+                min-height: 28px;
+            }}
+
+            QScrollBar::handle:vertical:hover {{
+                background: {muted};
+            }}
+
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
+            """
         )
 
     @property
