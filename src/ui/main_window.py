@@ -1339,6 +1339,10 @@ class MainWindow(QMainWindow):
             spotify_dashboard_artwork_loader,
         )
 
+        self.dashboard_page.install_spotify_playlist_dashboard_playback_runtime(
+            self.spotify_playback_runtime
+        )
+
         self.settings_page.set_diagnostics_provider(
             self.collect_diagnostics
         )

@@ -16,6 +16,7 @@ from PyQt6.QtCore import (
     QRectF,
     QSize,
     Qt,
+    pyqtSignal,
 )
 from PyQt6.QtGui import (
     QPainter,
@@ -342,6 +343,10 @@ class SpotifyPlaylistDashboardTrackRow(
 ):
     """Presentation-only row for one playlist item."""
 
+    activated = pyqtSignal(
+        object
+    )
+
     def __init__(
         self,
         track: SpotifyPlaylistDashboardTrack,
@@ -542,11 +547,109 @@ class SpotifyPlaylistDashboardTrackRow(
             self.duration_label
         )
 
+        self._activation_press_position = None
+
+        for child in self.findChildren(
+            QWidget
+        ):
+            child.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+                True,
+            )
+
+
+    def mousePressEvent(
+        self,
+        event,
+    ) -> None:
+        self._activation_press_position = None
+
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+            and self.track.available
+        ):
+            self._activation_press_position = (
+                event.position().toPoint()
+            )
+
+        super().mousePressEvent(
+            event
+        )
+
+    def mouseMoveEvent(
+        self,
+        event,
+    ) -> None:
+        start = getattr(
+            self,
+            "_activation_press_position",
+            None,
+        )
+
+        if start is not None:
+            current = (
+                event.position().toPoint()
+            )
+
+            if (
+                current
+                - start
+            ).manhattanLength() > 8:
+                self._activation_press_position = None
+
+        super().mouseMoveEvent(
+            event
+        )
+
+    def mouseReleaseEvent(
+        self,
+        event,
+    ) -> None:
+        start = getattr(
+            self,
+            "_activation_press_position",
+            None,
+        )
+
+        self._activation_press_position = None
+
+        release_position = (
+            event.position().toPoint()
+        )
+
+        should_activate = (
+            event.button()
+            == Qt.MouseButton.LeftButton
+            and start is not None
+            and self.track.available
+            and self.rect().contains(
+                release_position
+            )
+            and (
+                release_position
+                - start
+            ).manhattanLength() <= 8
+        )
+
+        super().mouseReleaseEvent(
+            event
+        )
+
+        if should_activate:
+            self.activated.emit(
+                self.track
+            )
+
 
 class SpotifyPlaylistDashboardCard(
     QFrame
 ):
     """Reusable static Playlist Card surface for the Dashboard."""
+
+    track_activated = pyqtSignal(
+        object
+    )
 
     ARTWORK_SIZE = 118
 
@@ -1401,6 +1504,10 @@ class SpotifyPlaylistDashboardCard(
                     )
                 )
 
+                row.activated.connect(
+                    self.track_activated.emit
+                )
+
                 # Keep construction invisible until the whole batch
                 # has a parent and layout position.
                 row.hide()
@@ -1488,6 +1595,10 @@ class SpotifyPlaylistDashboardCard(
                         track,
                         self.track_container,
                     )
+                )
+
+                row.activated.connect(
+                    self.track_activated.emit
                 )
 
                 row.hide()

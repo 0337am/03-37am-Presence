@@ -6428,6 +6428,175 @@ class DashboardPage(QWidget):
         return True
 
 
+    def install_spotify_playlist_dashboard_playback_runtime(
+        self,
+        runtime,
+    ) -> bool:
+        play_position = getattr(
+            runtime,
+            "play_playlist_position",
+            None,
+        )
+
+        if not callable(
+            play_position
+        ):
+            raise TypeError(
+                "runtime must provide play_playlist_position."
+            )
+
+        self._spotify_playlist_dashboard_playback_runtime = (
+            runtime
+        )
+
+        if bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "playback_connected"
+                ),
+                False,
+            )
+        ):
+            return True
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        signal = getattr(
+            card,
+            "track_activated",
+            None,
+        )
+
+        connect = getattr(
+            signal,
+            "connect",
+            None,
+        )
+
+        if not callable(
+            connect
+        ):
+            raise TypeError(
+                "spotify_playlist_card must provide track_activated."
+            )
+
+        connect(
+            self.play_spotify_playlist_dashboard_track
+        )
+
+        self._spotify_playlist_dashboard_playback_connected = (
+            True
+        )
+
+        return True
+
+    def play_spotify_playlist_dashboard_track(
+        self,
+        track,
+    ) -> bool:
+        if not isinstance(
+            track,
+            SpotifyPlaylistDashboardTrack,
+        ):
+            return False
+
+        if not track.available:
+            return False
+
+        position = track.position
+
+        if (
+            isinstance(
+                position,
+                bool,
+            )
+            or not isinstance(
+                position,
+                int,
+            )
+            or position < 0
+        ):
+            return False
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        snapshot = getattr(
+            card,
+            "snapshot",
+            None,
+        )
+
+        if not isinstance(
+            snapshot,
+            SpotifyPlaylistDashboardSnapshot,
+        ):
+            return False
+
+        if track not in snapshot.tracks:
+            return False
+
+        playlist_id = str(
+            snapshot.playlist_id
+            or ""
+        ).strip()
+
+        if not playlist_id:
+            return False
+
+        runtime = getattr(
+            self,
+            (
+                "_spotify_playlist_dashboard_"
+                "playback_runtime"
+            ),
+            None,
+        )
+
+        if runtime is None:
+            return False
+
+        if bool(
+            getattr(
+                runtime,
+                "busy",
+                False,
+            )
+        ):
+            return False
+
+        play_position = getattr(
+            runtime,
+            "play_playlist_position",
+            None,
+        )
+
+        if not callable(
+            play_position
+        ):
+            return False
+
+        try:
+            result = play_position(
+                playlist_id,
+                position,
+            )
+
+        except Exception:
+            return False
+
+        return result is not False
+
+
     def _request_spotify_playlist_dashboard_summary_restore(
         self,
     ) -> bool:
