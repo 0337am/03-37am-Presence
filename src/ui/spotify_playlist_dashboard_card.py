@@ -858,6 +858,8 @@ class SpotifyPlaylistDashboardCard(
 
     ARTWORK_SIZE = 118
 
+    change_playlist_requested = pyqtSignal()
+
     def __init__(
         self,
         parent: QWidget | None = None,
@@ -1026,7 +1028,7 @@ class SpotifyPlaylistDashboardCard(
             1
         )
 
-        self.more_label = QLabel(
+        self.more_label = QPushButton(
             "..."
         )
 
@@ -1034,13 +1036,29 @@ class SpotifyPlaylistDashboardCard(
             "spotifyPlaylistDashboardMore"
         )
 
-        self.more_label.setAlignment(
-            Qt.AlignmentFlag.AlignLeft
-            | Qt.AlignmentFlag.AlignVCenter
+        self.more_label.setToolTip(
+            "Change playlist"
+        )
+
+        self.more_label.setAccessibleName(
+            "Change playlist"
+        )
+
+        self.more_label.setFlat(
+            True
+        )
+
+        self.more_label.setCursor(
+            Qt.CursorShape.PointingHandCursor
         )
 
         self.more_label.setFixedWidth(
             30
+        )
+
+        self.more_label.clicked.connect(
+            lambda checked=False:
+            self.change_playlist_requested.emit()
         )
 
         information_layout.addWidget(
@@ -1359,7 +1377,7 @@ class SpotifyPlaylistDashboardCard(
                 font-weight: 700;
             }}
 
-            QLabel#spotifyPlaylistDashboardMore {{
+            QPushButton#spotifyPlaylistDashboardMore {{
                 color: {muted};
                 background: transparent;
                 border: none;

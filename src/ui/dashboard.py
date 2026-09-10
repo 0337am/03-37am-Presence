@@ -8964,6 +8964,8 @@ class DashboardPage(QWidget):
     def configure_spotify_playlist_dashboard_card(
         self,
         playlist_id,
+        *,
+        allow_locked_existing=False,
     ):
         layout = getattr(
             self,
@@ -8974,12 +8976,17 @@ class DashboardPage(QWidget):
         if layout is None:
             return False
 
-        if bool(
+        layout_locked = bool(
             getattr(
                 layout,
                 "locked",
                 True,
             )
+        )
+
+        if (
+            layout_locked
+            and not allow_locked_existing
         ):
             sync = getattr(
                 self,
@@ -9003,6 +9010,26 @@ class DashboardPage(QWidget):
             AttributeError,
             KeyError,
         ):
+            return False
+
+        if (
+            layout_locked
+            and allow_locked_existing
+            and not bool(
+                playlist_layout.visible
+            )
+        ):
+            sync = getattr(
+                self,
+                "sync_dashboard_layout_controls",
+                None,
+            )
+
+            if callable(
+                sync
+            ):
+                sync()
+
             return False
 
         try:
@@ -9082,6 +9109,96 @@ class DashboardPage(QWidget):
                 sync()
 
         return True
+
+
+    def change_spotify_playlist_dashboard_card(
+        self,
+    ):
+        dynamic_items = (
+            DashboardPage
+            ._spotify_playlist_quick_access_items(
+                self
+            )
+        )
+
+        if not dynamic_items:
+            return False
+
+        theme_manager = getattr(
+            self,
+            "theme_manager",
+            None,
+        )
+
+        theme_getter = getattr(
+            theme_manager,
+            "theme",
+            None,
+        )
+
+        theme = (
+            theme_getter()
+            if callable(
+                theme_getter
+            )
+            else None
+        )
+
+        dialog = QuickAccessPickerDialog(
+            (),
+            theme=theme,
+            parent=self,
+            dynamic_items=dynamic_items,
+        )
+
+        if not dialog.exec():
+            return False
+
+        selected_item_id = str(
+            dialog.selected_item_id()
+            or ""
+        ).strip().casefold()
+
+        if not selected_item_id:
+            return False
+
+        selected = None
+
+        for item in dynamic_items:
+            if (
+                str(
+                    item.item_id
+                    or ""
+                ).strip().casefold()
+                == selected_item_id
+            ):
+                selected = item
+                break
+
+        if selected is None:
+            return False
+
+        try:
+            playlist_id = (
+                spotify_playlist_id_from_quick_access_target(
+                    selected.target
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return False
+
+        return bool(
+            DashboardPage
+            .configure_spotify_playlist_dashboard_card(
+                self,
+                playlist_id,
+                allow_locked_existing=True,
+            )
+        )
 
 
     def add_spotify_playlist_card(
@@ -17469,6 +17586,13 @@ class DashboardPage(QWidget):
     ):
         self.spotify_playlist_card = (
             SpotifyPlaylistDashboardCard()
+        )
+
+        self.spotify_playlist_card.change_playlist_requested.connect(
+            lambda:
+            DashboardPage.change_spotify_playlist_dashboard_card(
+                self
+            )
         )
 
         apply_theme = getattr(
