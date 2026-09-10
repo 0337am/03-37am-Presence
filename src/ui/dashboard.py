@@ -6496,6 +6496,890 @@ class DashboardPage(QWidget):
 
         return True
 
+    @staticmethod
+    def _spotify_playlist_dashboard_normalize_identity(
+        value,
+    ) -> str:
+        return (
+            " ".join(
+                str(
+                    value
+                    or ""
+                ).split()
+            )
+            .casefold()
+        )
+
+    @staticmethod
+    def _spotify_playlist_dashboard_is_spotify_song(
+        song,
+    ) -> bool:
+        if song is None:
+            return False
+
+        source = (
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                getattr(
+                    song,
+                    "source_app",
+                    "",
+                )
+            )
+        )
+
+        title = (
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                getattr(
+                    song,
+                    "title",
+                    "",
+                )
+            )
+        )
+
+        return bool(
+            title
+            and "spotify"
+            in source
+        )
+
+    @staticmethod
+    def _spotify_playlist_dashboard_artist_matches(
+        current_artist,
+        playlist_artists,
+    ) -> bool:
+        current = (
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                current_artist
+            )
+        )
+
+        playlist = (
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                playlist_artists
+            )
+        )
+
+        if (
+            not current
+            or not playlist
+        ):
+            return False
+
+        if current == playlist:
+            return True
+
+        primary = (
+            playlist.split(
+                ",",
+                1,
+            )[
+                0
+            ].strip()
+        )
+
+        return bool(
+            primary
+            and primary
+            == current
+        )
+
+    @staticmethod
+    def _spotify_playlist_dashboard_track_identity(
+        track,
+    ) -> tuple[str, str]:
+        return (
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                getattr(
+                    track,
+                    "title",
+                    "",
+                )
+            ),
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                getattr(
+                    track,
+                    "artists",
+                    "",
+                )
+            ),
+        )
+
+    @staticmethod
+    def _spotify_playlist_dashboard_song_matches_identity(
+        song,
+        identity,
+    ) -> bool:
+        if not (
+            DashboardPage
+            ._spotify_playlist_dashboard_is_spotify_song(
+                song
+            )
+        ):
+            return False
+
+        if not (
+            isinstance(
+                identity,
+                tuple,
+            )
+            and len(
+                identity
+            )
+            == 2
+        ):
+            return False
+
+        expected_title = str(
+            identity[
+                0
+            ]
+            or ""
+        ).strip()
+
+        expected_artists = str(
+            identity[
+                1
+            ]
+            or ""
+        ).strip()
+
+        if (
+            not expected_title
+            or not expected_artists
+        ):
+            return False
+
+        current_title = (
+            DashboardPage
+            ._spotify_playlist_dashboard_normalize_identity(
+                getattr(
+                    song,
+                    "title",
+                    "",
+                )
+            )
+        )
+
+        if (
+            current_title
+            != expected_title
+        ):
+            return False
+
+        return (
+            DashboardPage
+            ._spotify_playlist_dashboard_artist_matches(
+                getattr(
+                    song,
+                    "artist",
+                    "",
+                ),
+                expected_artists,
+            )
+        )
+
+    @staticmethod
+    def _spotify_playlist_dashboard_identity_is_unique(
+        snapshot,
+        identity,
+    ) -> bool:
+        if snapshot is None:
+            return False
+
+        matches = 0
+
+        for track in tuple(
+            getattr(
+                snapshot,
+                "tracks",
+                (),
+            )
+            or ()
+        ):
+            if (
+                DashboardPage
+                ._spotify_playlist_dashboard_track_identity(
+                    track
+                )
+                == identity
+            ):
+                matches += 1
+
+                if matches > 1:
+                    return False
+
+        return (
+            matches
+            == 1
+        )
+
+    @staticmethod
+    def _spotify_playlist_dashboard_song_belongs_to_snapshot(
+        song,
+        snapshot,
+    ) -> bool:
+        if not (
+            DashboardPage
+            ._spotify_playlist_dashboard_is_spotify_song(
+                song
+            )
+        ):
+            return False
+
+        matches = 0
+
+        for track in tuple(
+            getattr(
+                snapshot,
+                "tracks",
+                (),
+            )
+            or ()
+        ):
+            identity = (
+                DashboardPage
+                ._spotify_playlist_dashboard_track_identity(
+                    track
+                )
+            )
+
+            if (
+                DashboardPage
+                ._spotify_playlist_dashboard_song_matches_identity(
+                    song,
+                    identity,
+                )
+            ):
+                matches += 1
+
+                if matches > 1:
+                    return False
+
+        return (
+            matches
+            == 1
+        )
+
+    def _clear_spotify_playlist_dashboard_pending_playback(
+        self,
+    ) -> None:
+        self._spotify_playlist_dashboard_pending_playlist_id = ""
+        self._spotify_playlist_dashboard_pending_track_identity = None
+        self._spotify_playlist_dashboard_pending_deadline = 0.0
+
+    def _mark_spotify_playlist_dashboard_playback_pending(
+        self,
+        playlist_id,
+        track,
+    ) -> bool:
+        checked_playlist_id = str(
+            playlist_id
+            or ""
+        ).strip()
+
+        identity = (
+            DashboardPage
+            ._spotify_playlist_dashboard_track_identity(
+                track
+            )
+        )
+
+        if (
+            not checked_playlist_id
+            or not identity[
+                0
+            ]
+            or not identity[
+                1
+            ]
+        ):
+            return False
+
+        self._spotify_playlist_dashboard_active_playlist_id = ""
+
+        self._spotify_playlist_dashboard_pending_playlist_id = (
+            checked_playlist_id
+        )
+
+        self._spotify_playlist_dashboard_pending_track_identity = (
+            identity
+        )
+
+        self._spotify_playlist_dashboard_pending_deadline = (
+            time.monotonic()
+            + 6.0
+        )
+
+        return True
+
+    def _spotify_playlist_dashboard_current_snapshot(
+        self,
+    ):
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        if card is None:
+            return None
+
+        snapshot = getattr(
+            card,
+            "snapshot",
+            None,
+        )
+
+        if snapshot is None:
+            snapshot = getattr(
+                card,
+                "_snapshot",
+                None,
+            )
+
+        return snapshot
+
+    def handle_spotify_playlist_dashboard_song_update(
+        self,
+        song,
+    ) -> None:
+        self._spotify_playlist_dashboard_header_song = (
+            song
+        )
+
+        DashboardPage.sync_spotify_playlist_dashboard_header_playback_state(
+            self
+        )
+
+    def sync_spotify_playlist_dashboard_header_playback_state(
+        self,
+        *_ignored,
+    ) -> None:
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        if card is None:
+            return
+
+        setter = getattr(
+            card,
+            "set_playback_state",
+            None,
+        )
+
+        if not callable(
+            setter
+        ):
+            return
+
+        snapshot = (
+            DashboardPage
+            ._spotify_playlist_dashboard_current_snapshot(
+                self
+            )
+        )
+
+        snapshot_id = str(
+            getattr(
+                snapshot,
+                "playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        song = getattr(
+            self,
+            "_spotify_playlist_dashboard_header_song",
+            None,
+        )
+
+        pending_id = str(
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_pending_playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        pending_identity = getattr(
+            self,
+            "_spotify_playlist_dashboard_pending_track_identity",
+            None,
+        )
+
+        pending_deadline = float(
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_pending_deadline",
+                0.0,
+            )
+            or 0.0
+        )
+
+        if pending_id:
+            pending_valid = bool(
+                snapshot_id
+                and pending_id
+                == snapshot_id
+                and time.monotonic()
+                <= pending_deadline
+            )
+
+            if not pending_valid:
+                DashboardPage._clear_spotify_playlist_dashboard_pending_playback(
+                    self
+                )
+
+            elif (
+                DashboardPage
+                ._spotify_playlist_dashboard_song_matches_identity(
+                    song,
+                    pending_identity,
+                )
+                and DashboardPage
+                ._spotify_playlist_dashboard_identity_is_unique(
+                    snapshot,
+                    pending_identity,
+                )
+            ):
+                self._spotify_playlist_dashboard_active_playlist_id = (
+                    pending_id
+                )
+
+                DashboardPage._clear_spotify_playlist_dashboard_pending_playback(
+                    self
+                )
+
+        active_id = str(
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_active_playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        active_truth = bool(
+            active_id
+            and snapshot_id
+            and active_id
+            == snapshot_id
+            and DashboardPage
+            ._spotify_playlist_dashboard_song_belongs_to_snapshot(
+                song,
+                snapshot,
+            )
+        )
+
+        if (
+            active_id
+            and not active_truth
+        ):
+            self._spotify_playlist_dashboard_active_playlist_id = ""
+
+        runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_playback_runtime",
+            None,
+        )
+
+        play_position = getattr(
+            runtime,
+            "play_playlist_position",
+            None,
+        )
+
+        tracks = tuple(
+            getattr(
+                snapshot,
+                "tracks",
+                (),
+            )
+            or ()
+        )
+
+        has_available_track = any(
+            bool(
+                getattr(
+                    track,
+                    "available",
+                    False,
+                )
+            )
+            for track
+            in tracks
+        )
+
+        enabled = bool(
+            snapshot_id
+            and has_available_track
+            and callable(
+                play_position
+            )
+            and not bool(
+                getattr(
+                    runtime,
+                    "busy",
+                    False,
+                )
+            )
+        )
+
+        playing = bool(
+            active_truth
+            and getattr(
+                song,
+                "playing",
+                False,
+            )
+        )
+
+        setter(
+            enabled=enabled,
+            playing=playing,
+        )
+
+    def request_spotify_playlist_dashboard_header_playback(
+        self,
+    ) -> bool:
+        DashboardPage.sync_spotify_playlist_dashboard_header_playback_state(
+            self
+        )
+
+        snapshot = (
+            DashboardPage
+            ._spotify_playlist_dashboard_current_snapshot(
+                self
+            )
+        )
+
+        playlist_id = str(
+            getattr(
+                snapshot,
+                "playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not playlist_id:
+            return False
+
+        runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_playback_runtime",
+            None,
+        )
+
+        if (
+            runtime is None
+            or bool(
+                getattr(
+                    runtime,
+                    "busy",
+                    False,
+                )
+            )
+        ):
+            return False
+
+        pending_id = str(
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_pending_playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        pending_deadline = float(
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_pending_deadline",
+                0.0,
+            )
+            or 0.0
+        )
+
+        if (
+            pending_id
+            == playlist_id
+            and time.monotonic()
+            <= pending_deadline
+        ):
+            return False
+
+        song = getattr(
+            self,
+            "_spotify_playlist_dashboard_header_song",
+            None,
+        )
+
+        active_id = str(
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_active_playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        active_truth = bool(
+            active_id
+            == playlist_id
+            and DashboardPage
+            ._spotify_playlist_dashboard_song_belongs_to_snapshot(
+                song,
+                snapshot,
+            )
+        )
+
+        if active_truth:
+            signal = getattr(
+                self,
+                "playback_control_requested",
+                None,
+            )
+
+            emitter = getattr(
+                signal,
+                "emit",
+                None,
+            )
+
+            if not callable(
+                emitter
+            ):
+                return False
+
+            emitter(
+                "toggle_play_pause",
+                str(
+                    getattr(
+                        song,
+                        "source_app",
+                        "",
+                    )
+                    or ""
+                ),
+                bool(
+                    getattr(
+                        song,
+                        "playing",
+                        False,
+                    )
+                ),
+            )
+
+            return True
+
+        available_tracks = [
+            track
+            for track in tuple(
+                getattr(
+                    snapshot,
+                    "tracks",
+                    (),
+                )
+                or ()
+            )
+            if bool(
+                getattr(
+                    track,
+                    "available",
+                    False,
+                )
+            )
+        ]
+
+        if not available_tracks:
+            return False
+
+        first_available = min(
+            available_tracks,
+            key=lambda track:
+            int(
+                getattr(
+                    track,
+                    "position",
+                    0,
+                )
+            ),
+        )
+
+        return bool(
+            DashboardPage
+            .play_spotify_playlist_dashboard_track(
+                self,
+                first_available,
+            )
+        )
+
+    def install_spotify_playlist_dashboard_header_playback(
+        self,
+        playback_runtime,
+    ) -> bool:
+        row_runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_playback_runtime",
+            None,
+        )
+
+        if (
+            row_runtime is None
+            or row_runtime
+            is not playback_runtime
+        ):
+            return False
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        if card is None:
+            return False
+
+        if (
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_header_card",
+                None,
+            )
+            is not card
+        ):
+            header_signal = getattr(
+                card,
+                "header_play_requested",
+                None,
+            )
+
+            snapshot_signal = getattr(
+                card,
+                "snapshot_changed",
+                None,
+            )
+
+            header_connect = getattr(
+                header_signal,
+                "connect",
+                None,
+            )
+
+            snapshot_connect = getattr(
+                snapshot_signal,
+                "connect",
+                None,
+            )
+
+            if (
+                not callable(
+                    header_connect
+                )
+                or not callable(
+                    snapshot_connect
+                )
+            ):
+                return False
+
+            header_connect(
+                lambda owner=self:
+                DashboardPage
+                .request_spotify_playlist_dashboard_header_playback(
+                    owner
+                )
+            )
+
+            snapshot_connect(
+                lambda owner=self:
+                DashboardPage
+                .sync_spotify_playlist_dashboard_header_playback_state(
+                    owner
+                )
+            )
+
+            self._spotify_playlist_dashboard_header_card = (
+                card
+            )
+
+        if (
+            getattr(
+                self,
+                "_spotify_playlist_dashboard_header_busy_runtime",
+                None,
+            )
+            is not playback_runtime
+        ):
+            busy_signal = getattr(
+                playback_runtime,
+                "busy_changed",
+                None,
+            )
+
+            busy_connect = getattr(
+                busy_signal,
+                "connect",
+                None,
+            )
+
+            if callable(
+                busy_connect
+            ):
+                busy_connect(
+                    lambda *_args, owner=self:
+                    DashboardPage
+                    .sync_spotify_playlist_dashboard_header_playback_state(
+                        owner
+                    )
+                )
+
+            self._spotify_playlist_dashboard_header_busy_runtime = (
+                playback_runtime
+            )
+
+        if not hasattr(
+            self,
+            "_spotify_playlist_dashboard_active_playlist_id",
+        ):
+            self._spotify_playlist_dashboard_active_playlist_id = ""
+
+        if not hasattr(
+            self,
+            "_spotify_playlist_dashboard_pending_playlist_id",
+        ):
+            DashboardPage._clear_spotify_playlist_dashboard_pending_playback(
+                self
+            )
+
+        if not hasattr(
+            self,
+            "_spotify_playlist_dashboard_header_song",
+        ):
+            self._spotify_playlist_dashboard_header_song = getattr(
+                self,
+                "song",
+                None,
+            )
+
+        DashboardPage.sync_spotify_playlist_dashboard_header_playback_state(
+            self
+        )
+
+        return True
+
     def play_spotify_playlist_dashboard_track(
         self,
         track,
@@ -6594,7 +7478,16 @@ class DashboardPage(QWidget):
         except Exception:
             return False
 
-        return result is not False
+        accepted = result is not False
+
+        if accepted:
+            DashboardPage._mark_spotify_playlist_dashboard_playback_pending(
+                self,
+                playlist_id,
+                track,
+            )
+
+        return accepted
 
 
     def _request_spotify_playlist_dashboard_summary_restore(

@@ -650,6 +650,8 @@ class SpotifyPlaylistDashboardCard(
     track_activated = pyqtSignal(
         object
     )
+    header_play_requested = pyqtSignal()
+    snapshot_changed = pyqtSignal()
 
     ARTWORK_SIZE = 118
 
@@ -910,6 +912,10 @@ class SpotifyPlaylistDashboardCard(
         self.play_button.setEnabled(
             False
         )
+        self.play_button.clicked.connect(
+            self._emit_header_play_requested
+        )
+
 
         right_column.addWidget(
             self.play_button,
@@ -1284,6 +1290,61 @@ class SpotifyPlaylistDashboardCard(
             self._track_rows
         )
 
+    def _emit_header_play_requested(
+        self,
+        checked=False,
+    ) -> bool:
+        del checked
+
+        if not self.play_button.isEnabled():
+            return False
+
+        self.header_play_requested.emit()
+
+        return True
+
+    def set_playback_state(
+        self,
+        *,
+        enabled: bool,
+        playing: bool,
+    ) -> None:
+        enabled = bool(
+            enabled
+        )
+
+        playing = bool(
+            playing
+        )
+
+        self.play_button.setEnabled(
+            enabled
+        )
+
+        self.play_button.setIcon(
+            self.style().standardIcon(
+                (
+                    QStyle.StandardPixmap.SP_MediaPause
+                    if playing
+                    else QStyle.StandardPixmap.SP_MediaPlay
+                )
+            )
+        )
+
+        label = (
+            "Pause playlist"
+            if playing
+            else "Play playlist"
+        )
+
+        self.play_button.setToolTip(
+            label
+        )
+
+        self.play_button.setAccessibleName(
+            label
+        )
+
     def set_snapshot(
         self,
         snapshot: SpotifyPlaylistDashboardSnapshot,
@@ -1373,6 +1434,7 @@ class SpotifyPlaylistDashboardCard(
         self._replace_tracks(
             snapshot.tracks
         )
+        self.snapshot_changed.emit()
 
     def clear_snapshot(
         self,
@@ -1394,6 +1456,7 @@ class SpotifyPlaylistDashboardCard(
         self._replace_tracks(
             ()
         )
+        self.snapshot_changed.emit()
 
     def set_artwork_pixmap(
         self,

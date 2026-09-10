@@ -1343,6 +1343,10 @@ class MainWindow(QMainWindow):
             self.spotify_playback_runtime
         )
 
+        self.dashboard_page.install_spotify_playlist_dashboard_header_playback(
+            self.spotify_playback_runtime
+        )
+
         self.settings_page.set_diagnostics_provider(
             self.collect_diagnostics
         )
@@ -2612,6 +2616,25 @@ class MainWindow(QMainWindow):
         self,
         song,
     ):
+        dashboard_page = getattr(
+            self,
+            "dashboard_page",
+            None,
+        )
+
+        playlist_song_handler = getattr(
+            dashboard_page,
+            "handle_spotify_playlist_dashboard_song_update",
+            None,
+        )
+
+        if callable(
+            playlist_song_handler
+        ):
+            playlist_song_handler(
+                song
+            )
+
         self.dashboard_page.restore_cached_song_artwork(
             song
         )
