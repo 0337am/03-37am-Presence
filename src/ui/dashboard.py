@@ -2949,6 +2949,11 @@ class DashboardPage(QWidget):
                 "quick_access_card",
                 None,
             ),
+            getattr(
+                self,
+                "spotify_playlist_card",
+                None,
+            ),
         }
 
         custom_card_widgets = (

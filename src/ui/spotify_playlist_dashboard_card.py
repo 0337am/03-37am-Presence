@@ -365,6 +365,7 @@ class SpotifyPlaylistDashboardTrackRow(
         )
 
         self.track = track
+        self._responsive_state = ""
 
         self.setObjectName(
             "spotifyPlaylistDashboardTrackRow"
@@ -610,6 +611,155 @@ class SpotifyPlaylistDashboardTrackRow(
 
         return True
 
+    @property
+    def responsive_state(
+        self,
+    ) -> str:
+        return self._responsive_state
+
+    def set_responsive_state(
+        self,
+        state: str,
+    ) -> bool:
+        checked = str(
+            state
+            or ""
+        ).strip().casefold()
+
+        if checked not in {
+            "compact",
+            "medium",
+            "large",
+        }:
+            checked = "large"
+
+        changed = (
+            checked
+            != self._responsive_state
+        )
+
+        self._responsive_state = (
+            checked
+        )
+
+        self.setProperty(
+            "responsiveState",
+            checked,
+        )
+
+        layout = self.layout()
+
+        for label in (
+            self.title_label,
+            self.artist_label,
+        ):
+            label.setMinimumWidth(
+                0
+            )
+
+            label.setSizePolicy(
+                QSizePolicy.Policy.Ignored,
+                QSizePolicy.Policy.Preferred,
+            )
+
+        if checked == "compact":
+            self.setMinimumHeight(
+                48
+            )
+
+            if layout is not None:
+                layout.setContentsMargins(
+                    6,
+                    4,
+                    6,
+                    4,
+                )
+
+                layout.setSpacing(
+                    6
+                )
+
+            self.number_label.setFixedWidth(
+                22
+            )
+
+            self.duration_label.setVisible(
+                False
+            )
+
+        elif checked == "medium":
+            self.setMinimumHeight(
+                52
+            )
+
+            if layout is not None:
+                layout.setContentsMargins(
+                    7,
+                    5,
+                    7,
+                    5,
+                )
+
+                layout.setSpacing(
+                    8
+                )
+
+            self.number_label.setFixedWidth(
+                24
+            )
+
+            self.duration_label.setFixedWidth(
+                54
+            )
+
+            self.duration_label.setVisible(
+                True
+            )
+
+        else:
+            self.setMinimumHeight(
+                54
+            )
+
+            if layout is not None:
+                layout.setContentsMargins(
+                    8,
+                    6,
+                    8,
+                    6,
+                )
+
+                layout.setSpacing(
+                    10
+                )
+
+            self.number_label.setFixedWidth(
+                26
+            )
+
+            self.duration_label.setFixedWidth(
+                58
+            )
+
+            self.duration_label.setVisible(
+                True
+            )
+
+        # Availability/local truth remains present at every density.
+        self.local_badge.setVisible(
+            bool(
+                self.track.is_local
+            )
+        )
+
+        self.unavailable_badge.setVisible(
+            not bool(
+                self.track.available
+            )
+        )
+
+        return changed
+
 
     def mousePressEvent(
         self,
@@ -719,6 +869,8 @@ class SpotifyPlaylistDashboardCard(
         self._snapshot = None
         self._track_rows = []
         self._current_position = None
+        self._responsive_state = ""
+        self._responsive_defaults = None
 
         self.setObjectName(
             "spotifyPlaylistDashboardCard"
@@ -1079,6 +1231,19 @@ class SpotifyPlaylistDashboardCard(
             self.scroll_area,
             1,
         )
+        self.setMinimumSize(
+            260,
+            220,
+        )
+
+        # Dashboard artwork is square-cropped before installation, so
+        # scaledContents lets the existing pixmap follow responsive
+        # square artwork sizes without any new image/network pipeline.
+        self.artwork_label.setScaledContents(
+            True
+        )
+
+        self._apply_responsive_state()
 
     def apply_theme(
         self,
@@ -1440,6 +1605,443 @@ class SpotifyPlaylistDashboardCard(
 
         return changed
 
+    @property
+    def responsive_state(
+        self,
+    ) -> str:
+        return self._responsive_state
+
+    def _capture_responsive_defaults(
+        self,
+    ) -> dict:
+        if isinstance(
+            self._responsive_defaults,
+            dict,
+        ):
+            return self._responsive_defaults
+
+        root = self.layout()
+        header_layout = self.header.layout()
+
+        if (
+            root is None
+            or header_layout is None
+        ):
+            self._responsive_defaults = {}
+            return self._responsive_defaults
+
+        root_margins = (
+            root.contentsMargins()
+        )
+
+        header_margins = (
+            header_layout.contentsMargins()
+        )
+
+        self._responsive_defaults = {
+            "root_margins": (
+                root_margins.left(),
+                root_margins.top(),
+                root_margins.right(),
+                root_margins.bottom(),
+            ),
+            "root_spacing":
+                root.spacing(),
+            "header_margins": (
+                header_margins.left(),
+                header_margins.top(),
+                header_margins.right(),
+                header_margins.bottom(),
+            ),
+            "header_spacing":
+                header_layout.spacing(),
+            "artwork_size": (
+                self.artwork_label.width(),
+                self.artwork_label.height(),
+            ),
+            "play_size": (
+                self.play_button.width(),
+                self.play_button.height(),
+            ),
+            "play_icon_size": (
+                self.play_button.iconSize().width(),
+                self.play_button.iconSize().height(),
+            ),
+            "owner_visible":
+                not self.owner_label.isHidden(),
+            "count_visible":
+                not self.count_label.isHidden(),
+            "more_visible":
+                not self.more_label.isHidden(),
+        }
+
+        return self._responsive_defaults
+
+    def _apply_responsive_to_row(
+        self,
+        row,
+    ) -> bool:
+        if not isinstance(
+            row,
+            SpotifyPlaylistDashboardTrackRow,
+        ):
+            return False
+
+        setter = getattr(
+            row,
+            "set_responsive_state",
+            None,
+        )
+
+        if not callable(
+            setter
+        ):
+            return False
+
+        return bool(
+            setter(
+                self._responsive_state
+                or "large"
+            )
+        )
+
+    def _apply_responsive_state(
+        self,
+    ) -> bool:
+        width = max(
+            0,
+            self.width(),
+        )
+
+        height = max(
+            0,
+            self.height(),
+        )
+
+        if (
+            width < 360
+            or height < 300
+        ):
+            state = "compact"
+
+        elif (
+            width < 520
+            or height < 420
+        ):
+            state = "medium"
+
+        else:
+            state = "large"
+
+        changed = (
+            state
+            != self._responsive_state
+        )
+
+        defaults = (
+            self._capture_responsive_defaults()
+        )
+
+        self._responsive_state = (
+            state
+        )
+
+        self.setProperty(
+            "responsiveState",
+            state,
+        )
+
+        root = self.layout()
+        header_layout = self.header.layout()
+
+        for label in (
+            self.title_label,
+            self.owner_label,
+            self.count_label,
+        ):
+            label.setMinimumWidth(
+                0
+            )
+
+            label.setSizePolicy(
+                QSizePolicy.Policy.Ignored,
+                QSizePolicy.Policy.Preferred,
+            )
+
+        if state == "compact":
+            if root is not None:
+                root.setContentsMargins(
+                    9,
+                    8,
+                    9,
+                    9,
+                )
+
+                root.setSpacing(
+                    7
+                )
+
+            if header_layout is not None:
+                header_layout.setContentsMargins(
+                    0,
+                    0,
+                    0,
+                    0,
+                )
+
+                header_layout.setSpacing(
+                    7
+                )
+
+            self.artwork_label.setFixedSize(
+                64,
+                64,
+            )
+
+            self.play_button.setFixedSize(
+                40,
+                40,
+            )
+
+            self.play_button.setIconSize(
+                QSize(
+                    18,
+                    18,
+                )
+            )
+
+            self.owner_label.setVisible(
+                False
+            )
+
+            self.count_label.setVisible(
+                True
+            )
+
+            self.more_label.setVisible(
+                False
+            )
+
+        elif state == "medium":
+            if root is not None:
+                root.setContentsMargins(
+                    11,
+                    10,
+                    11,
+                    11,
+                )
+
+                root.setSpacing(
+                    9
+                )
+
+            if header_layout is not None:
+                header_layout.setContentsMargins(
+                    0,
+                    0,
+                    0,
+                    0,
+                )
+
+                header_layout.setSpacing(
+                    9
+                )
+
+            self.artwork_label.setFixedSize(
+                84,
+                84,
+            )
+
+            self.play_button.setFixedSize(
+                46,
+                46,
+            )
+
+            self.play_button.setIconSize(
+                QSize(
+                    22,
+                    22,
+                )
+            )
+
+            self.owner_label.setVisible(
+                True
+            )
+
+            self.count_label.setVisible(
+                True
+            )
+
+            self.more_label.setVisible(
+                True
+            )
+
+        else:
+            root_margins = defaults.get(
+                "root_margins"
+            )
+
+            if (
+                root is not None
+                and isinstance(
+                    root_margins,
+                    tuple,
+                )
+                and len(
+                    root_margins
+                )
+                == 4
+            ):
+                root.setContentsMargins(
+                    *root_margins
+                )
+
+                root.setSpacing(
+                    int(
+                        defaults.get(
+                            "root_spacing",
+                            root.spacing(),
+                        )
+                    )
+                )
+
+            header_margins = defaults.get(
+                "header_margins"
+            )
+
+            if (
+                header_layout is not None
+                and isinstance(
+                    header_margins,
+                    tuple,
+                )
+                and len(
+                    header_margins
+                )
+                == 4
+            ):
+                header_layout.setContentsMargins(
+                    *header_margins
+                )
+
+                header_layout.setSpacing(
+                    int(
+                        defaults.get(
+                            "header_spacing",
+                            header_layout.spacing(),
+                        )
+                    )
+                )
+
+            artwork_size = defaults.get(
+                "artwork_size",
+                (
+                    112,
+                    112,
+                ),
+            )
+
+            self.artwork_label.setFixedSize(
+                int(
+                    artwork_size[
+                        0
+                    ]
+                ),
+                int(
+                    artwork_size[
+                        1
+                    ]
+                ),
+            )
+
+            play_size = defaults.get(
+                "play_size",
+                (
+                    52,
+                    52,
+                ),
+            )
+
+            self.play_button.setFixedSize(
+                int(
+                    play_size[
+                        0
+                    ]
+                ),
+                int(
+                    play_size[
+                        1
+                    ]
+                ),
+            )
+
+            icon_size = defaults.get(
+                "play_icon_size",
+                (
+                    24,
+                    24,
+                ),
+            )
+
+            self.play_button.setIconSize(
+                QSize(
+                    int(
+                        icon_size[
+                            0
+                        ]
+                    ),
+                    int(
+                        icon_size[
+                            1
+                        ]
+                    ),
+                )
+            )
+
+            self.owner_label.setVisible(
+                bool(
+                    defaults.get(
+                        "owner_visible",
+                        True,
+                    )
+                )
+            )
+
+            self.count_label.setVisible(
+                bool(
+                    defaults.get(
+                        "count_visible",
+                        True,
+                    )
+                )
+            )
+
+            self.more_label.setVisible(
+                bool(
+                    defaults.get(
+                        "more_visible",
+                        True,
+                    )
+                )
+            )
+
+        for row in self._track_rows:
+            self._apply_responsive_to_row(
+                row
+            )
+
+        return changed
+
+    def resizeEvent(
+        self,
+        event,
+    ) -> None:
+        super().resizeEvent(
+            event
+        )
+
+        self._apply_responsive_state()
+
     def set_playback_state(
         self,
         *,
@@ -1739,6 +2341,9 @@ class SpotifyPlaylistDashboardCard(
                 self._track_rows.append(
                     row
                 )
+                self._apply_responsive_to_row(
+                    row
+                )
                 self._apply_current_to_row(
                     row
                 )
@@ -1831,6 +2436,9 @@ class SpotifyPlaylistDashboardCard(
                 row.hide()
 
                 self._track_rows.append(
+                    row
+                )
+                self._apply_responsive_to_row(
                     row
                 )
                 self._apply_current_to_row(
