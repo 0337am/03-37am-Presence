@@ -6767,6 +6767,65 @@ class DashboardPage(QWidget):
             == 1
         )
 
+    @staticmethod
+    def _spotify_playlist_dashboard_current_track_position(
+        song,
+        snapshot,
+    ) -> int | None:
+        if not (
+            DashboardPage
+            ._spotify_playlist_dashboard_song_belongs_to_snapshot(
+                song,
+                snapshot,
+            )
+        ):
+            return None
+
+        for track in tuple(
+            getattr(
+                snapshot,
+                "tracks",
+                (),
+            )
+            or ()
+        ):
+            identity = (
+                DashboardPage
+                ._spotify_playlist_dashboard_track_identity(
+                    track
+                )
+            )
+
+            if (
+                DashboardPage
+                ._spotify_playlist_dashboard_song_matches_identity(
+                    song,
+                    identity,
+                )
+            ):
+                position = getattr(
+                    track,
+                    "position",
+                    None,
+                )
+
+                if (
+                    isinstance(
+                        position,
+                        bool,
+                    )
+                    or not isinstance(
+                        position,
+                        int,
+                    )
+                    or position < 0
+                ):
+                    return None
+
+                return position
+
+        return None
+
     def _clear_spotify_playlist_dashboard_pending_playback(
         self,
     ) -> None:
@@ -7050,6 +7109,29 @@ class DashboardPage(QWidget):
             enabled=enabled,
             playing=playing,
         )
+        current_position = None
+
+        if active_truth:
+            current_position = (
+                DashboardPage
+                ._spotify_playlist_dashboard_current_track_position(
+                    song,
+                    snapshot,
+                )
+            )
+
+        current_setter = getattr(
+            card,
+            "set_current_position",
+            None,
+        )
+
+        if callable(
+            current_setter
+        ):
+            current_setter(
+                current_position
+            )
 
     def request_spotify_playlist_dashboard_header_playback(
         self,

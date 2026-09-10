@@ -556,6 +556,59 @@ class SpotifyPlaylistDashboardTrackRow(
                 Qt.WidgetAttribute.WA_TransparentForMouseEvents,
                 True,
             )
+        self.current = False
+
+        self.setProperty(
+            "current",
+            False,
+        )
+
+        self.number_label.setProperty(
+            "current",
+            False,
+        )
+
+        self.title_label.setProperty(
+            "current",
+            False,
+        )
+
+    def set_current(
+        self,
+        current: bool,
+    ) -> bool:
+        state = bool(
+            current
+        )
+
+        if state == self.current:
+            return False
+
+        self.current = state
+
+        for widget in (
+            self,
+            self.number_label,
+            self.title_label,
+        ):
+            widget.setProperty(
+                "current",
+                state,
+            )
+
+            style = widget.style()
+
+            style.unpolish(
+                widget
+            )
+
+            style.polish(
+                widget
+            )
+
+            widget.update()
+
+        return True
 
 
     def mousePressEvent(
@@ -665,6 +718,7 @@ class SpotifyPlaylistDashboardCard(
 
         self._snapshot = None
         self._track_rows = []
+        self._current_position = None
 
         self.setObjectName(
             "spotifyPlaylistDashboardCard"
@@ -1272,6 +1326,19 @@ class SpotifyPlaylistDashboardCard(
             }}
             """
         )
+        self.setStyleSheet(
+            self.styleSheet()
+            + f"""
+            QFrame#spotifyPlaylistDashboardTrackRow[current="true"] {{
+                border-color: {accent};
+            }}
+
+            QLabel#spotifyPlaylistDashboardTrackNumber[current="true"],
+            QLabel#spotifyPlaylistDashboardTrackTitle[current="true"] {{
+                color: {accent};
+            }}
+            """
+        )
 
     @property
     def snapshot(
@@ -1302,6 +1369,76 @@ class SpotifyPlaylistDashboardCard(
         self.header_play_requested.emit()
 
         return True
+
+    @property
+    def current_position(
+        self,
+    ) -> int | None:
+        return self._current_position
+
+    def _apply_current_to_row(
+        self,
+        row,
+    ) -> bool:
+        if not isinstance(
+            row,
+            SpotifyPlaylistDashboardTrackRow,
+        ):
+            return False
+
+        position = getattr(
+            row.track,
+            "position",
+            None,
+        )
+
+        return row.set_current(
+            bool(
+                self._current_position
+                is not None
+                and position
+                == self._current_position
+            )
+        )
+
+    def set_current_position(
+        self,
+        position,
+    ) -> bool:
+        checked_position = None
+
+        if (
+            position is not None
+            and not isinstance(
+                position,
+                bool,
+            )
+            and isinstance(
+                position,
+                int,
+            )
+            and position >= 0
+        ):
+            checked_position = (
+                position
+            )
+
+        changed = bool(
+            checked_position
+            != self._current_position
+        )
+
+        self._current_position = (
+            checked_position
+        )
+
+        for row in self._track_rows:
+            if self._apply_current_to_row(
+                row
+            ):
+                changed = True
+
+        return changed
 
     def set_playback_state(
         self,
@@ -1395,6 +1532,28 @@ class SpotifyPlaylistDashboardCard(
             == previous_tracks
         )
 
+        previous_snapshot = getattr(
+            self,
+            "_snapshot",
+            None,
+        )
+
+        previous_playlist_id = str(
+            getattr(
+                previous_snapshot,
+                "playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            previous_playlist_id
+            and previous_playlist_id
+            != snapshot.playlist_id
+        ):
+            self._current_position = None
+
         self._snapshot = snapshot
 
         self.title_label.setText(
@@ -1439,6 +1598,8 @@ class SpotifyPlaylistDashboardCard(
     def clear_snapshot(
         self,
     ) -> None:
+        self._current_position = None
+
         self._snapshot = None
 
         self.title_label.setText(
@@ -1578,6 +1739,9 @@ class SpotifyPlaylistDashboardCard(
                 self._track_rows.append(
                     row
                 )
+                self._apply_current_to_row(
+                    row
+                )
 
                 self.track_layout.addWidget(
                     row
@@ -1667,6 +1831,9 @@ class SpotifyPlaylistDashboardCard(
                 row.hide()
 
                 self._track_rows.append(
+                    row
+                )
+                self._apply_current_to_row(
                     row
                 )
 
