@@ -1312,6 +1312,33 @@ class MainWindow(QMainWindow):
             ),
         )
 
+
+        spotify_dashboard_artwork_loader = getattr(
+            getattr(
+                self.spotify_page,
+                "search_page",
+                None,
+            ),
+            "artwork_loader",
+            None,
+        )
+
+        if spotify_dashboard_artwork_loader is None:
+            spotify_dashboard_artwork_loader = getattr(
+                getattr(
+                    self.spotify_page,
+                    "playlist_detail",
+                    None,
+                ),
+                "artwork_loader",
+                None,
+            )
+
+        self.dashboard_page.install_spotify_playlist_dashboard_content_sources(
+            self.spotify_playlist_runtime,
+            spotify_dashboard_artwork_loader,
+        )
+
         self.settings_page.set_diagnostics_provider(
             self.collect_diagnostics
         )
@@ -2496,6 +2523,11 @@ class MainWindow(QMainWindow):
         self.spotify_playlist_runtime.playlists_ready.connect(
             self._handle_quick_access_spotify_playlists_ready
         )
+
+
+        self.dashboard_page.prime_spotify_playlist_dashboard_catalog()
+
+        self.dashboard_page.restore_spotify_playlist_dashboard_assignment()
         self.presence_page.presets_changed.connect(
             self.refresh_dashboard_quick_access
         )

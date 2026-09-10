@@ -182,6 +182,14 @@ from src.ui.spotify_playlist_dashboard_card import (
     SpotifyPlaylistDashboardSnapshot,
 )
 
+from src.spotify.qt_playlist_runtime import (
+    OPERATION_PLAYLIST_ITEMS,
+)
+from src.ui.spotify_playlist_dashboard_card import (
+    MAX_RENDERED_TRACKS,
+    SpotifyPlaylistDashboardTrack,
+)
+
 
 SPOTIFY_PLAYLIST_DASHBOARD_CARD_CONFIG_ID = (
     "spotify_playlist_card.dashboard"
@@ -6090,7 +6098,7 @@ class DashboardPage(QWidget):
         return None
 
 
-    def refresh_spotify_playlist_dashboard_card(
+    def _refresh_spotify_playlist_dashboard_header(
         self,
     ):
         card = getattr(
@@ -6197,6 +6205,1611 @@ class DashboardPage(QWidget):
         )
 
         return True
+
+
+    def install_spotify_playlist_dashboard_content_sources(
+        self,
+        runtime,
+        artwork_loader,
+    ) -> bool:
+        load_items = getattr(
+            runtime,
+            "load_playlist_items",
+            None,
+        )
+
+        if not callable(
+            load_items
+        ):
+            raise TypeError(
+                (
+                    "runtime must provide a callable "
+                    "load_playlist_items method"
+                )
+            )
+
+        playlist_items_ready = getattr(
+            runtime,
+            "playlist_items_ready",
+            None,
+        )
+
+        runtime_failed = getattr(
+            runtime,
+            "failed",
+            None,
+        )
+
+        operation_finished = getattr(
+            runtime,
+            "operation_finished",
+            None,
+        )
+
+        for (
+            signal_name,
+            signal,
+        ) in (
+            (
+                "playlist_items_ready",
+                playlist_items_ready,
+            ),
+            (
+                "failed",
+                runtime_failed,
+            ),
+            (
+                "operation_finished",
+                operation_finished,
+            ),
+        ):
+            if not callable(
+                getattr(
+                    signal,
+                    "connect",
+                    None,
+                )
+            ):
+                raise TypeError(
+                    "runtime must expose a "
+                    + signal_name
+                    + " signal"
+                )
+
+        if not callable(
+            getattr(
+                artwork_loader,
+                "request",
+                None,
+            )
+        ):
+            raise TypeError(
+                (
+                    "artwork_loader must provide "
+                    "a callable request method"
+                )
+            )
+
+        artwork_ready = getattr(
+            artwork_loader,
+            "artwork_ready",
+            None,
+        )
+
+        artwork_failed = getattr(
+            artwork_loader,
+            "artwork_failed",
+            None,
+        )
+
+        for (
+            signal_name,
+            signal,
+        ) in (
+            (
+                "artwork_ready",
+                artwork_ready,
+            ),
+            (
+                "artwork_failed",
+                artwork_failed,
+            ),
+        ):
+            if not callable(
+                getattr(
+                    signal,
+                    "connect",
+                    None,
+                )
+            ):
+                raise TypeError(
+                    (
+                        "artwork_loader must expose "
+                        "an "
+                        + signal_name
+                        + " signal"
+                    )
+                )
+
+        if bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_sources_installed"
+                ),
+                False,
+            )
+        ):
+            same_runtime = (
+                getattr(
+                    self,
+                    (
+                        "_spotify_playlist_dashboard_"
+                        "runtime"
+                    ),
+                    None,
+                )
+                is runtime
+            )
+
+            same_loader = (
+                getattr(
+                    self,
+                    (
+                        "_spotify_playlist_dashboard_"
+                        "artwork_loader"
+                    ),
+                    None,
+                )
+                is artwork_loader
+            )
+
+            if (
+                same_runtime
+                and same_loader
+            ):
+                return False
+
+            raise RuntimeError(
+                (
+                    "Spotify Playlist Dashboard "
+                    "content sources already installed."
+                )
+            )
+
+        self._spotify_playlist_dashboard_runtime = (
+            runtime
+        )
+
+        self._spotify_playlist_dashboard_artwork_loader = (
+            artwork_loader
+        )
+
+        self._spotify_playlist_dashboard_content_playlist_id = ""
+
+        self._spotify_playlist_dashboard_tracks_by_position = {}
+
+        self._spotify_playlist_dashboard_requested_offset = None
+
+        self._spotify_playlist_dashboard_pending_offset = None
+
+        self._spotify_playlist_dashboard_total = None
+
+        self._spotify_playlist_dashboard_active_artwork_reference = ""
+
+
+        self._spotify_playlist_dashboard_summary_restore_pending = False
+
+        playlist_items_ready.connect(
+            self.handle_spotify_playlist_dashboard_items_ready
+        )
+
+        runtime_failed.connect(
+            self.handle_spotify_playlist_dashboard_runtime_failure
+        )
+
+        operation_finished.connect(
+            self.handle_spotify_playlist_dashboard_operation_finished
+        )
+
+        artwork_ready.connect(
+            self.handle_spotify_playlist_dashboard_artwork_ready
+        )
+
+        artwork_failed.connect(
+            self.handle_spotify_playlist_dashboard_artwork_failed
+        )
+
+        self._spotify_playlist_dashboard_content_sources_installed = (
+            True
+        )
+
+        return True
+
+
+    def _request_spotify_playlist_dashboard_summary_restore(
+        self,
+    ) -> bool:
+        if not bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "summary_restore_pending"
+                ),
+                False,
+            )
+        ):
+            return False
+
+        runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_runtime",
+            None,
+        )
+
+        if runtime is None:
+            self._spotify_playlist_dashboard_summary_restore_pending = (
+                False
+            )
+
+            return False
+
+        if bool(
+            getattr(
+                runtime,
+                "busy",
+                False,
+            )
+        ):
+            return False
+
+        load_playlists = getattr(
+            runtime,
+            "load_playlists",
+            None,
+        )
+
+        if not callable(
+            load_playlists
+        ):
+            self._spotify_playlist_dashboard_summary_restore_pending = (
+                False
+            )
+
+            return False
+
+        try:
+            load_playlists()
+
+        except Exception:
+            self._spotify_playlist_dashboard_summary_restore_pending = (
+                False
+            )
+
+            return False
+
+        return True
+
+    def prime_spotify_playlist_dashboard_catalog(
+        self,
+    ) -> bool:
+        """Load shared playlist summaries independently of the Spotify tab."""
+
+        if not bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_sources_installed"
+                ),
+                False,
+            )
+        ):
+            return False
+
+        live_playlists = getattr(
+            self,
+            "_spotify_quick_access_playlists",
+            {},
+        )
+
+        if (
+            isinstance(
+                live_playlists,
+                dict,
+            )
+            and live_playlists
+        ):
+            self._spotify_playlist_dashboard_summary_restore_pending = (
+                False
+            )
+
+            return True
+
+        runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_runtime",
+            None,
+        )
+
+        if runtime is None:
+            return False
+
+        self._spotify_playlist_dashboard_summary_restore_pending = (
+            True
+        )
+
+        started = (
+            self
+            ._request_spotify_playlist_dashboard_summary_restore()
+        )
+
+        return bool(
+            started
+            or getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "summary_restore_pending"
+                ),
+                False,
+            )
+        )
+
+    def restore_spotify_playlist_dashboard_assignment(
+        self,
+    ) -> bool:
+        if not bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_sources_installed"
+                ),
+                False,
+            )
+        ):
+            return False
+
+        config_getter = getattr(
+            self,
+            "_spotify_playlist_dashboard_config",
+            None,
+        )
+
+        if not callable(
+            config_getter
+        ):
+            return False
+
+        try:
+            config = config_getter()
+
+        except Exception:
+            return False
+
+        playlist_id = str(
+            getattr(
+                config,
+                "playlist_id",
+                "",
+            )
+            if config is not None
+            else ""
+        ).strip()
+
+        if not playlist_id:
+            return False
+
+        # The shared playlist summary catalogue is primed independently
+        # of Spotify-page navigation. If a request is already in flight,
+        # the existing operation_finished path will continue the saved
+        # Dashboard playlist load when the runtime becomes available.
+        self.prime_spotify_playlist_dashboard_catalog()
+
+        self.refresh_spotify_playlist_dashboard_card(
+            reload_content=True
+        )
+
+        return True
+
+    def _reset_spotify_playlist_dashboard_content(
+        self,
+        playlist_id: str = "",
+    ) -> None:
+        self._spotify_playlist_dashboard_content_playlist_id = str(
+            playlist_id
+            or ""
+        ).strip()
+
+        self._spotify_playlist_dashboard_tracks_by_position = {}
+
+        self._spotify_playlist_dashboard_requested_offset = None
+
+        self._spotify_playlist_dashboard_pending_offset = None
+
+        self._spotify_playlist_dashboard_total = None
+
+        self._spotify_playlist_dashboard_active_artwork_reference = ""
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        clear_artwork = getattr(
+            card,
+            "clear_artwork",
+            None,
+        )
+
+        if callable(
+            clear_artwork
+        ):
+            clear_artwork()
+
+    def _spotify_playlist_dashboard_rendered_tracks(
+        self,
+    ) -> tuple:
+        values = getattr(
+            self,
+            (
+                "_spotify_playlist_dashboard_"
+                "tracks_by_position"
+            ),
+            {},
+        )
+
+        if not isinstance(
+            values,
+            dict,
+        ):
+            return ()
+
+        return tuple(
+            values[
+                position
+            ]
+            for position
+            in sorted(
+                values
+            )
+            if (
+                isinstance(
+                    position,
+                    int,
+                )
+                and not isinstance(
+                    position,
+                    bool,
+                )
+                and 0
+                <= position
+                < MAX_RENDERED_TRACKS
+            )
+        )
+
+    def _render_spotify_playlist_dashboard_content(
+        self,
+    ) -> bool:
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        if card is None:
+            return False
+
+        snapshot = getattr(
+            card,
+            "snapshot",
+            None,
+        )
+
+        if snapshot is None:
+            snapshot = getattr(
+                card,
+                "_snapshot",
+                None,
+            )
+
+        if snapshot is None:
+            return False
+
+        active_id = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_playlist_id"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        snapshot_id = str(
+            getattr(
+                snapshot,
+                "playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            active_id
+            and snapshot_id
+            != active_id
+        ):
+            return False
+
+        tracks = (
+            self
+            ._spotify_playlist_dashboard_rendered_tracks()
+        )
+
+        summary_count = getattr(
+            snapshot,
+            "track_count",
+            0,
+        )
+
+        if (
+            isinstance(
+                summary_count,
+                bool,
+            )
+            or not isinstance(
+                summary_count,
+                int,
+            )
+            or summary_count < 0
+        ):
+            summary_count = 0
+
+        resolved_total = getattr(
+            self,
+            "_spotify_playlist_dashboard_total",
+            0,
+        )
+
+        if (
+            isinstance(
+                resolved_total,
+                bool,
+            )
+            or not isinstance(
+                resolved_total,
+                int,
+            )
+            or resolved_total < 0
+        ):
+            resolved_total = 0
+
+        raw_position_count = max(
+            (
+                track.position
+                + 1
+                for track
+                in tracks
+            ),
+            default=0,
+        )
+
+        replacement = (
+            SpotifyPlaylistDashboardSnapshot
+            .build(
+                playlist_id=(
+                    snapshot.playlist_id
+                ),
+                title=(
+                    snapshot.title
+                ),
+                owner=(
+                    snapshot.owner
+                ),
+                track_count=max(
+                    summary_count,
+                    resolved_total,
+                    raw_position_count,
+                ),
+                tracks=tracks,
+            )
+        )
+
+        card.set_snapshot(
+            replacement
+        )
+
+        return True
+
+    def _spotify_playlist_dashboard_artwork_reference_for_playlist(
+        self,
+        playlist_id: str,
+    ) -> str:
+        summary_getter = getattr(
+            self,
+            "_spotify_playlist_dashboard_summary",
+            None,
+        )
+
+        if not callable(
+            summary_getter
+        ):
+            return ""
+
+        try:
+            summary = summary_getter(
+                playlist_id
+            )
+
+        except Exception:
+            return ""
+
+        if summary is None:
+            return ""
+
+        for attribute in (
+            "artwork_reference",
+            "artwork_url",
+            "image_url",
+        ):
+            reference = str(
+                getattr(
+                    summary,
+                    attribute,
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if reference:
+                return reference
+
+        return ""
+
+    def _request_spotify_playlist_dashboard_artwork(
+        self,
+        playlist_id: str,
+    ) -> bool:
+        loader = getattr(
+            self,
+            (
+                "_spotify_playlist_dashboard_"
+                "artwork_loader"
+            ),
+            None,
+        )
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        if (
+            loader is None
+            or card is None
+        ):
+            return False
+
+        reference = (
+            self
+            ._spotify_playlist_dashboard_artwork_reference_for_playlist(
+                playlist_id
+            )
+        )
+
+        previous = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "active_artwork_reference"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            reference
+            and reference == previous
+        ):
+            return False
+
+        self._spotify_playlist_dashboard_active_artwork_reference = (
+            reference
+        )
+
+        clear_artwork = getattr(
+            card,
+            "clear_artwork",
+            None,
+        )
+
+        if callable(
+            clear_artwork
+        ):
+            clear_artwork()
+
+        if not reference:
+            return False
+
+        try:
+            loader.request(
+                reference
+            )
+
+        except Exception:
+            return False
+
+        return True
+
+    def _request_spotify_playlist_dashboard_content_page(
+        self,
+        offset: int,
+    ) -> bool:
+        if (
+            isinstance(
+                offset,
+                bool,
+            )
+            or not isinstance(
+                offset,
+                int,
+            )
+            or offset < 0
+            or offset
+            >= MAX_RENDERED_TRACKS
+        ):
+            return False
+
+        playlist_id = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_playlist_id"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not playlist_id:
+            return False
+
+        runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_runtime",
+            None,
+        )
+
+        load_items = getattr(
+            runtime,
+            "load_playlist_items",
+            None,
+        )
+
+        if not callable(
+            load_items
+        ):
+            return False
+
+        if bool(
+            getattr(
+                runtime,
+                "busy",
+                False,
+            )
+        ):
+            self._spotify_playlist_dashboard_pending_offset = (
+                offset
+            )
+
+            return False
+
+        self._spotify_playlist_dashboard_requested_offset = (
+            offset
+        )
+
+        self._spotify_playlist_dashboard_pending_offset = (
+            None
+        )
+
+        try:
+            load_items(
+                playlist_id,
+                limit=50,
+                offset=offset,
+            )
+
+        except Exception:
+            self._spotify_playlist_dashboard_requested_offset = (
+                None
+            )
+
+            self._spotify_playlist_dashboard_pending_offset = (
+                offset
+            )
+
+            return False
+
+        return True
+
+    def refresh_spotify_playlist_dashboard_card(
+        self,
+        *,
+        reload_content: bool = False,
+    ):
+        """
+        Preserve the accepted B04B return contract exactly.
+
+        B04C content work is additive side-effect behavior only.
+        """
+
+        header_refresh = getattr(
+            self,
+            "_refresh_spotify_playlist_dashboard_header",
+            None,
+        )
+
+        if callable(
+            header_refresh
+        ):
+            header_result = (
+                header_refresh()
+            )
+
+        else:
+            header_result = (
+                DashboardPage
+                ._refresh_spotify_playlist_dashboard_header(
+                    self
+                )
+            )
+
+        if not bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_sources_installed"
+                ),
+                False,
+            )
+        ):
+            return header_result
+
+        config_getter = getattr(
+            self,
+            "_spotify_playlist_dashboard_config",
+            None,
+        )
+
+        if callable(
+            config_getter
+        ):
+            try:
+                config = (
+                    config_getter()
+                )
+
+            except Exception:
+                config = None
+
+        else:
+            try:
+                config = (
+                    DashboardPage
+                    ._spotify_playlist_dashboard_config(
+                        self
+                    )
+                )
+
+            except Exception:
+                config = None
+
+        if config is None:
+            self._reset_spotify_playlist_dashboard_content()
+            return header_result
+
+        playlist_id = str(
+            getattr(
+                config,
+                "playlist_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not playlist_id:
+            self._reset_spotify_playlist_dashboard_content()
+            return header_result
+
+        previous_id = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_playlist_id"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        playlist_changed = (
+            previous_id
+            != playlist_id
+        )
+
+        if (
+            playlist_changed
+            or reload_content
+        ):
+            self._reset_spotify_playlist_dashboard_content(
+                playlist_id
+            )
+
+        self._render_spotify_playlist_dashboard_content()
+
+        self._request_spotify_playlist_dashboard_artwork(
+            playlist_id
+        )
+
+        if (
+            playlist_changed
+            or reload_content
+        ):
+            self._request_spotify_playlist_dashboard_content_page(
+                0
+            )
+
+        return header_result
+
+    def handle_spotify_playlist_dashboard_items_ready(
+        self,
+        playlist_id: str,
+        result,
+    ) -> None:
+        active_id = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_playlist_id"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            not active_id
+            or str(
+                playlist_id
+                or ""
+            ).strip()
+            != active_id
+        ):
+            return
+
+        requested_offset = getattr(
+            self,
+            (
+                "_spotify_playlist_dashboard_"
+                "requested_offset"
+            ),
+            None,
+        )
+
+        if requested_offset is None:
+            return
+
+        if not bool(
+            getattr(
+                result,
+                "ready",
+                False,
+            )
+        ):
+            self._spotify_playlist_dashboard_requested_offset = (
+                None
+            )
+
+            self._spotify_playlist_dashboard_pending_offset = (
+                None
+            )
+
+            return
+
+        page = getattr(
+            result,
+            "resolved_page",
+            None,
+        )
+
+        if page is None:
+            self._spotify_playlist_dashboard_requested_offset = (
+                None
+            )
+
+            self._spotify_playlist_dashboard_pending_offset = (
+                None
+            )
+
+            return
+
+        page_offset = getattr(
+            page,
+            "offset",
+            None,
+        )
+
+        if (
+            isinstance(
+                page_offset,
+                bool,
+            )
+            or not isinstance(
+                page_offset,
+                int,
+            )
+            or page_offset
+            != requested_offset
+        ):
+            self._spotify_playlist_dashboard_requested_offset = (
+                None
+            )
+
+            self._spotify_playlist_dashboard_pending_offset = (
+                None
+            )
+
+            return
+
+        self._spotify_playlist_dashboard_requested_offset = (
+            None
+        )
+
+        page_total = getattr(
+            page,
+            "total",
+            None,
+        )
+
+        if (
+            isinstance(
+                page_total,
+                int,
+            )
+            and not isinstance(
+                page_total,
+                bool,
+            )
+            and page_total >= 0
+        ):
+            self._spotify_playlist_dashboard_total = (
+                page_total
+            )
+
+        items = getattr(
+            page,
+            "items",
+            (),
+        )
+
+        if not isinstance(
+            items,
+            (
+                tuple,
+                list,
+            ),
+        ):
+            items = ()
+
+        tracks = getattr(
+            self,
+            (
+                "_spotify_playlist_dashboard_"
+                "tracks_by_position"
+            ),
+            None,
+        )
+
+        if not isinstance(
+            tracks,
+            dict,
+        ):
+            tracks = {}
+
+            self._spotify_playlist_dashboard_tracks_by_position = (
+                tracks
+            )
+
+        for item in items:
+            position = getattr(
+                item,
+                "position",
+                None,
+            )
+
+            if (
+                isinstance(
+                    position,
+                    bool,
+                )
+                or not isinstance(
+                    position,
+                    int,
+                )
+                or position < 0
+                or position
+                >= MAX_RENDERED_TRACKS
+            ):
+                continue
+
+            unified = getattr(
+                item,
+                "unified_track",
+                None,
+            )
+
+            if unified is None:
+                continue
+
+            title = str(
+                getattr(
+                    unified,
+                    "title",
+                    "",
+                )
+                or "Unknown track"
+            ).strip()
+
+            artist_value = getattr(
+                unified,
+                "artist",
+                None,
+            )
+
+            if not artist_value:
+                artist_value = getattr(
+                    unified,
+                    "artists",
+                    "",
+                )
+
+            if isinstance(
+                artist_value,
+                (
+                    tuple,
+                    list,
+                ),
+            ):
+                artist = ", ".join(
+                    str(
+                        value
+                    ).strip()
+                    for value
+                    in artist_value
+                    if str(
+                        value
+                    ).strip()
+                )
+
+            else:
+                artist = str(
+                    artist_value
+                    or "Unknown artist"
+                ).strip()
+
+            if not artist:
+                artist = "Unknown artist"
+
+            duration_ms = getattr(
+                unified,
+                "duration_ms",
+                0,
+            )
+
+            if (
+                isinstance(
+                    duration_ms,
+                    bool,
+                )
+                or not isinstance(
+                    duration_ms,
+                    int,
+                )
+                or duration_ms < 0
+            ):
+                duration_ms = 0
+
+            is_local = bool(
+                getattr(
+                    item,
+                    "is_local",
+                    False,
+                )
+            )
+
+            if is_local:
+                available = (
+                    getattr(
+                        item,
+                        "local_available",
+                        None,
+                    )
+                    is True
+                )
+
+            else:
+                available = bool(
+                    getattr(
+                        unified,
+                        "playable",
+                        True,
+                    )
+                )
+
+            try:
+                dashboard_track = (
+                    SpotifyPlaylistDashboardTrack(
+                        position=position,
+                        title=title,
+                        artists=artist,
+                        duration_seconds=(
+                            duration_ms
+                            // 1000
+                        ),
+                        is_local=is_local,
+                        available=available,
+                    )
+                )
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            tracks[
+                position
+            ] = dashboard_track
+
+        self._render_spotify_playlist_dashboard_content()
+
+        page_limit = getattr(
+            page,
+            "limit",
+            None,
+        )
+
+        if (
+            isinstance(
+                page_limit,
+                bool,
+            )
+            or not isinstance(
+                page_limit,
+                int,
+            )
+            or page_limit <= 0
+        ):
+            self._spotify_playlist_dashboard_pending_offset = (
+                None
+            )
+
+            return
+
+        next_offset = (
+            page_offset
+            + page_limit
+        )
+
+        total = getattr(
+            self,
+            "_spotify_playlist_dashboard_total",
+            0,
+        )
+
+        if (
+            isinstance(
+                total,
+                bool,
+            )
+            or not isinstance(
+                total,
+                int,
+            )
+            or total < 0
+        ):
+            total = 0
+
+        if (
+            next_offset
+            > page_offset
+            and next_offset
+            < total
+            and next_offset
+            < MAX_RENDERED_TRACKS
+        ):
+            self._spotify_playlist_dashboard_pending_offset = (
+                next_offset
+            )
+
+        else:
+            self._spotify_playlist_dashboard_pending_offset = (
+                None
+            )
+
+    def handle_spotify_playlist_dashboard_runtime_failure(
+        self,
+        operation: str,
+        target: str,
+        error_code: str,
+        message: str,
+    ) -> None:
+        del error_code
+        del message
+
+        if (
+            operation
+            != OPERATION_PLAYLIST_ITEMS
+        ):
+            return
+
+        active_id = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "content_playlist_id"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            not active_id
+            or str(
+                target
+                or ""
+            ).strip()
+            != active_id
+        ):
+            return
+
+        if (
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "requested_offset"
+                ),
+                None,
+            )
+            is None
+        ):
+            return
+
+        self._spotify_playlist_dashboard_requested_offset = (
+            None
+        )
+
+        self._spotify_playlist_dashboard_pending_offset = (
+            None
+        )
+
+    def handle_spotify_playlist_dashboard_operation_finished(
+        self,
+        operation: str,
+        target: str,
+    ) -> None:
+        del target
+
+        runtime = getattr(
+            self,
+            "_spotify_playlist_dashboard_runtime",
+            None,
+        )
+
+        summary_pending = bool(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "summary_restore_pending"
+                ),
+                False,
+            )
+        )
+
+        if summary_pending:
+            if (
+                str(
+                    operation
+                    or ""
+                ).strip()
+                == "playlists"
+            ):
+                self._spotify_playlist_dashboard_summary_restore_pending = (
+                    False
+                )
+
+            else:
+                if (
+                    runtime is not None
+                    and not bool(
+                        getattr(
+                            runtime,
+                            "busy",
+                            False,
+                        )
+                    )
+                ):
+                    if (
+                        self
+                        ._request_spotify_playlist_dashboard_summary_restore()
+                    ):
+                        return
+
+                if bool(
+                    getattr(
+                        self,
+                        (
+                            "_spotify_playlist_dashboard_"
+                            "summary_restore_pending"
+                        ),
+                        False,
+                    )
+                ):
+                    return
+
+        pending = getattr(
+            self,
+            (
+                "_spotify_playlist_dashboard_"
+                "pending_offset"
+            ),
+            None,
+        )
+
+        if pending is None:
+            return
+
+        if (
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "requested_offset"
+                ),
+                None,
+            )
+            is not None
+        ):
+            return
+
+        if (
+            runtime is None
+            or bool(
+                getattr(
+                    runtime,
+                    "busy",
+                    False,
+                )
+            )
+        ):
+            return
+
+        self._request_spotify_playlist_dashboard_content_page(
+            pending
+        )
+
+    def handle_spotify_playlist_dashboard_artwork_ready(
+        self,
+        artwork_reference: str,
+        pixmap,
+    ) -> None:
+        expected = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "active_artwork_reference"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            not expected
+            or str(
+                artwork_reference
+                or ""
+            ).strip()
+            != expected
+        ):
+            return
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        setter = getattr(
+            card,
+            "set_artwork_pixmap",
+            None,
+        )
+
+        if not callable(
+            setter
+        ):
+            return
+
+        try:
+            setter(
+                pixmap
+            )
+
+        except Exception:
+            return
+
+    def handle_spotify_playlist_dashboard_artwork_failed(
+        self,
+        artwork_reference: str,
+    ) -> None:
+        expected = str(
+            getattr(
+                self,
+                (
+                    "_spotify_playlist_dashboard_"
+                    "active_artwork_reference"
+                ),
+                "",
+            )
+            or ""
+        ).strip()
+
+        if (
+            not expected
+            or str(
+                artwork_reference
+                or ""
+            ).strip()
+            != expected
+        ):
+            return
+
+        card = getattr(
+            self,
+            "spotify_playlist_card",
+            None,
+        )
+
+        clear_artwork = getattr(
+            card,
+            "clear_artwork",
+            None,
+        )
+
+        if callable(
+            clear_artwork
+        ):
+            clear_artwork()
 
 
     def configure_spotify_playlist_dashboard_card(

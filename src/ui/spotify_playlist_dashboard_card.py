@@ -400,7 +400,8 @@ class SpotifyPlaylistDashboardTrackRow(
         )
 
         self.number_label = QLabel(
-            track.display_number
+            track.display_number,
+            self,
         )
 
         self.number_label.setObjectName(
@@ -443,7 +444,8 @@ class SpotifyPlaylistDashboardTrackRow(
         )
 
         self.title_label = QLabel(
-            track.title
+            track.title,
+            text_widget,
         )
 
         self.title_label.setObjectName(
@@ -455,7 +457,8 @@ class SpotifyPlaylistDashboardTrackRow(
         )
 
         self.artist_label = QLabel(
-            track.artists
+            track.artists,
+            text_widget,
         )
 
         self.artist_label.setObjectName(
@@ -476,7 +479,8 @@ class SpotifyPlaylistDashboardTrackRow(
         )
 
         self.local_badge = QLabel(
-            "LOCAL"
+            "LOCAL",
+            self,
         )
 
         self.local_badge.setObjectName(
@@ -487,16 +491,17 @@ class SpotifyPlaylistDashboardTrackRow(
             Qt.AlignmentFlag.AlignCenter
         )
 
-        self.local_badge.setVisible(
-            track.is_local
-        )
-
         layout.addWidget(
             self.local_badge
         )
 
+        self.local_badge.setVisible(
+            track.is_local
+        )
+
         self.unavailable_badge = QLabel(
-            "UNAVAILABLE"
+            "UNAVAILABLE",
+            self,
         )
 
         self.unavailable_badge.setObjectName(
@@ -507,16 +512,17 @@ class SpotifyPlaylistDashboardTrackRow(
             Qt.AlignmentFlag.AlignCenter
         )
 
-        self.unavailable_badge.setVisible(
-            not track.available
-        )
-
         layout.addWidget(
             self.unavailable_badge
         )
 
+        self.unavailable_badge.setVisible(
+            not track.available
+        )
+
         self.duration_label = QLabel(
-            track.display_duration
+            track.display_duration,
+            self,
         )
 
         self.duration_label.setObjectName(
@@ -1187,6 +1193,44 @@ class SpotifyPlaylistDashboardCard(
                 "snapshot must be SpotifyPlaylistDashboardSnapshot."
             )
 
+        previous = (
+            self._snapshot
+        )
+
+        previous_tracks = (
+            previous.tracks
+            if isinstance(
+                previous,
+                SpotifyPlaylistDashboardSnapshot,
+            )
+            else ()
+        )
+
+        same_playlist = bool(
+            isinstance(
+                previous,
+                SpotifyPlaylistDashboardSnapshot,
+            )
+            and previous.playlist_id
+            == snapshot.playlist_id
+        )
+
+        extends_existing_rows = bool(
+            same_playlist
+            and len(
+                snapshot.tracks
+            )
+            >= len(
+                previous_tracks
+            )
+            and snapshot.tracks[
+                :len(
+                    previous_tracks
+                )
+            ]
+            == previous_tracks
+        )
+
         self._snapshot = snapshot
 
         self.title_label.setText(
@@ -1206,6 +1250,22 @@ class SpotifyPlaylistDashboardCard(
         self.count_label.setText(
             f"{snapshot.track_count} {word}"
         )
+
+        if extends_existing_rows:
+            new_tracks = (
+                snapshot.tracks[
+                    len(
+                        previous_tracks
+                    ):
+                ]
+            )
+
+            if new_tracks:
+                self._append_tracks(
+                    new_tracks
+                )
+
+            return
 
         self._replace_tracks(
             snapshot.tracks
@@ -1278,66 +1338,186 @@ class SpotifyPlaylistDashboardCard(
             SpotifyPlaylistDashboardTrack
         ],
     ) -> None:
-        while self.track_layout.count():
-            item = (
-                self.track_layout
-                .takeAt(0)
+        tracks = tuple(
+            tracks
+        )
+
+        self.track_container.setUpdatesEnabled(
+            False
+        )
+
+        try:
+            while self.track_layout.count():
+                item = (
+                    self.track_layout
+                    .takeAt(0)
+                )
+
+                widget = (
+                    item.widget()
+                )
+
+                if widget is not None:
+                    # deleteLater() is deferred until Qt returns to
+                    # the event loop. Hide first so a genuinely
+                    # replaced row can never remain visibly painted
+                    # during that deferred lifetime.
+                    widget.hide()
+
+                    widget.deleteLater()
+
+            self._track_rows.clear()
+
+            if not tracks:
+                self.empty_label = QLabel(
+                    "Playlist tracks will appear here.",
+                    self.track_container,
+                )
+
+                self.empty_label.setObjectName(
+                    "spotifyPlaylistDashboardEmpty"
+                )
+
+                self.empty_label.setAlignment(
+                    Qt.AlignmentFlag.AlignCenter
+                )
+
+                self.empty_label.setWordWrap(
+                    True
+                )
+
+                self.track_layout.addWidget(
+                    self.empty_label,
+                    1,
+                )
+
+                return
+
+            for track in tracks:
+                row = (
+                    SpotifyPlaylistDashboardTrackRow(
+                        track,
+                        self.track_container,
+                    )
+                )
+
+                # Keep construction invisible until the whole batch
+                # has a parent and layout position.
+                row.hide()
+
+                self._track_rows.append(
+                    row
+                )
+
+                self.track_layout.addWidget(
+                    row
+                )
+
+            self.track_layout.addStretch(
+                1
             )
 
-            widget = item.widget()
+        finally:
+            self.track_container.setUpdatesEnabled(
+                True
+            )
 
-            if widget is not None:
-                widget.deleteLater()
+        for row in self._track_rows:
+            row.show()
 
-        self._track_rows.clear()
+        self.track_container.updateGeometry()
+        self.track_container.update()
+
+    def _append_tracks(
+        self,
+        tracks: Iterable[
+            SpotifyPlaylistDashboardTrack
+        ],
+    ) -> None:
+        """Append one pagination batch without rebuilding existing rows."""
 
         tracks = tuple(
             tracks
         )
 
         if not tracks:
-            self.empty_label = QLabel(
-                "Playlist tracks will appear here."
-            )
+            return
 
-            self.empty_label.setObjectName(
-                "spotifyPlaylistDashboardEmpty"
-            )
-
-            self.empty_label.setAlignment(
-                Qt.AlignmentFlag.AlignCenter
-            )
-
-            self.empty_label.setWordWrap(
-                True
-            )
-
-            self.track_layout.addWidget(
-                self.empty_label,
-                1,
+        # The first non-empty page replaces the static empty-state
+        # label once. Every later pagination page follows the
+        # incremental path below.
+        if not self._track_rows:
+            self._replace_tracks(
+                tracks
             )
 
             return
 
-        for track in tracks:
-            row = (
-                SpotifyPlaylistDashboardTrackRow(
-                    track,
-                    self.track_container,
-                )
-            )
+        new_rows = []
 
-            self._track_rows.append(
-                row
-            )
-
-            self.track_layout.addWidget(
-                row
-            )
-
-        self.track_layout.addStretch(
-            1
+        self.track_container.setUpdatesEnabled(
+            False
         )
+
+        try:
+            last_index = (
+                self.track_layout.count()
+                - 1
+            )
+
+            if last_index >= 0:
+                last_item = (
+                    self.track_layout
+                    .itemAt(
+                        last_index
+                    )
+                )
+
+                if (
+                    last_item is not None
+                    and last_item.spacerItem()
+                    is not None
+                ):
+                    self.track_layout.takeAt(
+                        last_index
+                    )
+
+            for track in tracks:
+                row = (
+                    SpotifyPlaylistDashboardTrackRow(
+                        track,
+                        self.track_container,
+                    )
+                )
+
+                row.hide()
+
+                self._track_rows.append(
+                    row
+                )
+
+                new_rows.append(
+                    row
+                )
+
+                self.track_layout.addWidget(
+                    row
+                )
+
+            self.track_layout.addStretch(
+                1
+            )
+
+        finally:
+            self.track_container.setUpdatesEnabled(
+                True
+            )
+
+        for row in new_rows:
+            row.show()
+
+        self.track_container.updateGeometry()
+        self.track_container.update()
 
     @staticmethod
     def _rounded_square_pixmap(

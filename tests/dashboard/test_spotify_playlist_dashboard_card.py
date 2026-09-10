@@ -611,6 +611,323 @@ class SpotifyPlaylistDashboardCardTests(
                     source,
                 )
 
+    def test_extending_same_playlist_reuses_existing_row_widgets(
+        self,
+    ):
+        card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        initial = (
+            self.make_snapshot()
+        )
+
+        card.set_snapshot(
+            initial
+        )
+
+        original_rows = (
+            card.track_rows
+        )
+
+        extra_tracks = (
+            SpotifyPlaylistDashboardTrack(
+                position=3,
+                title="fourth",
+                artists="Artist Four",
+                duration_seconds=121,
+            ),
+            SpotifyPlaylistDashboardTrack(
+                position=4,
+                title="fifth",
+                artists="Artist Five",
+                duration_seconds=122,
+            ),
+        )
+
+        extended = (
+            SpotifyPlaylistDashboardSnapshot
+            .build(
+                playlist_id=(
+                    initial.playlist_id
+                ),
+                title=(
+                    initial.title
+                ),
+                owner=(
+                    initial.owner
+                ),
+                track_count=5,
+                tracks=(
+                    initial.tracks
+                    + extra_tracks
+                ),
+            )
+        )
+
+        card.set_snapshot(
+            extended
+        )
+
+        self.assertEqual(
+            len(
+                card.track_rows
+            ),
+            5,
+        )
+
+        for index in range(
+            len(
+                original_rows
+            )
+        ):
+            self.assertIs(
+                card.track_rows[
+                    index
+                ],
+                original_rows[
+                    index
+                ],
+            )
+
+        self.assertEqual(
+            card.track_rows[
+                3
+            ].title_label.text(),
+            "fourth",
+        )
+
+        self.assertEqual(
+            card.track_rows[
+                4
+            ].title_label.text(),
+            "fifth",
+        )
+
+    def test_reapplying_identical_snapshot_does_not_rebuild_rows(
+        self,
+    ):
+        card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        snapshot = (
+            self.make_snapshot()
+        )
+
+        card.set_snapshot(
+            snapshot
+        )
+
+        original_rows = (
+            card.track_rows
+        )
+
+        card.set_snapshot(
+            snapshot
+        )
+
+        self.assertEqual(
+            len(
+                card.track_rows
+            ),
+            len(
+                original_rows
+            ),
+        )
+
+        for (
+            current,
+            original,
+        ) in zip(
+            card.track_rows,
+            original_rows,
+        ):
+            self.assertIs(
+                current,
+                original,
+            )
+
+    def test_incremental_growth_keeps_every_row_owned_and_non_window(
+        self,
+    ):
+        card = (
+            SpotifyPlaylistDashboardCard()
+        )
+
+        initial = (
+            self.make_snapshot()
+        )
+
+        card.set_snapshot(
+            initial
+        )
+
+        card.show()
+
+        self.app.processEvents()
+
+        extra = (
+            SpotifyPlaylistDashboardTrack(
+                position=3,
+                title="fourth",
+                artists="Artist",
+                duration_seconds=90,
+            ),
+        )
+
+        card.set_snapshot(
+            SpotifyPlaylistDashboardSnapshot.build(
+                playlist_id=(
+                    initial.playlist_id
+                ),
+                title=(
+                    initial.title
+                ),
+                owner=(
+                    initial.owner
+                ),
+                track_count=4,
+                tracks=(
+                    initial.tracks
+                    + extra
+                ),
+            )
+        )
+
+        self.app.processEvents()
+
+        self.assertEqual(
+            len(
+                card.track_rows
+            ),
+            4,
+        )
+
+        for row in card.track_rows:
+            self.assertIs(
+                row.parent(),
+                card.track_container,
+            )
+
+            self.assertFalse(
+                row.isWindow()
+            )
+
+        card.hide()
+
+    def test_badges_never_show_as_parentless_top_level_windows(
+        self,
+    ):
+        from PyQt6.QtCore import (
+            QEvent,
+            QObject,
+        )
+        from PyQt6.QtWidgets import (
+            QWidget,
+        )
+        from src.ui.spotify_playlist_dashboard_card import (
+            SpotifyPlaylistDashboardTrackRow,
+        )
+
+        class ShowSpy(
+            QObject
+        ):
+
+            def __init__(
+                self,
+            ):
+                super().__init__()
+
+                self.top_level_badge_shows = []
+
+            def eventFilter(
+                self,
+                watched,
+                event,
+            ):
+                if (
+                    event.type()
+                    == QEvent.Type.Show
+                    and isinstance(
+                        watched,
+                        QWidget,
+                    )
+                    and watched.objectName()
+                    in {
+                        "spotifyPlaylistDashboardLocalBadge",
+                        "spotifyPlaylistDashboardUnavailableBadge",
+                    }
+                    and watched.isWindow()
+                ):
+                    self.top_level_badge_shows.append(
+                        watched.objectName()
+                    )
+
+                return False
+
+        spy = ShowSpy()
+
+        self.app.installEventFilter(
+            spy
+        )
+
+        parent = QWidget()
+
+        try:
+            track = (
+                SpotifyPlaylistDashboardTrack(
+                    position=0,
+                    title="Local unavailable test",
+                    artists="Juice WRLD",
+                    duration_seconds=120,
+                    is_local=True,
+                    available=False,
+                )
+            )
+
+            row = (
+                SpotifyPlaylistDashboardTrackRow(
+                    track,
+                    parent,
+                )
+            )
+
+            self.assertIs(
+                row.parentWidget(),
+                parent,
+            )
+
+            self.assertIs(
+                row.number_label.parentWidget(),
+                row,
+            )
+
+            self.assertIs(
+                row.local_badge.parentWidget(),
+                row,
+            )
+
+            self.assertIs(
+                row.unavailable_badge.parentWidget(),
+                row,
+            )
+
+            self.assertIs(
+                row.duration_label.parentWidget(),
+                row,
+            )
+
+        finally:
+            self.app.removeEventFilter(
+                spy
+            )
+
+        self.assertEqual(
+            spy.top_level_badge_shows,
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
