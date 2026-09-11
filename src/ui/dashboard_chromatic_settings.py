@@ -993,6 +993,36 @@ class DashboardChromaticSettingsWidget(
         cls,
         atmosphere,
     ):
+        if not isinstance(
+            atmosphere,
+            dict,
+        ):
+            return False
+
+        enabled = atmosphere.get(
+            "enabled",
+            False,
+        )
+
+        if isinstance(
+            enabled,
+            str,
+        ):
+            enabled = (
+                enabled.strip().casefold()
+                in {
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                }
+            )
+
+        if not bool(
+            enabled
+        ):
+            return False
+
         value = (
             cls._background_image_path(
                 atmosphere
@@ -1178,6 +1208,35 @@ class DashboardChromaticSettingsWidget(
             )
 
         return True
+
+    def _clear_matched_palette(
+        self,
+        *,
+        notify=True,
+        force=False,
+        message="",
+    ):
+        updated = (
+            update_matched_palette(
+                self._palette_preferences,
+                (),
+                force=force,
+            )
+        )
+
+        if (
+            updated
+            == self._palette_preferences
+        ):
+            self._sync_controls()
+
+            return False
+
+        return self._save_palette(
+            updated,
+            notify=notify,
+            message=message,
+        )
 
     def _display_palette(
         self,
@@ -1592,11 +1651,7 @@ class DashboardChromaticSettingsWidget(
             source=source,
         )
 
-        if not self._save_palette(
-            preferences,
-            notify=False,
-        ):
-            return
+        atmosphere = None
 
         if (
             source
@@ -1607,16 +1662,37 @@ class DashboardChromaticSettingsWidget(
                 self._current_atmosphere()
             )
 
-            if (
-                self._has_background_image(
-                    atmosphere
-                )
+            if not self._has_background_image(
+                atmosphere
             ):
-                self._match_atmosphere(
-                    atmosphere,
-                    force=False,
-                    notify=False,
+                preferences = (
+                    update_matched_palette(
+                        preferences,
+                        (),
+                        force=False,
+                    )
                 )
+
+        if not self._save_palette(
+            preferences,
+            notify=False,
+        ):
+            return
+
+        if (
+            source
+            == PALETTE_SOURCE_BACKGROUND
+            and not preferences.locked
+            and atmosphere is not None
+            and self._has_background_image(
+                atmosphere
+            )
+        ):
+            self._match_atmosphere(
+                atmosphere,
+                force=False,
+                notify=False,
+            )
 
         self._notify_theme_refresh()
         self._sync_controls()
@@ -1810,18 +1886,73 @@ class DashboardChromaticSettingsWidget(
         self,
         checked,
     ):
-        self._save_palette(
-            replace(
-                self._palette_preferences,
-                locked=bool(
-                    checked
-                ),
-            ),
-            message=(
-                "Matched Dashboard palette locked."
-                if checked
-                else "Matched Dashboard palette unlocked."
-            ),
+        checked = bool(
+            checked
+        )
+
+        preferences = replace(
+            self._palette_preferences,
+            locked=checked,
+        )
+
+        atmosphere = None
+
+        if (
+            not checked
+            and preferences.source
+            == PALETTE_SOURCE_BACKGROUND
+        ):
+            atmosphere = (
+                self._current_atmosphere()
+            )
+
+            if not self._has_background_image(
+                atmosphere
+            ):
+                preferences = (
+                    update_matched_palette(
+                        preferences,
+                        (),
+                        force=False,
+                    )
+                )
+
+        if not self._save_palette(
+            preferences,
+            notify=False,
+        ):
+            return
+
+        if (
+            not checked
+            and preferences.source
+            == PALETTE_SOURCE_BACKGROUND
+            and atmosphere is not None
+            and self._has_background_image(
+                atmosphere
+            )
+        ):
+            self._match_atmosphere(
+                atmosphere,
+                force=False,
+                notify=False,
+            )
+
+        self._notify_theme_refresh()
+        self._sync_controls()
+
+        message = (
+            "Matched Dashboard palette locked."
+            if checked
+            else "Matched Dashboard palette unlocked."
+        )
+
+        self.status_label.setText(
+            message
+        )
+
+        self.message_changed.emit(
+            message
         )
 
     def _match_atmosphere(
@@ -1894,6 +2025,15 @@ class DashboardChromaticSettingsWidget(
         if not self._has_background_image(
             atmosphere
         ):
+            self._clear_matched_palette(
+                notify=True,
+                force=False,
+                message=(
+                    "No active Atmosphere background; "
+                    "Dashboard colours returned to the normal theme."
+                ),
+            )
+
             return
 
         if self._match_atmosphere(
@@ -1912,11 +2052,20 @@ class DashboardChromaticSettingsWidget(
             self._current_atmosphere()
         )
 
-        self._match_atmosphere(
-            atmosphere,
-            force=True,
-            notify=True,
-        )
+        if self._has_background_image(
+            atmosphere
+        ):
+            self._match_atmosphere(
+                atmosphere,
+                force=True,
+                notify=True,
+            )
+
+        else:
+            self._clear_matched_palette(
+                notify=True,
+                force=True,
+            )
 
         self._sync_controls()
 
@@ -1941,8 +2090,8 @@ class DashboardChromaticSettingsWidget(
 
         else:
             message = (
-                "No useful Dashboard colours were found "
-                "in the current background."
+                "No active Atmosphere background is available; "
+                "Dashboard colours are using the normal theme."
             )
 
         self.status_label.setText(

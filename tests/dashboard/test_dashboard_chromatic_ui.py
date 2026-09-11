@@ -1383,6 +1383,400 @@ class DashboardChromaticUiTests(
                 .enabled
             )
 
+    def test_unlocked_background_disable_clears_matched_palette(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp:
+            image = _solid_image(
+                temp,
+                "#e13d7b",
+                "active.png",
+            )
+
+            manager = _ThemeManager(
+                {
+                    "enabled": True,
+                    "image_path": str(
+                        image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            palette_store = (
+                _palette_store(
+                    temp
+                )
+            )
+
+            palette_store.save(
+                DashboardPalettePreferences
+                .build(
+                    source=(
+                        PALETTE_SOURCE_BACKGROUND
+                    ),
+                    matched_palette=(
+                        "#e13d7b",
+                    ),
+                    locked=False,
+                )
+            )
+
+            widget = (
+                DashboardChromaticSettingsWidget(
+                    theme_manager=manager,
+                    preference_store=(
+                        _effect_store(
+                            temp
+                        )
+                    ),
+                    palette_store=(
+                        palette_store
+                    ),
+                )
+            )
+
+            manager.set_atmosphere(
+                {
+                    "enabled": False,
+                    "image_path": str(
+                        image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            self.assertEqual(
+                palette_store.load()
+                .matched_palette,
+                (),
+            )
+
+            self.assertEqual(
+                widget.palette_preferences
+                .matched_palette,
+                (),
+            )
+
+    def test_locked_background_disable_preserves_matched_palette(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp:
+            image = _solid_image(
+                temp,
+                "#e13d7b",
+                "locked.png",
+            )
+
+            manager = _ThemeManager(
+                {
+                    "enabled": True,
+                    "image_path": str(
+                        image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            palette_store = (
+                _palette_store(
+                    temp
+                )
+            )
+
+            palette_store.save(
+                DashboardPalettePreferences
+                .build(
+                    source=(
+                        PALETTE_SOURCE_BACKGROUND
+                    ),
+                    matched_palette=(
+                        "#e13d7b",
+                    ),
+                    locked=True,
+                )
+            )
+
+            widget = (
+                DashboardChromaticSettingsWidget(
+                    theme_manager=manager,
+                    preference_store=(
+                        _effect_store(
+                            temp
+                        )
+                    ),
+                    palette_store=(
+                        palette_store
+                    ),
+                )
+            )
+
+            manager.set_atmosphere(
+                {
+                    "enabled": False,
+                    "image_path": str(
+                        image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            self.assertEqual(
+                palette_store.load()
+                .matched_palette,
+                (
+                    "#e13d7b",
+                ),
+            )
+
+            self.assertTrue(
+                widget.palette_preferences
+                .locked
+            )
+
+    def test_switch_to_background_without_active_image_clears_stale_palette(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp:
+            image = _solid_image(
+                temp,
+                "#e13d7b",
+                "inactive.png",
+            )
+
+            manager = _ThemeManager(
+                {
+                    "enabled": False,
+                    "image_path": str(
+                        image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            palette_store = (
+                _palette_store(
+                    temp
+                )
+            )
+
+            palette_store.save(
+                DashboardPalettePreferences
+                .build(
+                    source=(
+                        PALETTE_SOURCE_THEME
+                    ),
+                    matched_palette=(
+                        "#e13d7b",
+                    ),
+                    locked=False,
+                )
+            )
+
+            widget = (
+                DashboardChromaticSettingsWidget(
+                    theme_manager=manager,
+                    preference_store=(
+                        _effect_store(
+                            temp
+                        )
+                    ),
+                    palette_store=(
+                        palette_store
+                    ),
+                )
+            )
+
+            index = (
+                widget.source_combo.findData(
+                    PALETTE_SOURCE_BACKGROUND
+                )
+            )
+
+            widget.source_combo.setCurrentIndex(
+                index
+            )
+
+            stored = (
+                palette_store.load()
+            )
+
+            self.assertEqual(
+                stored.source,
+                PALETTE_SOURCE_BACKGROUND,
+            )
+
+            self.assertEqual(
+                stored.matched_palette,
+                (),
+            )
+
+    def test_unlock_without_active_background_clears_preserved_palette(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp:
+            image = _solid_image(
+                temp,
+                "#e13d7b",
+                "unlock-inactive.png",
+            )
+
+            manager = _ThemeManager(
+                {
+                    "enabled": False,
+                    "image_path": str(
+                        image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            palette_store = (
+                _palette_store(
+                    temp
+                )
+            )
+
+            palette_store.save(
+                DashboardPalettePreferences
+                .build(
+                    source=(
+                        PALETTE_SOURCE_BACKGROUND
+                    ),
+                    matched_palette=(
+                        "#e13d7b",
+                    ),
+                    locked=True,
+                )
+            )
+
+            widget = (
+                DashboardChromaticSettingsWidget(
+                    theme_manager=manager,
+                    preference_store=(
+                        _effect_store(
+                            temp
+                        )
+                    ),
+                    palette_store=(
+                        palette_store
+                    ),
+                )
+            )
+
+            widget.lock_box.setChecked(
+                False
+            )
+
+            stored = (
+                palette_store.load()
+            )
+
+            self.assertFalse(
+                stored.locked
+            )
+
+            self.assertEqual(
+                stored.matched_palette,
+                (),
+            )
+
+    def test_unlock_with_active_background_refreshes_current_image(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp:
+            old_image = _solid_image(
+                temp,
+                "#e13d7b",
+                "old.png",
+            )
+
+            current_image = _solid_image(
+                temp,
+                "#28c99a",
+                "current.png",
+            )
+
+            manager = _ThemeManager(
+                {
+                    "enabled": True,
+                    "image_path": str(
+                        current_image
+                    ),
+                    "blur": 0,
+                    "opacity": 100,
+                    "dim": 0,
+                }
+            )
+
+            palette_store = (
+                _palette_store(
+                    temp
+                )
+            )
+
+            palette_store.save(
+                DashboardPalettePreferences
+                .build(
+                    source=(
+                        PALETTE_SOURCE_BACKGROUND
+                    ),
+                    matched_palette=(
+                        "#e13d7b",
+                    ),
+                    locked=True,
+                )
+            )
+
+            widget = (
+                DashboardChromaticSettingsWidget(
+                    theme_manager=manager,
+                    preference_store=(
+                        _effect_store(
+                            temp
+                        )
+                    ),
+                    palette_store=(
+                        palette_store
+                    ),
+                )
+            )
+
+            self.assertTrue(
+                old_image.is_file()
+            )
+
+            widget.lock_box.setChecked(
+                False
+            )
+
+            stored = (
+                palette_store.load()
+            )
+
+            self.assertFalse(
+                stored.locked
+            )
+
+            self.assertEqual(
+                stored.matched_palette,
+                (
+                    "#28c99a",
+                ),
+            )
+
     def test_dashboard_static_resolver_uses_palette_store(
         self,
     ):
