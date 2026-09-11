@@ -568,31 +568,47 @@ class DashboardSpotifyPlaylistAddCardTests(
             "Waiting for Spotify",
         )
 
-    def test_picker_reuses_existing_dynamic_spotify_items(
+    def test_add_card_opens_direct_spotify_playlist_picker(
         self,
     ):
         harness = ConfigureHarness()
 
         class FakeDialog:
 
-            received_dynamic_items = ()
+            received_entries = ()
+            received_title = None
+            received_description = None
+            received_search_placeholder = None
 
             def __init__(
                 self,
-                existing_item_ids,
+                entries,
+                *,
+                title,
+                description,
+                search_placeholder,
                 theme=None,
                 parent=None,
-                *,
-                dynamic_items=(),
             ):
-                del existing_item_ids
                 del theme
                 del parent
 
-                FakeDialog.received_dynamic_items = (
+                FakeDialog.received_entries = (
                     tuple(
-                        dynamic_items
+                        entries
                     )
+                )
+
+                FakeDialog.received_title = (
+                    title
+                )
+
+                FakeDialog.received_description = (
+                    description
+                )
+
+                FakeDialog.received_search_placeholder = (
+                    search_placeholder
                 )
 
             def exec(
@@ -605,13 +621,27 @@ class DashboardSpotifyPlaylistAddCardTests(
             ):
                 return (
                     FakeDialog
-                    .received_dynamic_items[0]
+                    .received_entries[0]
                     .item_id
                 )
 
-        with patch(
-            "src.ui.dashboard.QuickAccessPickerDialog",
-            FakeDialog,
+        with (
+            patch(
+                (
+                    "src.ui.dashboard."
+                    "QuickAccessGroupPickerDialog"
+                ),
+                FakeDialog,
+            ),
+            patch(
+                (
+                    "src.ui.dashboard."
+                    "QuickAccessPickerDialog"
+                ),
+                side_effect=AssertionError(
+                    "Root Quick Access picker must not open."
+                ),
+            ),
         ):
             result = (
                 DashboardPage
@@ -625,14 +655,31 @@ class DashboardSpotifyPlaylistAddCardTests(
         )
 
         self.assertTrue(
-            FakeDialog.received_dynamic_items
+            FakeDialog.received_entries
+        )
+
+        self.assertTrue(
+            all(
+                item.kind
+                == "spotify_playlist"
+                for item
+                in FakeDialog.received_entries
+            )
         )
 
         self.assertEqual(
-            FakeDialog
-            .received_dynamic_items[0]
-            .kind,
-            "spotify_playlist",
+            FakeDialog.received_title,
+            "Spotify Playlists",
+        )
+
+        self.assertEqual(
+            FakeDialog.received_search_placeholder,
+            "Search playlists",
+        )
+
+        self.assertIn(
+            "Dashboard card",
+            FakeDialog.received_description,
         )
 
         config = (
@@ -651,6 +698,122 @@ class DashboardSpotifyPlaylistAddCardTests(
         self.assertEqual(
             config.playlist_id,
             "AbC123",
+        )
+
+    def test_direct_playlist_picker_cancel_is_noop(
+        self,
+    ):
+        harness = ConfigureHarness()
+
+        class FakeDialog:
+
+            def __init__(
+                self,
+                entries,
+                *,
+                title,
+                description,
+                search_placeholder,
+                theme=None,
+                parent=None,
+            ):
+                del entries
+                del title
+                del description
+                del search_placeholder
+                del theme
+                del parent
+
+            def exec(
+                self,
+            ):
+                return 0
+
+            def selected_item_id(
+                self,
+            ):
+                raise AssertionError(
+                    "Selection must not be read after cancel."
+                )
+
+        with patch(
+            (
+                "src.ui.dashboard."
+                "QuickAccessGroupPickerDialog"
+            ),
+            FakeDialog,
+        ):
+            result = (
+                DashboardPage
+                .add_spotify_playlist_card(
+                    harness
+                )
+            )
+
+        self.assertFalse(
+            result
+        )
+
+        self.assertEqual(
+            harness
+            .spotify_playlist_card_preferences_store
+            .upserts,
+            [],
+        )
+
+        self.assertEqual(
+            harness.visibility_calls,
+            [],
+        )
+
+    def test_add_card_with_no_loaded_playlists_does_not_open_picker(
+        self,
+    ):
+        harness = ConfigureHarness()
+
+        harness._spotify_quick_access_playlists = {}
+
+        with (
+            patch(
+                (
+                    "src.ui.dashboard."
+                    "QuickAccessGroupPickerDialog"
+                ),
+                side_effect=AssertionError(
+                    "Playlist picker must not open with no playlists."
+                ),
+            ),
+            patch(
+                (
+                    "src.ui.dashboard."
+                    "QuickAccessPickerDialog"
+                ),
+                side_effect=AssertionError(
+                    "Root Quick Access picker must never open."
+                ),
+            ),
+        ):
+            result = (
+                DashboardPage
+                .add_spotify_playlist_card(
+                    harness
+                )
+            )
+
+        self.assertFalse(
+            result
+        )
+
+        self.assertEqual(
+            harness
+            .spotify_playlist_card_preferences_store
+            .upserts,
+            [],
+        )
+
+        self.assertEqual(
+            harness.visibility_calls,
+            [],
         )
 
     def test_locked_layout_rejects_configuration(

@@ -175,6 +175,7 @@ from src.system.spotify_playlist_card_preferences import (
     SpotifyPlaylistCardPreferencesStore,
 )
 from src.ui.quick_access_picker import (
+    QuickAccessGroupPickerDialog,
     QuickAccessPickerDialog,
 )
 from src.ui.spotify_playlist_dashboard_card import (
@@ -9325,11 +9326,18 @@ class DashboardPage(QWidget):
             else None
         )
 
-        dialog = QuickAccessPickerDialog(
-            (),
+        dialog = QuickAccessGroupPickerDialog(
+            dynamic_items,
+            title="Spotify Playlists",
+            description=(
+                "Choose a Spotify playlist "
+                "for this Dashboard card."
+            ),
+            search_placeholder=(
+                "Search playlists"
+            ),
             theme=theme,
             parent=self,
-            dynamic_items=dynamic_items,
         )
 
         if not dialog.exec():
