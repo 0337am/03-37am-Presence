@@ -13,17 +13,17 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_python_version_metadata(self):
         self.assertEqual(
             APP_VERSION,
-            "3.4.1",
+            "3.5.0",
         )
 
         self.assertEqual(
             RELEASE_NAME,
-            "Multi-Presence Stability",
+            "Playlist Cards & Chromatic Dashboard",
         )
 
         self.assertEqual(
             DISPLAY_VERSION,
-            "v3.4.1 - Multi-Presence Stability",
+            "v3.5.0 - Playlist Cards & Chromatic Dashboard",
         )
 
 
@@ -35,22 +35,22 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "filevers=(3, 4, 1, 0)",
+            "filevers=(3, 5, 0, 0)",
             source,
         )
 
         self.assertIn(
-            "prodvers=(3, 4, 1, 0)",
+            "prodvers=(3, 5, 0, 0)",
             source,
         )
 
         self.assertEqual(
-            source.count('"3.4.1.0"'),
+            source.count('"3.5.0.0"'),
             2,
         )
 
         self.assertIn(
-            "03:37am Presence - Multi-Presence Stability",
+            "03:37am Presence - Playlist Cards & Chromatic Dashboard",
             source,
         )
 
@@ -63,7 +63,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         v341 = source.index(
-            "## v3.4.1 - Multi-Presence Stability"
+            "## v3.5.0 - Playlist Cards & Chromatic Dashboard"
         )
 
         v340 = source.index(
@@ -103,7 +103,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "## v3.4.1 highlights",
+            "## v3.5.0 highlights",
             source,
         )
 
@@ -137,7 +137,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "03-37am-Presence/3.4.1 Spotify-Web-API",
+            "03-37am-Presence/3.5.0 Spotify-Web-API",
             source,
         )
 

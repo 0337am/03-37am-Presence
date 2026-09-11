@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.5.0 - Playlist Cards & Chromatic Dashboard
+
+### Added
+
+- Spotify Playlist Dashboard cards with persistent playlist selection.
+- Playlist artwork, title, owner, track metadata, artists, durations, and scrollable rows.
+- Playlist-context track playback, including verified mixed catalogue/local-file playlist behavior.
+- Header Play/Pause control and current-playing row indication.
+- Responsive Playlist Card sizing and in-card playlist switching.
+- Dashboard Chromatic palette matching with configurable visual effects.
+
+### Improved
+
+- Dashboard Add Card now opens directly into the Spotify playlist chooser.
+- Playlist Cards resize cleanly while preserving useful controls and track visibility.
+- Local-file and unavailable-track presentation remains explicit and truthful.
+- Stale matched Dashboard palettes are cleared safely when their source is no longer valid.
+
+### Privacy and safety
+
+- Spotify playback continues through the existing authenticated playback architecture.
+- No second audio player, Spotify URI launching, focus stealing, or simulated input was added.
+- Existing Discord, Queue, Quick Access, Desktop Companion, and Spotify authentication safety boundaries remain intact.
+
 ## v3.4.1 - Multi-Presence Stability
 
 Released 8 September 2026.

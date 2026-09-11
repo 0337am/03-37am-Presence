@@ -2,6 +2,18 @@
 
 03:37am Presence is a Windows desktop app that turns your current media and custom status choices into a polished Discord Rich Presence. It includes a live customisable dashboard, an optional local Desktop Companion overlay, custom Link and Launcher cards, a searchable listening Library with insights, optional global media controls, automatic AFK handling, custom themes, blurred Atmosphere backgrounds, personal artwork hosting, and privacy-aware settings backup and restore.
 
+## v3.5.0 highlights
+
+v3.5.0 adds native Spotify Playlist Dashboard cards and a new Chromatic Dashboard system.
+
+- Add Spotify playlists directly to the Dashboard.
+- Browse playlist artwork, tracks, artists, durations, and local-file indicators.
+- Start playlist playback from a selected track while preserving playlist context.
+- Control playlist playback from the card header.
+- See the currently playing playlist row and resize cards responsively.
+- Switch the selected playlist directly from the Dashboard card.
+- Match Dashboard visuals to media artwork with configurable Chromatic palette effects.
+
 ## v3.4.1 highlights
 
 v3.4.1 is a focused stability update for Multi-Presence.
