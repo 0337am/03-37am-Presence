@@ -190,6 +190,21 @@ from src.ui.spotify_playlist_dashboard_card import (
     SpotifyPlaylistDashboardTrack,
 )
 
+from src.system.dashboard_chromatic import (
+    DashboardChromaticPreferencesStore,
+)
+
+from src.system.dashboard_palette import (
+    DashboardPalettePreferencesStore,
+    build_dashboard_palette_theme,
+    effect_colours_for_style,
+    resolve_dashboard_palette,
+)
+
+from src.ui.dashboard_chromatic_effect import (
+    DashboardChromaticEffectOverlay,
+)
+
 
 SPOTIFY_PLAYLIST_DASHBOARD_CARD_CONFIG_ID = (
     "spotify_playlist_card.dashboard"
@@ -18195,8 +18210,179 @@ class DashboardPage(QWidget):
             detail_label,
         )
 
+    @staticmethod
+    def _resolve_dashboard_chromatic_theme(
+        theme,
+    ):
+        if not isinstance(
+            theme,
+            dict,
+        ):
+            return theme
+
+        base_theme = dict(
+            theme
+        )
+
+        try:
+            preferences = (
+                DashboardPalettePreferencesStore()
+                .load()
+            )
+
+            return build_dashboard_palette_theme(
+                base_theme,
+                preferences,
+            )
+
+        except Exception:
+            return base_theme
+
+    def _dashboard_chromatic_target_widgets(
+        self,
+    ):
+        cards = getattr(
+            self,
+            "dashboard_cards",
+            {},
+        )
+
+        if not isinstance(
+            cards,
+            dict,
+        ):
+            return ()
+
+        return tuple(
+            widget
+            for widget
+            in cards.values()
+            if widget is not None
+        )
+
+    def _sync_dashboard_chromatic_effect(
+        self,
+        base_theme,
+    ):
+        canvas = getattr(
+            self,
+            "dashboard_canvas",
+            None,
+        )
+
+        if canvas is None:
+            return False
+
+        overlay = getattr(
+            self,
+            "_dashboard_chromatic_effect_overlay",
+            None,
+        )
+
+        if overlay is None:
+            overlay = (
+                DashboardChromaticEffectOverlay(
+                    canvas,
+                    target_provider=(
+                        self._dashboard_chromatic_target_widgets
+                    ),
+                )
+            )
+
+            self._dashboard_chromatic_effect_overlay = (
+                overlay
+            )
+
+        if not isinstance(
+            base_theme,
+            dict,
+        ):
+            overlay.configure(
+                enabled=False,
+                style="solid",
+                intensity=0,
+                colours=(
+                    "#ff79b9",
+                ),
+            )
+
+            return False
+
+        try:
+            effect_preferences = (
+                DashboardChromaticPreferencesStore()
+                .load()
+            )
+
+            palette_preferences = (
+                DashboardPalettePreferencesStore()
+                .load()
+            )
+
+            palette = resolve_dashboard_palette(
+                base_theme,
+                palette_preferences,
+            )
+
+            colours = (
+                effect_colours_for_style(
+                    palette,
+                    effect_preferences.effect_style,
+                )
+            )
+
+        except Exception:
+            overlay.configure(
+                enabled=False,
+                style="solid",
+                intensity=0,
+                colours=(
+                    "#ff79b9",
+                ),
+            )
+
+            return False
+
+        overlay.configure(
+            enabled=(
+                effect_preferences.enabled
+            ),
+            style=(
+                effect_preferences.effect_style
+            ),
+            intensity=(
+                effect_preferences.strength
+            ),
+            colours=(
+                colours
+            ),
+        )
+
+        return bool(
+            effect_preferences.enabled
+        )
+
     @pyqtSlot(dict)
     def apply_theme(self, theme: dict):
+        base_chromatic_theme = (
+            dict(
+                theme
+            )
+            if isinstance(
+                theme,
+                dict,
+            )
+            else theme
+        )
+        theme = (
+            DashboardPage
+            ._resolve_dashboard_chromatic_theme(
+                theme
+            )
+        )
+        self._sync_dashboard_chromatic_effect(
+            base_chromatic_theme
+        )
         discord_preview = getattr(
             self,
             "discord_profile_preview",

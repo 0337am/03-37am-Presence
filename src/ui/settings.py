@@ -210,6 +210,10 @@ from src.ui.local_music_settings import (
     LocalMusicSettingsCard,
 )
 
+from src.ui.dashboard_chromatic_settings import (
+    DashboardChromaticSettingsWidget,
+)
+
 class SettingsPage(QWidget):
     show_portrait_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
@@ -1020,6 +1024,19 @@ class SettingsPage(QWidget):
 
         source_preferences = (
             self.source_preferences_store.load()
+        )
+
+        self.dashboard_chromatic_settings = (
+            DashboardChromaticSettingsWidget(
+                theme_manager=(
+                    self.theme_manager
+                ),
+                parent=self,
+            )
+        )
+
+        atmosphere_layout.addWidget(
+            self.dashboard_chromatic_settings
         )
 
         sources = self.create_card(

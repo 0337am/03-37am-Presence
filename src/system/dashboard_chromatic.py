@@ -13,6 +13,22 @@ from PyQt6.QtGui import QColor, QImage
 CHROMATIC_MODE_MANUAL = "manual"
 CHROMATIC_MODE_BACKGROUND = "background"
 
+CHROMATIC_EFFECT_SOLID = "solid"
+CHROMATIC_EFFECT_GRADIENT = "gradient"
+CHROMATIC_EFFECT_NEON = "neon"
+CHROMATIC_EFFECT_PRISM = "prism"
+
+DEFAULT_EFFECT_STYLE = CHROMATIC_EFFECT_SOLID
+
+VALID_CHROMATIC_EFFECTS = frozenset(
+    {
+        CHROMATIC_EFFECT_SOLID,
+        CHROMATIC_EFFECT_GRADIENT,
+        CHROMATIC_EFFECT_NEON,
+        CHROMATIC_EFFECT_PRISM,
+    }
+)
+
 VALID_CHROMATIC_MODES = frozenset(
     {
         CHROMATIC_MODE_MANUAL,
@@ -198,6 +214,20 @@ def _normalise_mode(value):
     return mode
 
 
+def _normalise_effect_style(
+    value,
+):
+    style = str(
+        value
+        or ""
+    ).strip().casefold()
+
+    if style not in VALID_CHROMATIC_EFFECTS:
+        return DEFAULT_EFFECT_STYLE
+
+    return style
+
+
 def _normalise_palette(values):
     if isinstance(
         values,
@@ -315,6 +345,7 @@ class DashboardChromaticPalette:
 class DashboardChromaticPreferences:
     enabled: bool = False
     mode: str = CHROMATIC_MODE_BACKGROUND
+    effect_style: str = DEFAULT_EFFECT_STYLE
     manual_accent: str = DEFAULT_MANUAL_ACCENT
     strength: int = DEFAULT_STRENGTH
     locked: bool = False
@@ -338,6 +369,14 @@ class DashboardChromaticPreferences:
         ):
             raise DashboardChromaticError(
                 "Unknown Chromatic mode."
+            )
+
+        if (
+            self.effect_style
+            not in VALID_CHROMATIC_EFFECTS
+        ):
+            raise DashboardChromaticError(
+                "Unknown Chromatic effect style."
             )
 
         if (
@@ -406,6 +445,7 @@ class DashboardChromaticPreferences:
         *,
         enabled=False,
         mode=CHROMATIC_MODE_BACKGROUND,
+        effect_style=DEFAULT_EFFECT_STYLE,
         manual_accent=DEFAULT_MANUAL_ACCENT,
         strength=DEFAULT_STRENGTH,
         locked=False,
@@ -434,6 +474,9 @@ class DashboardChromaticPreferences:
             ),
             mode=_normalise_mode(
                 mode
+            ),
+            effect_style=_normalise_effect_style(
+                effect_style
             ),
             manual_accent=manual,
             strength=_clamp_strength(
@@ -485,6 +528,12 @@ class DashboardChromaticPreferencesStore:
                         "mode"
                     ),
                     CHROMATIC_MODE_BACKGROUND,
+                ),
+                effect_style=self.settings.value(
+                    self._key(
+                        "effect_style"
+                    ),
+                    DEFAULT_EFFECT_STYLE,
                 ),
                 manual_accent=self.settings.value(
                     self._key(
@@ -569,6 +618,24 @@ class DashboardChromaticPreferencesStore:
                     name
                 ),
                 value,
+            )
+
+        effect_key = self._key(
+            "effect_style"
+        )
+
+        if (
+            preferences.effect_style
+            == DEFAULT_EFFECT_STYLE
+        ):
+            self.settings.remove(
+                effect_key
+            )
+
+        else:
+            self.settings.setValue(
+                effect_key,
+                preferences.effect_style,
             )
 
         self.settings.sync()
@@ -1240,6 +1307,208 @@ def resolve_dashboard_accent(
     return sanitize_dashboard_accent(
         blended,
         background,
+    )
+
+
+
+def _derive_effect_colour(
+    colour,
+    hue_delta,
+):
+    source = QColor(
+        _require_colour(
+            colour,
+            field_name="colour",
+        )
+    )
+
+    hue = source.hsvHueF()
+
+    if hue < 0:
+        hue = 0.0
+
+    saturation = max(
+        0.55,
+        source.hsvSaturationF(),
+    )
+
+    value = max(
+        0.72,
+        source.valueF(),
+    )
+
+    derived = QColor.fromHsvF(
+        (
+            hue
+            + float(
+                hue_delta
+            )
+        )
+        % 1.0,
+        min(
+            1.0,
+            saturation,
+        ),
+        min(
+            1.0,
+            value,
+        ),
+        1.0,
+    )
+
+    return derived.name(
+        QColor.NameFormat.HexRgb
+    ).lower()
+
+
+def resolve_dashboard_effect_colours(
+    base_theme,
+    preferences,
+):
+    if not isinstance(
+        base_theme,
+        dict,
+    ):
+        raise TypeError(
+            "base_theme must be a dict."
+        )
+
+    if not isinstance(
+        preferences,
+        DashboardChromaticPreferences,
+    ):
+        raise TypeError(
+            "preferences must be "
+            "DashboardChromaticPreferences."
+        )
+
+    base_accent = normalise_hex_colour(
+        base_theme.get(
+            "accent",
+            DEFAULT_MANUAL_ACCENT,
+        ),
+        fallback=DEFAULT_MANUAL_ACCENT,
+    )
+
+    background = normalise_hex_colour(
+        base_theme.get(
+            "background",
+            "#140812",
+        ),
+        fallback="#140812",
+    )
+
+    if (
+        preferences.mode
+        == CHROMATIC_MODE_MANUAL
+    ):
+        source_colours = [
+            preferences.manual_accent,
+        ]
+
+    else:
+        source_colours = list(
+            preferences.matched_palette
+        )
+
+        if (
+            not source_colours
+            and preferences.matched_accent
+        ):
+            source_colours.append(
+                preferences.matched_accent
+            )
+
+        if not source_colours:
+            source_colours.append(
+                base_accent
+            )
+
+    colours = []
+
+    for raw in source_colours:
+        value = normalise_hex_colour(
+            raw
+        )
+
+        if not value:
+            continue
+
+        value = sanitize_dashboard_accent(
+            value,
+            background,
+        )
+
+        if value not in colours:
+            colours.append(
+                value
+            )
+
+    if not colours:
+        colours.append(
+            sanitize_dashboard_accent(
+                base_accent,
+                background,
+            )
+        )
+
+    if (
+        preferences.effect_style
+        == CHROMATIC_EFFECT_PRISM
+    ):
+        required = 3
+
+    elif (
+        preferences.effect_style
+        == CHROMATIC_EFFECT_GRADIENT
+    ):
+        required = 2
+
+    else:
+        required = 1
+
+    offsets = (
+        0.11,
+        0.31,
+        0.53,
+        0.71,
+    )
+
+    index = 0
+
+    while (
+        len(
+            colours
+        )
+        < required
+        and index < 16
+    ):
+        derived = _derive_effect_colour(
+            colours[0],
+            offsets[
+                index
+                % len(
+                    offsets
+                )
+            ],
+        )
+
+        index += 1
+
+        derived = sanitize_dashboard_accent(
+            derived,
+            background,
+        )
+
+        if derived not in colours:
+            colours.append(
+                derived
+            )
+
+    return tuple(
+        colours[
+            :required
+        ]
     )
 
 
